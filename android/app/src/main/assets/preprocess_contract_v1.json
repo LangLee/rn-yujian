@@ -1,0 +1,13 @@
+{
+  "contract_version": "PREPROCESS_CONTRACT_V1",
+  "pipeline_type": "CROP_CLASSIFIER_V1",
+  "input_size": 224,
+  "resize": "letterbox",
+  "normalize": {
+    "color_order": "RGB",
+    "mean": [0.485, 0.456, 0.406],
+    "std": [0.229, 0.224, 0.225]
+  },
+  "crop_expand_ratio": 0.15,
+  "padding_rgb": [124, 116, 104]
+}

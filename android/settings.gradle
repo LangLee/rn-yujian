@@ -1,0 +1,38 @@
+pluginManagement {
+    repositories {
+        // 添加国内镜像源（必须放在最前面）
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        gradlePluginPortal()
+        google()
+    }
+    
+    // 保留原有的 React Native 配置
+    includeBuild("../node_modules/@react-native/gradle-plugin")
+}
+
+plugins {
+    id("com.facebook.react.settings")
+}
+
+dependencyResolutionManagement {
+    repositories {
+        // 添加国内镜像源（必须放在最前面）
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        // 保留原有配置
+        google()
+        mavenCentral()
+    }
+}
+
+// 保留原有的 React Native 配置
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> 
+    ex.autolinkLibrariesFromCommand() 
+}
+
+rootProject.name = 'yujianai'
+include ':app'
+includeBuild('../node_modules/@react-native/gradle-plugin')
