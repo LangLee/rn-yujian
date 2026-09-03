@@ -1,0 +1,223 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+// 配置 react-native-config 使用不同的环境文件
+project.ext.envConfigFiles = [
+    debug: ".env",
+    release: ".env.production",
+]
+
+apply from: project(':react-native-config').projectDir.getPath() + "/dotenv.gradle"
+
+/**
+ * This is the configuration block to customize your React Native Android app.
+ * By default you don't need to apply any configuration, just uncomment the lines you need.
+ */
+react {
+    /* Folders */
+    //   The root of your project, i.e. where "package.json" lives. Default is '../..'
+    // root = file("../../")
+    //   The folder where the react-native NPM package is. Default is ../../node_modules/react-native
+    // reactNativeDir = file("../../node_modules/react-native")
+    //   The folder where the react-native Codegen package is. Default is ../../node_modules/@react-native/codegen
+    // codegenDir = file("../../node_modules/@react-native/codegen")
+    //   The cli.js file which is the React Native CLI entrypoint. Default is ../../node_modules/react-native/cli.js
+    // cliFile = file("../../node_modules/react-native/cli.js")
+
+    /* Variants */
+    //   The list of variants to that are debuggable. For those we're going to
+    //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
+    //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
+    // debuggableVariants = ["liteDebug", "prodDebug"]
+
+    /* Bundling */
+    //   A list containing the node command and its flags. Default is just 'node'.
+    // nodeExecutableAndArgs = ["node"]
+    //
+    //   The command to run when bundling. By default is 'bundle'
+    // bundleCommand = "ram-bundle"
+    //
+    //   The path to the CLI configuration file. Default is empty.
+    // bundleConfig = file(../rn-cli.config.js)
+    //
+    //   The name of the generated asset file containing your JS bundle
+    // bundleAssetName = "MyApplication.android.bundle"
+    //
+    //   The entry file for bundle generation. Default is 'index.android.js' or 'index.js'
+    // entryFile = file("../js/MyApplication.android.js")
+    //
+    //   A list of extra flags to pass to the 'bundle' commands.
+    //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
+    // extraPackagerArgs = []
+
+    /* Hermes Commands */
+    //   The hermes compiler command to run. By default it is 'hermesc'
+    // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
+    //
+    //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
+    // hermesFlags = ["-O", "-output-source-map"]
+
+    /* Autolinking */
+    autolinkLibrariesWithApp()
+}
+
+/**
+ * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ */
+def enableProguardInReleaseBuilds = true
+
+/**
+ * The preferred build flavor of JavaScriptCore (JSC)
+ *
+ * For example, to use the international variant, you can use:
+ * `def jscFlavor = io.github.react-native-community:jsc-android-intl:2026004.+`
+ *
+ * The international variant includes ICU i18n library and necessary data
+ * allowing to use e.g. `Date.toLocaleString` and `String.localeCompare` that
+ * give correct results when using with locales other than en-US. Note that
+ * this variant is about 6MiB larger per architecture than default.
+ */
+def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+
+// 渔见后端地址：优先读 .env（react-native-config），否则读环境变量，与原 Android 工程的 BuildConfig 字段同名
+
+
+def envOrFallback = { String key ->
+    def value = ""
+    try {
+        value = project.env.getOrEmpty(key)
+    } catch (ignored) {
+        value = ""
+    }
+    if (value == null || value.toString().trim().isEmpty()) {
+        value = System.getenv(key) ?: ""
+    }
+    return value.toString()
+}
+
+def quoted = { String value ->
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+}
+
+def feedbackBaseUrl = envOrFallback('YUJIAN_FEEDBACK_BASE_URL')
+def fishKnowledgeBaseUrl = envOrFallback('YUJIAN_FISH_KNOWLEDGE_BASE_URL').trim().isEmpty() ? feedbackBaseUrl : envOrFallback('YUJIAN_FISH_KNOWLEDGE_BASE_URL')
+def userApiBaseUrl = envOrFallback('YUJIAN_API_BASE_URL').trim().isEmpty() ? feedbackBaseUrl : envOrFallback('YUJIAN_API_BASE_URL')
+def feedbackIngestKey = envOrFallback('YUJIAN_FEEDBACK_INGEST_KEY')
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    namespace "com.yujian.ai.rn"
+    defaultConfig {
+        applicationId "com.yujianai"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 2
+        versionName "2.3.1-rn"
+        multiDexEnabled true
+
+        // 渔见后端配置，与原 Android 工程 BuildConfig 字段同名
+        buildConfigField "String", "FEEDBACK_BASE_URL", quoted(feedbackBaseUrl)
+        buildConfigField "String", "FEEDBACK_INGEST_KEY", quoted(feedbackIngestKey)
+        buildConfigField "String", "FISH_KNOWLEDGE_BASE_URL", quoted(fishKnowledgeBaseUrl)
+        buildConfigField "String", "USER_API_BASE_URL", quoted(userApiBaseUrl)
+        
+        // react-native-config
+        resValue "string", "build_config_package", "com.yujian.ai.rn"
+    }
+    
+    // 启用 APK 拆分，为不同架构生成独立 APK
+    // 这样每个 APK 只包含一个架构的原生库，大幅减少体积
+    splits {
+        abi {
+            reset()
+            enable true
+            universalApk false  // 不生成包含所有架构的通用 APK
+            include 'armeabi-v7a', 'arm64-v8a', 'x86_64'  // 主流架构 + 模拟器调试
+        }
+    }
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        release {
+            storeFile file('release.jks')
+            storePassword 'll1126!!@^'
+            keyAlias 'key0'
+            keyPassword 'll1126!!@^'
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.release
+            minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources true 
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            
+            // 启用 R8 完全模式以获得更好的优化
+            // 移除未使用的资源和代码
+        }
+    }
+    
+    buildFeatures {
+        buildConfig true
+    }
+
+    // 打包选项优化
+    packagingOptions {
+        // 原推理工程要求：ONNX/TFLite 原生库不解压加载
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        // 排除不必要的文件
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/license.txt'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/notice.txt'
+        exclude 'META-INF/ASL2.0'
+        exclude 'META-INF/{AL2.0,LGPL2.1}'
+        exclude 'META-INF/*.kotlin_module'
+    }
+}
+
+dependencies {
+    // The version of react-native is set by the React Native Gradle Plugin
+    implementation("com.facebook.react:react-android")
+
+    // 渔见端侧推理链路（与原 Android 工程同版本）
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'androidx.core:core:1.16.0'
+        force 'androidx.core:core-ktx:1.16.0'
+    }
+    exclude group: 'com.android.support', module: 'support-v4'
+    exclude group: 'com.android.support', module: 'support-compat'
+}
+
+apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
