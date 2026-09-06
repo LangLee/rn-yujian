@@ -1,11 +1,16 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, ImageStyle, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useRecognition } from '../contexts/RecognitionContext';
-import { YujianTopBar } from '../components/Common';
-import { DetectorOverlayImage } from '../components/DetectorOverlay';
+import { useTheme } from '../contexts/ThemeContext';
+import { WaterBackdrop } from '../components/WaterBackdrop';
+import { GlassCard } from '../components/ui/GlassCard';
+import { PrimaryButton } from '../components/ui/PrimaryButton';
+import { EmptyState } from '../components/ui/EmptyState';
 import { palette } from '../constants/colors';
+import { spacing, typeScale } from '../constants/tokens';
 import { FishInputStatusWire } from '../types/models';
 import { RootStackParamList } from '../navigation/types';
 import { toFileUri } from '../utils/fileUri';
@@ -16,40 +21,40 @@ type RecognitionIssueScreenNavigationProp = StackNavigationProp<
 >;
 
 interface IssueCopy {
-  title: string;
   body: string;
 }
 
+/** 异常文案：告诉用户发生了什么 + 下一步怎么做，不带 Error Code 与后台术语（1.4 / 15）。 */
 const issueCopyFor = (status: FishInputStatusWire): IssueCopy => {
   switch (status) {
     case 'no_fish':
-      return { title: '没有检测到鱼', body: '请重新拍摄或选择包含鱼的照片。' };
+      return { body: '照片里没有找到完整的鱼，可以重新拍一张试试。' };
     case 'uncertain':
-      return {
-        title: '没有确认到清晰鱼体',
-        body: '照片里可能有鱼，但当前画面不够确定。请换一张鱼体更清晰的照片。',
-      };
+      return { body: '照片里可能有鱼，但看得不太清楚，换一张更清晰的照片会更好。' };
     case 'multiple_fish':
-      return { title: '检测到多条鱼', body: '请重新拍摄单条鱼，或选择主体更明确的照片。' };
+      return { body: '一次拍一条鱼会认得更准，可以重新拍一张。' };
     case 'incomplete_fish':
-      return {
-        title: '鱼体没有完整进入画面',
-        body: '请尽量让鱼头、鱼尾和主要鳍部完整出现在照片中。',
-      };
+      return { body: '鱼头或鱼尾没有完整进入画面，重新拍一张试试。' };
     case 'fish_too_small':
-      return { title: '鱼离镜头有点远', body: '靠近一点再拍，更容易准确识别鱼种。' };
+      return { body: '鱼离镜头有点远，靠近一点再拍会更容易认出来。' };
     case 'ready':
     default:
-      return { title: '鱼体已准备好', body: '正在进入鱼种识别。' };
+      return { body: '这次没能认出来，可以重新识别或换一张照片。' };
   }
 };
 
-/** 识别异常分流页（对应原 RecognitionIssueScreen.kt，INVALID 状态文案）。 */
+/**
+ * 识别异常（FAILED 状态，7.3 / 15）：
+ * 「这次没能认出来」+ 重新识别 / 重拍 / 从相册；
+ * 保留原照片，内容不丢失；无抖动、无红闪、无报警声音（17.21）。
+ */
 export const RecognitionIssueScreen: React.FC = () => {
   const navigation = useNavigation<RecognitionIssueScreenNavigationProp>();
   const { image, result, reset } = useRecognition();
+  const { profile } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  // 原行为：没有结果或结果 ready 时直接回到识鱼页。
+  // 没有结果或结果其实已就绪时直接回 P02
   useEffect(() => {
     if (!result || result.ready) {
       navigation.navigate('Identify');
@@ -61,66 +66,39 @@ export const RecognitionIssueScreen: React.FC = () => {
   }
 
   const copy = issueCopyFor(result.status);
-  const assessment = result.assessment;
   const imageUri = toFileUri(image?.filePath);
 
   return (
     <View style={styles.screen}>
-      <YujianTopBar
-        title="检查照片"
-        subtitle="先确认鱼体，再判断鱼种"
-        onBack={() => navigation.goBack()}
-      />
-
-      {imageUri ? (
-        <DetectorOverlayImage
-          imagePath={imageUri}
-          sourceWidth={result.sourceWidth}
-          sourceHeight={result.sourceHeight}
-          detectorBox={assessment.primary ? assessment.primary.box : null}
-          cropBox={assessment.cropBox}
-          style={styles.overlay}
-        />
-      ) : null}
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{copy.title}</Text>
-        <Text style={styles.cardBody}>{copy.body}</Text>
-        <Text style={styles.qualityLine}>
-          {`Quality Gate ${assessment.qualityLevel.toUpperCase()} · ${assessment.qualityReason}`}
-        </Text>
-        {assessment.primary ? (
-          <Text style={styles.confidenceLine}>
-            {`鱼体检测置信度 ${Math.trunc(assessment.primary.confidence * 100)}%`}
-          </Text>
+      <WaterBackdrop />
+      <View style={[styles.content, { paddingTop: insets.top + spacing.xl }]}>
+        {imageUri ? (
+          <GlassCard noPadding style={styles.photoCard}>
+            <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" />
+          </GlassCard>
         ) : null}
-        <Text style={styles.detectorLine}>
-          {`Detector ${result.detectorRun.modelVersion} · ${result.detectorRun.latencyMs} ms`}
-        </Text>
-      </View>
-
-      <View style={{ flex: 1 }} />
-
-      <View style={styles.actions}>
-        <Pressable
+        <EmptyState
+          title="这次没能认出来"
+          description={copy.body}
+          style={styles.empty}
+        />
+        <PrimaryButton
+          label="重新识别"
+          onPress={() => navigation.replace('Recognizing')}
+          style={styles.primary}
+        />
+        <PrimaryButton
+          label="重新拍摄或从相册选择"
+          variant="ghost"
           onPress={() => {
             reset();
             navigation.navigate('Identify');
           }}
-          style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.85 }]}
-          accessibilityRole="button"
-          accessibilityLabel="重新选择照片"
-        >
-          <Text style={styles.primaryButtonText}>重新选择照片</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => navigation.replace('Recognizing')}
-          style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-          accessibilityLabel="再检测一次"
-        >
-          <Text style={styles.secondaryButtonText}>再检测一次</Text>
-        </Pressable>
+          style={styles.secondary}
+        />
+        <Text style={[styles.keepNote, { color: profile.surface.textSecondary }]}>
+          这张照片还在，不会丢失
+        </Text>
       </View>
     </View>
   );
@@ -129,73 +107,31 @@ export const RecognitionIssueScreen: React.FC = () => {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: palette.warmBackground,
-  },
-  overlay: {
-    marginHorizontal: 20,
-    marginVertical: 8,
-    height: 290,
-    borderRadius: 28,
-  },
-  card: {
-    margin: 20,
-    backgroundColor: palette.cardWhite,
-    borderRadius: 24,
-    padding: 22,
-    gap: 12,
-  },
-  cardTitle: {
-    color: palette.deepInk,
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  cardBody: {
-    color: palette.mutedInk,
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  qualityLine: {
-    color: palette.qualityInvalid,
-    fontSize: 11,
-  },
-  confidenceLine: {
-    color: palette.waterTeal,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  detectorLine: {
-    color: '#89938F',
-    fontSize: 11,
-  },
-  actions: {
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    gap: 10,
-    alignItems: 'center',
-  },
-  primaryButton: {
-    alignSelf: 'stretch',
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: palette.waterTeal,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    alignSelf: 'stretch',
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: palette.waterTeal,
-    backgroundColor: palette.cardWhite,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButtonText: {
-    color: palette.waterTeal,
-  },
+  } as ViewStyle,
+  content: {
+    flex: 1,
+    paddingHorizontal: spacing.page,
+  } as ViewStyle,
+  photoCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  } as ViewStyle,
+  photo: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+  } as ImageStyle,
+  empty: {
+    paddingTop: spacing.md,
+  } as ViewStyle,
+  primary: {
+    marginTop: spacing.md,
+  } as ViewStyle,
+  secondary: {
+    marginTop: spacing.sm,
+  } as ViewStyle,
+  keepNote: {
+    textAlign: 'center',
+    marginTop: spacing.lg,
+    fontSize: typeScale.caption,
+  } as TextStyle,
 });

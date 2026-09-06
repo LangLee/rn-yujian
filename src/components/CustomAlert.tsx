@@ -27,7 +27,7 @@ export function CustomAlert({
   onDismiss,
   buttonLayout = 'horizontal',
 }: CustomAlertProps) {
-  const { theme, colors } = useTheme();
+  const { colors } = useTheme();
 
   const handleButtonPress = (button: AlertButton) => {
     if (button.onPress) {

@@ -3,24 +3,36 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
+  useMemo,
   ReactNode,
 } from 'react';
-import { useColorScheme } from 'react-native';
+import { AccessibilityInfo } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ColorScheme, ThemeType } from '../types';
-import { lightTheme, darkTheme } from '../constants/colors';
+import { ColorScheme } from '../types';
+import {
+  EnvironmentId,
+  EnvironmentProfile,
+  ThemePreference,
+  environmentProfiles,
+  resolveAutoEnvironment,
+  toColorScheme,
+} from '../constants/environments';
 
 const THEME_STORAGE_KEY = '@asset_manager_theme';
-
-type ThemeMode = 'light' | 'dark' | 'system';
+/** 主题切换 Crossfade：手动 400-600ms（17.33）。 */
+export const THEME_CROSSFADE_MS = 500;
 
 interface ThemeContextType {
-  theme: ThemeType;
-  themeMode: ThemeMode;
+  /** 当前生效的 Environment Profile */
+  profile: EnvironmentProfile;
+  /** 用户偏好：auto / 固定某一环境 */
+  themeMode: ThemePreference;
+  /** 旧 ColorScheme 结构（结构兼容） */
   colors: ColorScheme;
-  toggleTheme: () => void;
-  setTheme: (theme: ThemeMode) => void;
   isDark: boolean;
+  setThemeMode: (mode: ThemePreference) => void;
+  reduceMotion: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -29,82 +41,95 @@ interface ThemeProviderProps {
   children: ReactNode;
 }
 
-export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const systemColorScheme = useColorScheme();
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
-  const [isLoading, setIsLoading] = useState(true);
+const LEGACY_MODE_MAP: Record<string, ThemePreference> = {
+  light: 'auto',
+  dark: 'auto',
+  system: 'auto',
+};
 
-  // Load saved theme on mount
+/**
+ * 环境主题编排：
+ * 默认自动跟随时间；用户可固定清晨 / 白天 / 傍晚 / 夜晚（3.3）。
+ * 切换 Profile 不重建页面组件，仅交叉淡入背景与表面 Token（17.33）。
+ */
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
+  const [themeMode, setThemeModeState] = useState<ThemePreference>('auto');
+  const [isLoading, setIsLoading] = useState(true);
+  const [autoTick, setAutoTick] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
   useEffect(() => {
-    loadTheme();
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+        if (
+          saved === 'auto' ||
+          saved === 'morning' ||
+          saved === 'day' ||
+          saved === 'sunset' ||
+          saved === 'night'
+        ) {
+          setThemeModeState(saved);
+        } else if (saved && LEGACY_MODE_MAP[saved]) {
+          setThemeModeState(LEGACY_MODE_MAP[saved]);
+        }
+      } catch (error) {
+        console.error('Error loading theme:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, []);
 
-  // Update theme when system theme changes and mode is 'system'
   useEffect(() => {
-    if (themeMode === 'system' && systemColorScheme) {
-      // System theme changed, no need to save
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      setReduceMotion,
+    );
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => undefined);
+    return () => subscription.remove();
+  }, []);
+
+  // 自动模式下每分钟重新解析当前环境
+  useEffect(() => {
+    if (themeMode !== 'auto' || isLoading) {
+      return;
     }
-  }, [systemColorScheme, themeMode]);
+    const timer = setInterval(() => setAutoTick((value) => value + 1), 60000);
+    return () => clearInterval(timer);
+  }, [themeMode, isLoading]);
 
-  const loadTheme = async () => {
-    try {
-      const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
-      if (
-        savedTheme === 'light' ||
-        savedTheme === 'dark' ||
-        savedTheme === 'system'
-      ) {
-        setThemeModeState(savedTheme as ThemeMode);
-      }
-    } catch (error) {
-      console.error('Error loading theme:', error);
-    } finally {
-      setIsLoading(false);
+  const setThemeMode = useCallback((mode: ThemePreference) => {
+    setThemeModeState(mode);
+    AsyncStorage.setItem(THEME_STORAGE_KEY, mode).catch(() => undefined);
+  }, []);
+
+  const profileId: EnvironmentId = useMemo(() => {
+    if (themeMode === 'auto') {
+      // autoTick 触发重算
+      void autoTick;
+      return resolveAutoEnvironment();
     }
-  };
+    return themeMode;
+  }, [themeMode, autoTick, isLoading]);
 
-  const setTheme = async (newThemeMode: ThemeMode) => {
-    try {
-      setThemeModeState(newThemeMode);
-      await AsyncStorage.setItem(THEME_STORAGE_KEY, newThemeMode);
-    } catch (error) {
-      console.error('Error saving theme:', error);
-    }
-  };
+  const profile = environmentProfiles[profileId];
+  const colors = useMemo(() => toColorScheme(profile), [profile]);
 
-  const toggleTheme = () => {
-    const newTheme = actualTheme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-  };
-
-  // Determine actual theme based on mode
-  const actualTheme: ThemeType =
-    themeMode === 'system'
-      ? systemColorScheme === 'dark'
-        ? 'dark'
-        : 'light'
-      : themeMode;
-
-  const colors = actualTheme === 'light' ? lightTheme : darkTheme;
-  const isDark = actualTheme === 'dark';
-
-  // Don't render children until theme is loaded
   if (isLoading) {
     return null;
   }
 
   const value: ThemeContextType = {
-    theme: actualTheme,
+    profile,
     themeMode,
     colors,
-    toggleTheme,
-    setTheme,
-    isDark,
+    isDark: profile.isDark,
+    setThemeMode,
+    reduceMotion,
   };
 
-  return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
 
 export const useTheme = (): ThemeContextType => {
@@ -114,3 +139,11 @@ export const useTheme = (): ThemeContextType => {
   }
   return context;
 };
+
+/** 环境跟随的 StatusBar 样式（夜晚浅色内容）。 */
+export function useStatusBarStyle(): 'light-content' | 'dark-content' {
+  const { profile } = useTheme();
+  return profile.isDark ? 'light-content' : 'dark-content';
+}
+
+export type { ThemePreference, EnvironmentId, EnvironmentProfile };

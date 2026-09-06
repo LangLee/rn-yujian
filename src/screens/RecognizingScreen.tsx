@@ -1,324 +1,278 @@
-import React, { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { useRecognition } from '../contexts/RecognitionContext';
-import { YujianTopBar } from '../components/Common';
+import { useTheme } from '../contexts/ThemeContext';
 import { FishIllustration } from '../components/FishIllustration';
-import { palette } from '../constants/colors';
-import { RootStackParamList } from '../navigation/types';
-import { toFileUri } from '../utils/fileUri';
+import { WaterBackdrop } from '../components/WaterBackdrop';
+import { spacing, typeScale } from '../constants/tokens';
 
 type RecognizingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Recognizing'>;
 
-/** 3 步骤动画节奏（对应原 400/400/250ms）。 */
-const STEP_ONE_MS = 400;
-const STEP_TWO_MS = 400;
-const STEP_THREE_MS = 250;
-const MIN_TOTAL_MS = STEP_ONE_MS + STEP_TWO_MS + STEP_THREE_MS;
+/** P03 状态文案：单步轮换，不显示技术流程列表（7.2 / 17.7）。 */
+const PHASES = ['正在观察鱼体', '正在寻找它的特征', '正在匹配鱼种'];
+const LONG_WAIT_COPY = '还在仔细看看这条鱼……';
+const VERY_LONG_COPY = '这次识别花得久一点';
+
+const PHASE_INTERVAL_MS = 2400;
+const MIN_VISIBLE_MS = 800;
+const LONG_WAIT_MS = 3000;
+const VERY_LONG_MS = 6000;
+const TIMEOUT_MS = 45000;
+
+/** 状态文案淡出 → 换词 → 淡入（Fade out 120-160ms，Gap ~60ms，Fade in 180-220ms）。 */
+const PhaseText: React.FC<{ text: string; color: string }> = ({ text, color }) => {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const [shown, setShown] = useState(text);
+  const firstRef = useRef(true);
+
+  useEffect(() => {
+    if (firstRef.current) {
+      firstRef.current = false;
+      setShown(text);
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+    if (text === shown) {
+      return;
+    }
+    Animated.timing(opacity, {
+      toValue: 0,
+      duration: 140,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) {
+        return;
+      }
+      setShown(text);
+      setTimeout(() => {
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      }, 60);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  return <Animated.Text style={[styles.phase, { color, opacity }]}>{shown}</Animated.Text>;
+};
+
+/** 极轻水波扩散：Alpha 0.10 → 0，Duration 1800-2600ms，间隔不规则（17.7）。 */
+const Ripple: React.FC<{ index: number; color: string; amplitude: number }> = ({
+  index,
+  color,
+  amplitude,
+}) => {
+  const scale = useRef(new Animated.Value(0.5)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let active = true;
+    const runOnce = () =>
+      new Promise<void>((resolve) => {
+        scale.setValue(0.5);
+        opacity.setValue(0.1 * amplitude);
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1.7,
+            duration: 2200,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0,
+            duration: 2200,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]).start(() => resolve());
+      });
+    const loop = async () => {
+      // 不同初始相位去同步（17.34）
+      await new Promise<void>((resolve) => setTimeout(() => resolve(), index * 1300));
+      while (active) {
+        await runOnce();
+        const gap = 1600 + Math.random() * 1800;
+        await new Promise<void>((resolve) => setTimeout(() => resolve(), gap));
+      }
+    };
+    void loop();
+    return () => {
+      active = false;
+    };
+  }, [scale, opacity, index, amplitude]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.ripple,
+        {
+          borderColor: color,
+          transform: [{ scale }],
+          opacity,
+        },
+      ]}
+    />
+  );
+};
 
 /**
- * 识别中页（对应原 RecognizingScreen.kt）：本地推理与步骤动画并行，
- * 完成后按 ready 标志分流到结果页/异常页。
+ * P03 识别处理中（设计文档 7.2 / 17.7 / 17.32）：
+ * 等待自然、安静；不展示"分离好的鱼"、不显示百分比 / 流程列表 / 扫描圈。
+ * 业务状态优先：识别 Ready 立即进入 P04，不为播完动画延迟结果。
  */
 export const RecognizingScreen: React.FC = () => {
   const navigation = useNavigation<RecognizingScreenNavigationProp>();
-  const { image, recognizeAndRecord } = useRecognition();
-  const [stage, setStage] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const { recognizeAndRecord } = useRecognition();
+  const { profile, reduceMotion } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [phaseIndex, setPhaseIndex] = useState(0);
+  const [longWait, setLongWait] = useState(false);
+  const [veryLong, setVeryLong] = useState(false);
 
+  const startedAt = useMemo(() => Date.now(), []);
+
+  // 识别主流程
   useEffect(() => {
-    if (!image) {
-      setError('没有可识别的照片');
-      return undefined;
-    }
     let cancelled = false;
-    setError(null);
-    setStage(1);
-    const timers = [
-      setTimeout(() => {
-        if (!cancelled) {
-          setStage(2);
-        }
-      }, STEP_ONE_MS),
-      setTimeout(() => {
-        if (!cancelled) {
-          setStage(3);
-        }
-      }, STEP_ONE_MS + STEP_TWO_MS),
-    ];
-    const minimumWait = new Promise<void>((resolve) => {
-      setTimeout(resolve, MIN_TOTAL_MS);
-    });
-    Promise.all([recognizeAndRecord(), minimumWait])
-      .then(([result]) => {
+    (async () => {
+      try {
+        const result = await recognizeAndRecord();
         if (cancelled) {
           return;
         }
-        if (result.ready) {
-          navigation.replace('Result');
+        const elapsed = Date.now() - startedAt;
+        const proceed = () => {
+          if (result.ready && result.prediction) {
+            navigation.replace('Result');
+          } else {
+            navigation.replace('RecognitionIssue');
+          }
+        };
+        if (elapsed < MIN_VISIBLE_MS) {
+          setTimeout(proceed, MIN_VISIBLE_MS - elapsed);
         } else {
+          proceed();
+        }
+      } catch {
+        if (!cancelled) {
           navigation.replace('RecognitionIssue');
         }
-      })
-      .catch((e: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        setError(e instanceof Error ? e.message : '识别失败，请重新选择照片');
-      });
+      }
+    })();
+    const timeout = setTimeout(() => {
+      if (!cancelled) {
+        navigation.replace('RecognitionIssue');
+      }
+    }, TIMEOUT_MS);
     return () => {
       cancelled = true;
-      timers.forEach(clearTimeout);
+      clearTimeout(timeout);
     };
-  }, [image, recognizeAndRecord, navigation]);
+  }, [recognizeAndRecord, navigation, startedAt]);
 
-  const imageUri = toFileUri(image?.filePath);
+  // 文案轮换 + 长等待文案（17.32）
+  useEffect(() => {
+    const phaseTimer = setInterval(() => {
+      setPhaseIndex((value) => Math.min(value + 1, PHASES.length - 1));
+    }, PHASE_INTERVAL_MS);
+    const longTimer = setTimeout(() => setLongWait(true), LONG_WAIT_MS);
+    const veryLongTimer = setTimeout(() => setVeryLong(true), VERY_LONG_MS);
+    return () => {
+      clearInterval(phaseTimer);
+      clearTimeout(longTimer);
+      clearTimeout(veryLongTimer);
+    };
+  }, []);
+
+  const copy = veryLong ? VERY_LONG_COPY : longWait ? LONG_WAIT_COPY : PHASES[phaseIndex];
+
+  // 鱼影呼吸：Alpha 0.08 → 0.14 → 0.08（2600-3600ms，禁止描边跑光与 CT 扫描感）
+  const silhouetteOpacity = useRef(new Animated.Value(0.1)).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      silhouetteOpacity.setValue(0.12);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(silhouetteOpacity, {
+          toValue: 0.16,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(silhouetteOpacity, {
+          toValue: 0.08,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, silhouetteOpacity]);
 
   return (
     <View style={styles.screen}>
-      <YujianTopBar
-        title="正在认识这条鱼"
-        subtitle={error === null ? '先找鱼，再识别鱼种' : '这次没认出来'}
-        onBack={() => navigation.goBack()}
-      />
-
-      <View style={styles.preview}>
-        {imageUri ? (
-          <>
-            <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            <View style={[StyleSheet.absoluteFill, styles.previewDim]} />
-          </>
-        ) : (
-          <FishIllustration size={150} bodyColor="rgba(46,139,131,0.78)" />
-        )}
-        <View style={styles.pulseOuter} pointerEvents="none" />
-        <View style={styles.pulseInner} pointerEvents="none" />
-        <FishIllustration size={126} bodyColor="rgba(46,139,131,0.72)" />
-        <View style={styles.badge} pointerEvents="none">
-          <Text style={styles.badgeText}>{error === null ? '本机识别中' : '识别未完成'}</Text>
+      <WaterBackdrop />
+      <View style={[styles.center, { paddingBottom: insets.bottom }]} pointerEvents="none">
+        {/* 极轻水波 */}
+        <Ripple
+          index={0}
+          color={profile.surface.accent}
+          amplitude={profile.motion.rippleAlpha}
+        />
+        <Ripple
+          index={1}
+          color={profile.surface.accent}
+          amplitude={profile.motion.rippleAlpha}
+        />
+        {/* 鱼影 */}
+        <Animated.View style={{ opacity: silhouetteOpacity }}>
+          <FishIllustration size={150} bodyColor={profile.surface.textPrimary} />
+        </Animated.View>
+        {/* 单步轮换状态文案 */}
+        <View style={styles.copyWrap}>
+          <PhaseText text={copy} color={profile.surface.textSecondary} />
         </View>
       </View>
-
-      <View style={styles.stepCard}>
-        <Text style={styles.stepCardTitle}>我正在看这些</Text>
-        <RecognitionStep
-          label="检测照片中的鱼体"
-          completed={stage >= 1}
-          active={stage === 1 && error === null}
-        />
-        <RecognitionStep
-          label="检查鱼体是否完整清晰"
-          completed={stage >= 2}
-          active={stage === 2 && error === null}
-        />
-        <RecognitionStep
-          label="比对鱼种特征"
-          completed={stage >= 3}
-          active={stage === 3 && error === null}
-        />
-      </View>
-
-      {error !== null ? (
-        <View style={styles.errorBlock}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.85 }]}
-            accessibilityRole="button"
-            accessibilityLabel="重新选择照片"
-          >
-            <Text style={styles.retryButtonText}>重新选择照片</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.progressBlock}>
-          <Text style={styles.progressText}>检测与识别都在手机本地完成</Text>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${Math.round(progressFraction(stage) * 100)}%` },
-              ]}
-            />
-          </View>
-        </View>
-      )}
     </View>
   );
 };
 
-const progressFraction = (stage: number): number => {
-  switch (stage) {
-    case 1:
-      return 0.34;
-    case 2:
-      return 0.68;
-    case 3:
-      return 0.92;
-    default:
-      return 0.05;
-  }
-};
-
-const RecognitionStep: React.FC<{
-  label: string;
-  completed: boolean;
-  active: boolean;
-}> = ({ label, completed, active }) => (
-  <View style={styles.stepRow}>
-    <View style={[styles.stepDot, completed && styles.stepDotCompleted]}>
-      <Text style={[styles.stepDotText, completed && styles.stepDotTextCompleted]}>
-        {completed ? '✓' : '·'}
-      </Text>
-    </View>
-    <Text style={styles.stepLabel}>{label}</Text>
-    <Text
-      style={[
-        styles.stepStatus,
-        active ? { color: palette.warmOrange } : completed ? { color: palette.waterTeal } : undefined,
-      ]}
-    >
-      {active ? '正在进行' : completed ? '完成' : '等待'}
-    </Text>
-  </View>
-);
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: palette.warmBackground,
-  },
-  preview: {
-    height: 312,
-    marginHorizontal: 20,
-    marginVertical: 8,
-    borderRadius: 28,
-    backgroundColor: palette.softWater,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewDim: {
-    backgroundColor: 'rgba(255,255,255,0.34)',
-  },
-  pulseOuter: {
-    position: 'absolute',
-    width: 184,
-    height: 184,
-    borderRadius: 92,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  pulseInner: {
-    position: 'absolute',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(255,255,255,0.20)',
-  },
-  badge: {
-    position: 'absolute',
-    top: 18,
-    left: 18,
-    backgroundColor: 'rgba(255,255,255,0.76)',
-    borderRadius: 50,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  badgeText: {
-    color: palette.waterTeal,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  stepCard: {
-    marginHorizontal: 20,
-    marginVertical: 18,
-    backgroundColor: palette.cardWhite,
-    borderRadius: 24,
-    padding: 20,
-    gap: 18,
-  },
-  stepCardTitle: {
-    color: palette.deepInk,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  stepRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stepDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: palette.stepIdle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepDotCompleted: {
-    backgroundColor: palette.waterTeal,
-  },
-  stepDotText: {
-    color: palette.mutedInk,
-    fontWeight: '700',
-  },
-  stepDotTextCompleted: {
-    color: '#FFFFFF',
-  },
-  stepLabel: {
+  } as ViewStyle,
+  center: {
     flex: 1,
-    color: palette.deepInk,
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 14,
-  },
-  stepStatus: {
-    color: palette.mutedInk,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  errorBlock: {
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  errorText: {
-    color: palette.qualityInvalid,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 14,
-    height: 50,
-    alignSelf: 'stretch',
-    borderRadius: 25,
-    backgroundColor: palette.waterTeal,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  progressBlock: {
-    paddingHorizontal: 64,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  progressText: {
-    color: palette.mutedInk,
-    fontSize: 12,
-  },
-  progressTrack: {
-    alignSelf: 'stretch',
-    marginTop: 12,
-    height: 7,
-    borderRadius: 50,
-    backgroundColor: palette.progressTrack,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: 7,
-    borderRadius: 50,
-    backgroundColor: palette.waterTeal,
-  },
+  } as ViewStyle,
+  ripple: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1.5,
+  } as ViewStyle,
+  copyWrap: {
+    marginTop: spacing.xl + 12,
+    minHeight: 32,
+    justifyContent: 'center',
+  } as ViewStyle,
+  phase: {
+    fontSize: typeScale.body,
+    letterSpacing: 1,
+  } as TextStyle,
 });

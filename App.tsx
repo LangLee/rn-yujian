@@ -2,7 +2,8 @@ import React from 'react';
 import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
-import { ThemeProvider } from './src/contexts/ThemeContext';
+import { ThemeProvider, useStatusBarStyle } from './src/contexts/ThemeContext';
+import { PreferencesProvider } from './src/contexts/PreferencesContext';
 import { LanguageProvider } from './src/contexts/LanguageContext';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { RecognitionProvider } from './src/contexts/RecognitionContext';
@@ -11,16 +12,23 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 
-// Inner component to keep providers above NavigationContainer
-const AppContent: React.FC = () => (
-  <>
-    {/* 主题固定浅色（与原 app 一致） */}
+// StatusBar 跟随环境主题：夜晚浅色内容，其余深色内容
+const ThemeStatusBar: React.FC = () => {
+  const barStyle = useStatusBarStyle();
+  return (
     <StatusBar
-      barStyle="dark-content"
+      barStyle={barStyle}
       backgroundColor="transparent"
       translucent
       animated
     />
+  );
+};
+
+// Inner component to keep providers above NavigationContainer
+const AppContent: React.FC = () => (
+  <>
+    <ThemeStatusBar />
     <NavigationContainer fallback={null}>
       <AppNavigator />
     </NavigationContainer>
@@ -32,17 +40,19 @@ function App(): React.JSX.Element {
     <ErrorBoundary>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AlertProvider>
-            <LanguageProvider>
-              <AuthProvider>
-                <RecognitionProvider>
-                  <CatchProvider>
-                    <AppContent />
-                  </CatchProvider>
-                </RecognitionProvider>
-              </AuthProvider>
-            </LanguageProvider>
-          </AlertProvider>
+          <PreferencesProvider>
+            <AlertProvider>
+              <LanguageProvider>
+                <AuthProvider>
+                  <RecognitionProvider>
+                    <CatchProvider>
+                      <AppContent />
+                    </CatchProvider>
+                  </RecognitionProvider>
+                </AuthProvider>
+              </LanguageProvider>
+            </AlertProvider>
+          </PreferencesProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

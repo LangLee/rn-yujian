@@ -43,18 +43,18 @@ const statsForPeriod = (period: SharePeriodKey): ShareStats => {
 const shareCopyFor = (period: SharePeriodKey): string => {
   switch (period) {
     case 'SINGLE':
-      return `我用渔见记录了一条${demoCatch.speciesName}：${demoCatch.weightKg}kg / ${demoCatch.lengthCm}cm，${demoCatch.location}。\n\n渔见 AI · 收藏每一次渔获`;
+      return `我用渔见记录了一条${demoCatch.speciesName}：${demoCatch.weightKg}kg / ${demoCatch.lengthCm}cm，${demoCatch.location}。\n\n渔见 · 拍照收藏每次渔获`;
     case 'TODAY':
-      return '今天鱼获：3条 / 2种 / 4.8kg。\n\n渔见 AI · 收藏每一次渔获';
+      return '今天鱼获：3条 / 2种 / 4.8kg。\n\n渔见 · 拍照收藏每次渔获';
     case 'WEEK':
-      return '本周鱼获：8条 / 4种 / 11.6kg。\n\n渔见 AI · 收藏每一次渔获';
+      return '本周鱼获：8条 / 4种 / 11.6kg。\n\n渔见 · 拍照收藏每次渔获';
     case 'MONTH':
-      return '本月鱼获：18条 / 7种 / 26.4kg。\n\n渔见 AI · 收藏每一次渔获';
+      return '本月鱼获：18条 / 7种 / 26.4kg。\n\n渔见 · 拍照收藏每次渔获';
     case 'YEAR':
-      return '本年鱼获：36条 / 12种 / 52.7kg。\n\n渔见 AI · 收藏每一次渔获';
+      return '本年鱼获：36条 / 12种 / 52.7kg。\n\n渔见 · 拍照收藏每次渔获';
     case 'ALL':
     default:
-      return '累计鱼获36条，已经发现12种鱼。\n\n渔见 AI · 收藏每一次渔获';
+      return '累计鱼获36条，已经发现12种鱼。\n\n渔见 · 拍照收藏每次渔获';
   }
 };
 
@@ -102,7 +102,7 @@ export const ShareCenterScreen: React.FC = () => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View>
-              <Text style={styles.cardBrand}>渔见 AI</Text>
+              <Text style={styles.cardBrand}>渔见</Text>
               <Text style={styles.cardBrandSub}>收藏每一次渔获</Text>
             </View>
             <View style={styles.cardPeriodPill}>

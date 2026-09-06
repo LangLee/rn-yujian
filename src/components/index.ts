@@ -3,4 +3,7 @@ export { FishIllustration } from './FishIllustration';
 export { RemoteImage } from './RemoteImage';
 export { DetectorOverlayImage, DetectorOverlayLegend } from './DetectorOverlay';
 export { AuthLayout, AuthField, AuthError, AuthPrimaryButton, AuthTextButton } from './AuthLayout';
-export { YujianBottomNav } from './YujianBottomNav';
+export { WaterBackdrop } from './WaterBackdrop';
+export { CaptureButton } from './CaptureButton';
+export { MediaViewerModal } from './MediaViewerModal';
+export { PressableScale, GlassCard, PrimaryButton, EmptyState, BottomSheet, FishGlyph } from './ui';

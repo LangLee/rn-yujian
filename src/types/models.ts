@@ -1,5 +1,5 @@
 /**
- * 渔见 AI 领域类型 —— 与原 Android 工程 Kotlin 数据模型一一对应。
+ * 渔见领域类型 —— 与原 Android 工程 Kotlin 数据模型一一对应。
  *
  * 来源对照：
  *   model/Models.kt            -> FishSpecies / SelectedImageMeta / RecognitionPrediction

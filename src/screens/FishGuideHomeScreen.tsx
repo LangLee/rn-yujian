@@ -1,67 +1,69 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { StackNavigationProp } from '@react-navigation/stack';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextStyle,
+  View,
+  ViewStyle,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
   fishKnowledgeService,
   localGuideItems,
   mergeGuideItems,
 } from '../services/fishKnowledgeService';
-import { FishIllustration } from '../components/FishIllustration';
 import { RemoteImage } from '../components/RemoteImage';
-import { TagChip } from '../components/Common';
 import { palette } from '../constants/colors';
+import { font, radius, spacing } from '../constants/tokens';
 import { FishGuideItem } from '../types/models';
-import { MainTabParamList, RootStackParamList } from '../navigation/types';
+import { StackNavigationProp, RootStackParamList } from '../navigation/types';
+import { WaterBackdrop } from '../components/WaterBackdrop';
+import { PressableScale } from '../components/ui/PressableScale';
+import { EmptyState } from '../components/ui/EmptyState';
 
-type FishGuideHomeScreenNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'Guide'>,
-  StackNavigationProp<RootStackParamList>
->;
+type FishGuideHomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Guide'>;
 
-type GuideFilterKey = 'ALL' | 'DISCOVERED' | 'UNDISCOVERED';
+const GOLD = '#C9A96A';
 
-const guideFilters: { key: GuideFilterKey; label: string }[] = [
-  { key: 'ALL', label: '全部' },
-  { key: 'DISCOVERED', label: '已发现' },
-  { key: 'UNDISCOVERED', label: '未发现' },
-];
-
-/** 鱼类图鉴首页（对应原 FishGuideHomeScreen.kt：远程列表 + 离线预览 fallback）。 */
+/**
+ * 鱼鉴首页（设计文档 9.2 + 高保真参考稿）：
+ * 顶栏（返回 / 渔见 / 搜索）→ hero（鱼鉴 + 认识你遇见的每一种鱼 + N 种鱼已点亮金进度）→
+ * 已点亮 / 未点亮 分组两列卡片。未点亮灰度显示但知识始终可点击，不做「锁住知识」。
+ */
 export const FishGuideHomeScreen: React.FC = () => {
   const navigation = useNavigation<FishGuideHomeScreenNavigationProp>();
-  const [species, setSpecies] = useState<FishGuideItem[]>([]);
+  const { profile } = useThemeSafe();
+  const insets = useSafeAreaInsets();
+
+  const [species, setSpecies] = useState<FishGuideItem[]>(localGuideItems());
   const [loading, setLoading] = useState(true);
-  const [offlinePreview, setOfflinePreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<GuideFilterKey>('ALL');
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
     (async () => {
-      setLoading(true);
       setError(null);
       try {
         const remote = await fishKnowledgeService.listSpecies();
-        if (!mounted) {
-          return;
+        if (mounted) {
+          setSpecies(mergeGuideItems(remote));
         }
-        setSpecies(mergeGuideItems(remote));
-        setOfflinePreview(false);
       } catch (e) {
-        if (!mounted) {
-          return;
+        if (mounted) {
+          setError(e instanceof Error ? e.message : '鱼鉴数据暂时没有加载出来');
         }
-        setSpecies(localGuideItems());
-        setOfflinePreview(true);
-        setError(e instanceof Error ? e.message : 'Fish Knowledge API 暂不可用');
-      }
-      if (mounted) {
-        setLoading(false);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     })();
     return () => {
@@ -69,386 +71,375 @@ export const FishGuideHomeScreen: React.FC = () => {
     };
   }, [retryToken]);
 
-  const visible = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return species.filter((fish) => {
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        fish.nameCn.toLowerCase().includes(normalizedQuery) ||
-        (fish.aliases ?? []).some((alias) => alias.toLowerCase().includes(normalizedQuery));
-      const matchesFilter =
-        filter === 'ALL' ? true : filter === 'DISCOVERED' ? !!fish.discovered : !fish.discovered;
-      return matchesQuery && matchesFilter;
-    });
-  }, [query, filter, species]);
+  const lit = useMemo(() => species.filter((fish) => fish.discovered), [species]);
+  const unlit = useMemo(() => species.filter((fish) => !fish.discovered), [species]);
 
-  if (loading && species.length === 0) {
-    return (
-      <View style={styles.centerScreen}>
-        <Text style={styles.centerText}>正在加载鱼鉴…</Text>
-      </View>
+  const searching = query.trim().length > 0;
+  const searchResults = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    return species.filter(
+      (fish) =>
+        fish.nameCn.toLowerCase().includes(keyword) ||
+        (fish.aliases ?? []).some((alias) => alias.toLowerCase().includes(keyword)),
     );
-  }
+  }, [species, query]);
 
-  const discovered = species.filter((fish) => fish.discovered).length;
+  const textPrimary = profile.surface.textPrimary;
+  const textSecondary = profile.surface.textSecondary;
+  const progress = species.length === 0 ? 0 : Math.min(1, lit.length / species.length);
 
   return (
-    <FlatList
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      data={visible}
-      keyExtractor={(item) => item.id}
-      numColumns={2}
-      columnWrapperStyle={styles.gridRow}
-      keyboardShouldPersistTaps="handled"
-      ListHeaderComponent={
-        <View>
-          <Text style={styles.title}>鱼类图鉴</Text>
-          <Text style={styles.subtitle}>把见过的鱼，一条条收藏起来</Text>
+    <View style={styles.screen}>
+      <WaterBackdrop />
+      {/* 顶栏：返回 / 渔见 / 搜索 */}
+      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
+          <Icon name="chevron-back" size={24} color={textPrimary} />
+        </PressableScale>
+        <Text style={[styles.topTitle, { color: textPrimary }]}>渔见</Text>
+        <PressableScale
+          onPress={() => {
+            setSearchOpen((value) => !value);
+            if (searchOpen) {
+              setQuery('');
+            }
+          }}
+          scaleTo={0.92}
+          style={[styles.edgeHit, styles.edgeRight]}
+        >
+          <Icon name={searchOpen ? 'close' : 'search-outline'} size={21} color={textPrimary} />
+        </PressableScale>
+      </View>
 
-          {error !== null ? (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText} numberOfLines={2}>
-                {offlinePreview ? `离线预览：${error}` : error}
-              </Text>
-              <Pressable
-                onPress={() => setRetryToken((value) => value + 1)}
-                style={({ pressed }) => [styles.retryChip, pressed && { opacity: 0.8 }]}
-                accessibilityRole="button"
-                accessibilityLabel="重试"
-              >
-                <Icon name="refresh" size={14} color="#FFFFFF" />
-                <Text style={styles.retryChipText}>重试</Text>
-              </Pressable>
-            </View>
-          ) : offlinePreview ? (
-            <Text style={styles.offlineHint}>
-              当前为离线预览数据，连接后将自动读取 Fish Knowledge Database。
-            </Text>
-          ) : null}
-
-          <View style={styles.progressCard}>
-            <View style={styles.progressBody}>
-              <Text style={styles.progressLabel}>我的图鉴</Text>
-              <View style={styles.progressCountRow}>
-                <Text style={styles.progressCount}>{discovered}</Text>
-                <Text style={styles.progressTotal}>{` / ${species.length}`}</Text>
-              </View>
-              <Text style={styles.progressCaption}>已发现鱼种</Text>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${Math.round(
-                        (species.length === 0
-                          ? 0
-                          : Math.min(1, Math.max(0, discovered / species.length))) * 100,
-                      )}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-            <FishIllustration size={104} bodyColor="rgba(46,139,131,0.78)" />
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[styles.content, { paddingBottom: 48 + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero：鱼鉴 + 点亮进度 */}
+        <View style={styles.heroRow}>
+          <View style={styles.heroLeft}>
+            <Text style={[styles.heroTitle, { color: textPrimary }]}>鱼鉴</Text>
+            <Text style={[styles.heroSub, { color: textSecondary }]}>认识你遇见的每一种鱼</Text>
           </View>
+          <View style={styles.heroRight}>
+            <View style={styles.litRow}>
+              <Text style={[styles.litCount, { color: GOLD }]}>{lit.length}</Text>
+              <Text style={[styles.litSuffix, { color: textSecondary }]}>种鱼已点亮</Text>
+            </View>
+            <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.5)' }]}>
+              <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: GOLD }]} />
+            </View>
+          </View>
+        </View>
 
-          <View style={styles.searchWrap}>
-            <Icon name="search" size={18} color={palette.mutedInk} />
+        {error !== null ? (
+          <PressableScale onPress={() => setRetryToken((value) => value + 1)} scaleTo={0.98}>
+            <View style={[styles.errorBanner, { backgroundColor: profile.surface.glassStrong }]}>
+              <Text style={[styles.errorText, { color: textSecondary }]} numberOfLines={2}>
+                鱼鉴暂时没有加载出来，你的记录没有受影响
+              </Text>
+              <Text style={[styles.retryText, { color: profile.surface.accent }]}>重新尝试</Text>
+            </View>
+          </PressableScale>
+        ) : null}
+
+        {searchOpen ? (
+          <View style={[styles.searchWrap, { backgroundColor: profile.surface.glassStrong }]}>
+            <Icon name="search-outline" size={17} color={textSecondary} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: textPrimary }]}
               value={query}
               onChangeText={setQuery}
               placeholder="搜索鱼名或别名"
-              placeholderTextColor={palette.mutedInk}
-              selectionColor={palette.waterTeal}
-              returnKeyType="search"
+              placeholderTextColor={textSecondary}
+              autoFocus
             />
           </View>
+        ) : null}
 
-          <View style={styles.filterRow}>
-            {guideFilters.map((item) => (
-              <Pressable key={item.key} onPress={() => setFilter(item.key)}>
-                <TagChip text={item.label} emphasized={filter === item.key} />
-              </Pressable>
+        {loading && species.length === 0 ? (
+          <Text style={[styles.stateText, { color: textSecondary }]}>正在打开鱼鉴…</Text>
+        ) : searching ? (
+          searchResults.length === 0 ? (
+            <EmptyState
+              title="没有找到这个鱼种"
+              description="可以试试其他名称，或清空搜索浏览全部鱼种。"
+              actionLabel="清空搜索"
+              onAction={() => setQuery('')}
+            />
+          ) : (
+            <SpeciesSection title="搜索结果" items={searchResults} textPrimary={textPrimary} textSecondary={textSecondary} onOpen={(key) => navigation.navigate('Species', { key })} />
+          )
+        ) : (
+          <>
+            <SpeciesSection title="已点亮" items={lit} textPrimary={textPrimary} textSecondary={textSecondary} onOpen={(key) => navigation.navigate('Species', { key })} />
+            <SpeciesSection title="未点亮" items={unlit} textPrimary={textPrimary} textSecondary={textSecondary} onOpen={(key) => navigation.navigate('Species', { key })} />
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+};
+
+import { useTheme } from '../contexts/ThemeContext';
+const useThemeSafe = useTheme;
+
+const SpeciesSection: React.FC<{
+  title: string;
+  items: FishGuideItem[];
+  textPrimary: string;
+  textSecondary: string;
+  onOpen: (key: string) => void;
+}> = ({ title, items, textPrimary, textSecondary, onOpen }) => {
+  if (items.length === 0) {
+    return null;
+  }
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: textPrimary }]}>{title}</Text>
+      <View style={styles.grid}>
+        {chunk(items, 2).map((row, rowIndex) => (
+          <View key={rowIndex} style={styles.gridRow}>
+            {row.map((fish) => (
+              <SpeciesCard
+                key={fish.id}
+                fish={fish}
+                textSecondary={textSecondary}
+                onOpen={() => onOpen(fish.id)}
+              />
             ))}
+            {row.length < 2 ? <View style={styles.gridFiller} /> : null}
           </View>
-
-          <View style={styles.countRow}>
-            <Text style={styles.countTitle}>鱼种</Text>
-            <Text style={styles.countText}>{`${visible.length} 种`}</Text>
-          </View>
-        </View>
-      }
-      renderItem={({ item }) => (
-        <SpeciesCard
-          fish={item}
-          imageUrl={fishKnowledgeService.resolveAssetUrl(item.coverImage)}
-          onClick={() => navigation.navigate('Species', { key: item.id })}
-        />
-      )}
-      ListEmptyComponent={
-        !loading ? (
-          <Text style={styles.emptyText}>没有匹配的鱼种。</Text>
-        ) : null
-      }
-    />
+        ))}
+      </View>
+    </View>
   );
 };
 
 const SpeciesCard: React.FC<{
   fish: FishGuideItem;
-  imageUrl: string | null;
-  onClick: () => void;
-}> = ({ fish, imageUrl, onClick }) => (
-  <Pressable
-    onPress={onClick}
-    style={({ pressed }) => [styles.speciesCard, pressed && { opacity: 0.85 }]}
-    accessibilityRole="button"
-    accessibilityLabel={`${fish.nameCn} 鱼鉴`}
-  >
-    <View
-      style={[
-        styles.speciesImageWrap,
-        { backgroundColor: fish.discovered ? palette.softWater : '#EEEFEA' },
-      ]}
-    >
-      {imageUrl ? (
-        <RemoteImage url={imageUrl} style={styles.speciesImage} resizeMode="cover" />
-      ) : (
-        <FishIllustration
-          size={112}
-          bodyColor={
-            fish.discovered ? 'rgba(46,139,131,0.72)' : 'rgba(138,151,155,0.45)'
-          }
-        />
-      )}
-      {fish.discovered ? (
-        <View style={styles.discoveredBadge}>
-          <Text style={styles.discoveredBadgeText}>已发现</Text>
+  textSecondary: string;
+  onOpen: () => void;
+}> = ({ fish, textSecondary, onOpen }) => {
+  const imageUrl = fishKnowledgeService.resolveAssetUrl(fish.coverImage);
+  return (
+    <PressableScale onPress={onOpen} scaleTo={0.98} style={styles.cardHit}>
+      <View style={[styles.card, { borderColor: 'rgba(255,255,255,0.55)' }]}>
+        <View style={[styles.imageWrap, !fish.discovered && styles.imageDim]}>
+          {imageUrl ? (
+            <RemoteImage url={imageUrl} style={styles.image} resizeMode="cover" />
+          ) : (
+            <View style={[styles.image, styles.imageFallback]}>
+              <Text style={styles.fallbackText}>{fish.nameCn.slice(0, 1)}</Text>
+            </View>
+          )}
         </View>
-      ) : null}
-    </View>
-    <Text style={styles.speciesName}>{fish.nameCn}</Text>
-    <TagChip text={fish.category.length > 0 ? fish.category : '鱼鉴内容'} emphasized />
-    {fish.catches && fish.catches > 0 ? (
-      <Text style={styles.speciesMetaTeal}>{`我的鱼获 ${fish.catches} 次`}</Text>
-    ) : (
-      <Text style={styles.speciesMetaMuted}>查看完整鱼鉴</Text>
-    )}
-  </Pressable>
-);
+        <View style={styles.cardBody}>
+          <Text style={styles.cardName} numberOfLines={1}>
+            {fish.nameCn}
+          </Text>
+          <Text style={[styles.cardMeta, { color: textSecondary }]} numberOfLines={1}>
+            {fish.discovered ? `${fish.catches ?? 0} 次记录` : '还没有我的记录'}
+          </Text>
+        </View>
+      </View>
+    </PressableScale>
+  );
+};
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    rows.push(items.slice(i, i + size));
+  }
+  return rows;
+}
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: palette.warmBackground,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 110,
-  },
-  centerScreen: {
+  } as ViewStyle,
+  flex: {
     flex: 1,
-    backgroundColor: palette.warmBackground,
+  } as ViewStyle,
+  topBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerText: {
-    color: palette.mutedInk,
-    fontSize: 14,
-  },
-  title: {
-    color: palette.deepInk,
-    fontSize: 29,
+    paddingHorizontal: spacing.page,
+    paddingBottom: spacing.sm,
+  } as ViewStyle,
+  edgeHit: {
+    width: 44,
+    alignItems: 'flex-start',
+    paddingVertical: 6,
+  } as ViewStyle,
+  edgeRight: {
+    alignItems: 'flex-end',
+  } as ViewStyle,
+  topTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: font.serif,
+    fontSize: 20,
     fontWeight: '700',
-  },
-  subtitle: {
-    color: palette.mutedInk,
-    fontSize: 13,
-    marginTop: 4,
-    marginBottom: 14,
-  },
+    letterSpacing: 4,
+  } as TextStyle,
+  content: {
+    paddingHorizontal: spacing.page,
+  } as ViewStyle,
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+  } as ViewStyle,
+  heroLeft: {
+    flexShrink: 1,
+  } as ViewStyle,
+  heroTitle: {
+    fontFamily: font.serif,
+    fontSize: 30,
+    fontWeight: '700',
+    letterSpacing: 10,
+  } as TextStyle,
+  heroSub: {
+    fontSize: 14,
+    marginTop: 10,
+  } as TextStyle,
+  heroRight: {
+    width: 150,
+    alignItems: 'flex-end',
+  } as ViewStyle,
+  litRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 3,
+  } as ViewStyle,
+  litCount: {
+    fontFamily: font.serif,
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 24,
+  } as TextStyle,
+  litSuffix: {
+    fontSize: 12,
+    lineHeight: 20,
+  } as TextStyle,
+  progressTrack: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
+    marginTop: 8,
+    overflow: 'hidden',
+  } as ViewStyle,
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  } as ViewStyle,
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3E8',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 12,
-    gap: 10,
-  },
-  errorBannerText: {
+    gap: spacing.md,
+    borderRadius: radius.m,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    marginTop: spacing.lg,
+  } as ViewStyle,
+  errorText: {
     flex: 1,
-    color: '#9A5B16',
-    fontSize: 11,
-  },
-  retryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: palette.waterTeal,
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  retryChipText: {
-    color: '#FFFFFF',
     fontSize: 12,
-  },
-  offlineHint: {
-    color: palette.mutedInk,
-    fontSize: 11,
-    marginBottom: 12,
-  },
-  progressCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: palette.softWater,
-    borderRadius: 28,
-    padding: 20,
-    marginBottom: 12,
-  },
-  progressBody: {
-    flex: 1,
-  },
-  progressLabel: {
-    color: palette.waterTeal,
+    lineHeight: 17,
+  } as TextStyle,
+  retryText: {
     fontSize: 13,
     fontWeight: '600',
-  },
-  progressCountRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginTop: 8,
-  },
-  progressCount: {
-    color: palette.deepInk,
-    fontSize: 36,
-    fontWeight: '700',
-    lineHeight: 44,
-  },
-  progressTotal: {
-    color: palette.mutedInk,
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 6,
-    marginLeft: 2,
-  },
-  progressCaption: {
-    color: palette.mutedInk,
-    fontSize: 12,
-  },
-  progressTrack: {
-    alignSelf: 'stretch',
-    marginTop: 14,
-    height: 7,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: 7,
-    borderRadius: 50,
-    backgroundColor: palette.waterTeal,
-  },
+  } as TextStyle,
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: palette.cardWhite,
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    height: 48,
-    marginBottom: 12,
-  },
+    gap: spacing.sm,
+    borderRadius: radius.s,
+    paddingHorizontal: spacing.md,
+    height: 42,
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  } as ViewStyle,
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    color: palette.deepInk,
+    fontSize: 15,
     paddingVertical: 0,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  countRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  countTitle: {
-    color: palette.deepInk,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  countText: {
-    color: palette.mutedInk,
-    fontSize: 12,
-  },
-  gridRow: {
-    gap: 12,
-    marginBottom: 14,
-  },
-  speciesCard: {
-    flex: 1,
-    backgroundColor: palette.cardWhite,
-    borderRadius: 22,
-    padding: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  speciesImageWrap: {
-    height: 164,
-    borderRadius: 16,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  speciesImage: {
-    width: '100%',
-    height: '100%',
-  },
-  discoveredBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderRadius: 50,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  discoveredBadgeText: {
-    color: palette.waterTeal,
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  speciesName: {
-    color: palette.deepInk,
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 11,
-  },
-  speciesMetaTeal: {
-    color: palette.waterTeal,
-    fontSize: 10,
-    marginTop: 5,
-  },
-  speciesMetaMuted: {
-    color: palette.mutedInk,
-    fontSize: 10,
-    marginTop: 5,
-  },
-  emptyText: {
-    color: palette.mutedInk,
+  } as TextStyle,
+  stateText: {
     fontSize: 13,
     textAlign: 'center',
-    marginVertical: 24,
-  },
+    paddingVertical: spacing.xl,
+  } as TextStyle,
+  section: {
+    marginTop: spacing.xl,
+  } as ViewStyle,
+  sectionTitle: {
+    fontFamily: font.serif,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 2,
+    marginBottom: spacing.md,
+    paddingHorizontal: 2,
+  } as TextStyle,
+  grid: {
+    gap: spacing.md,
+  } as ViewStyle,
+  gridRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  } as ViewStyle,
+  gridFiller: {
+    flex: 1,
+  } as ViewStyle,
+  cardHit: {
+    flex: 1,
+  } as ViewStyle,
+  card: {
+    borderRadius: radius.m + 2,
+    borderWidth: 1,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.38)',
+  } as ViewStyle,
+  imageWrap: {
+    width: '100%',
+    height: 86,
+    backgroundColor: 'rgba(220,238,235,0.4)',
+  } as ViewStyle,
+  imageDim: {
+    opacity: 0.55,
+  } as ViewStyle,
+  image: {
+    width: '100%',
+    height: '100%',
+  } as ViewStyle,
+  imageFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as ViewStyle,
+  fallbackText: {
+    fontFamily: font.serif,
+    fontSize: 26,
+    color: palette.waterTeal,
+  } as TextStyle,
+  cardBody: {
+    padding: spacing.md,
+    gap: 3,
+  } as ViewStyle,
+  cardName: {
+    fontFamily: font.serif,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: '#1F4A56',
+  } as TextStyle,
+  cardMeta: {
+    fontSize: 11,
+    letterSpacing: 0.5,
+  } as TextStyle,
 });

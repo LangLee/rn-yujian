@@ -201,3 +201,172 @@ export const truncateText = (text: string, maxLength: number): string => {
   }
   return text.substring(0, maxLength - 3) + '...';
 };
+
+// ---------------------------------------------------------------------------
+// 鱼获 / 记录日历辅助
+// ---------------------------------------------------------------------------
+
+export interface CatchLike {
+  capturedAt: string;
+  speciesId?: string;
+  speciesName?: string;
+  imageUrl?: string;
+}
+
+const pad = (value: number): string => (value < 10 ? `0${value}` : `${value}`);
+
+/** 'YYYY-MM-DD'（本地时区） */
+export const dayKeyOf = (date: Date | string): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) {
+    return '';
+  }
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/** 月份分组键 'YYYY-MM' */
+export const monthKeyOf = (date: Date | string): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) {
+    return '';
+  }
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+};
+
+/** 卡片时间：今天 15:26 / 9月5日 15:26 / 2025年1月31日 */
+export const formatCaptureWhen = (iso: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const now = new Date();
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (dayKeyOf(date) === dayKeyOf(now)) {
+    return `今天 ${time}`;
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (dayKeyOf(date) === dayKeyOf(yesterday)) {
+    return `昨天 ${time}`;
+  }
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+  }
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+};
+
+/** 详情页完整时间：2026年9月5日 15:26 */
+export const formatCaptureFull = (iso: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+};
+
+export const formatMonthLabel = (year: number, month: number): string =>
+  `${year}年${month + 1}月`;
+
+export const formatMonthDayLabel = (date: Date): string =>
+  `${date.getMonth() + 1}月${date.getDate()}日`;
+
+export interface MonthGroup<T extends CatchLike> {
+  key: string;
+  label: string;
+  year: number;
+  month: number;
+  items: T[];
+}
+
+/** 我的渔获按月份分组（9.1：主内容按月份分组）。 */
+export function groupCatchesByMonth<T extends CatchLike>(items: T[]): MonthGroup<T>[] {
+  const groups = new Map<string, MonthGroup<T>>();
+  for (const item of items) {
+    const date = new Date(item.capturedAt);
+    if (Number.isNaN(date.getTime())) {
+      continue;
+    }
+    const key = monthKeyOf(date);
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        label: formatMonthLabel(date.getFullYear(), date.getMonth()),
+        year: date.getFullYear(),
+        month: date.getMonth(),
+        items: [],
+      };
+      groups.set(key, group);
+    }
+    group.items.push(item);
+  }
+  return Array.from(groups.values()).sort((a, b) => b.key.localeCompare(a.key));
+}
+
+/** 有鱼获记录的独立天数（记录天数统计）。 */
+export function countDistinctDays(items: CatchLike[]): number {
+  const days = new Set<string>();
+  for (const item of items) {
+    const key = dayKeyOf(item.capturedAt);
+    if (key) {
+      days.add(key);
+    }
+  }
+  return days.size;
+}
+
+/** 一天内的记录次数映射（记录日历小鱼 glyph）。 */
+export function countByDay(items: CatchLike[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const item of items) {
+    const key = dayKeyOf(item.capturedAt);
+    if (!key) {
+      continue;
+    }
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  return map;
+}
+
+// ---------------------------------------------------------------------------
+// 单位与偏好（13.4 单位与偏好）
+// ---------------------------------------------------------------------------
+
+export type LengthUnit = 'cm' | 'inch';
+export type WeightUnit = 'kg' | 'jin' | 'lb';
+
+export const LENGTH_UNIT_LABEL: Record<LengthUnit, string> = {
+  cm: '厘米 cm',
+  inch: '英寸 inch',
+};
+
+export const WEIGHT_UNIT_LABEL: Record<WeightUnit, string> = {
+  kg: '千克 kg',
+  jin: '斤',
+  lb: '磅 lb',
+};
+
+export function formatLength(cm: number | null | undefined, unit: LengthUnit): string | null {
+  if (cm == null || Number.isNaN(cm) || cm <= 0) {
+    return null;
+  }
+  if (unit === 'inch') {
+    return `${(cm / 2.54).toFixed(1)} in`;
+  }
+  return `${Number.isInteger(cm) ? cm : cm.toFixed(1)} cm`;
+}
+
+export function formatWeight(kg: number | null | undefined, unit: WeightUnit): string | null {
+  if (kg == null || Number.isNaN(kg) || kg <= 0) {
+    return null;
+  }
+  if (unit === 'jin') {
+    return `${(kg * 2).toFixed(1)} 斤`;
+  }
+  if (unit === 'lb') {
+    return `${(kg * 2.20462).toFixed(1)} lb`;
+  }
+  return `${kg.toFixed(2).replace(/\.?0+$/, '')} kg`;
+}

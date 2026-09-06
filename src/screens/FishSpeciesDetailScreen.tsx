@@ -383,7 +383,7 @@ export const FishSpeciesDetailScreen: React.FC = () => {
       ) : selectedTab === 'CATCH' ? (
         <CatchSection
           catchCount={catchCount}
-          onOpenCatch={() => navigation.navigate('Main', { screen: 'My' })}
+          onOpenCatch={() => navigation.navigate('MyCatches')}
         />
       ) : (
         <RankingSection />
