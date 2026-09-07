@@ -317,7 +317,7 @@ export const CatchDetailScreen: React.FC = () => {
             </PressableScale>
           ) : null}
           <PressableScale
-            onPress={() => navigation.navigate('Share', { catchId: remoteCatch.id })}
+            onPress={() => navigation.navigate('ShareCreate', { presetCatchId: remoteCatch.id })}
             scaleTo={0.92}
             style={styles.edgeHit}
           >

@@ -13,9 +13,11 @@ import { RecognizingScreen } from '../screens/RecognizingScreen';
 import { RecognitionResultScreen } from '../screens/RecognitionResultScreen';
 import { RecognitionIssueScreen } from '../screens/RecognitionIssueScreen';
 import { FishSpeciesDetailScreen } from '../screens/FishSpeciesDetailScreen';
-import { ShareCenterScreen } from '../screens/ShareCenterScreen';
 import { CatchDetailScreen } from '../screens/CatchDetailScreen';
-import { MyCatchesScreen } from '../screens/MyCatchesScreen';
+import { CatchHubScreen } from '../screens/share/CatchHubScreen';
+import { ShareCreateScreen } from '../screens/share/ShareCreateScreen';
+import { SharePreviewScreen } from '../screens/share/SharePreviewScreen';
+import { AnnualReviewScreen } from '../screens/share/AnnualReviewScreen';
 import { FishGuideHomeScreen } from '../screens/FishGuideHomeScreen';
 import { RecordCalendarScreen } from '../screens/RecordCalendarScreen';
 import { SpeciesPickerScreen } from '../screens/SpeciesPickerScreen';
@@ -107,10 +109,12 @@ export const AppNavigator: React.FC = () => {
       <Stack.Screen name="Result" component={RecognitionResultScreen} />
       <Stack.Screen name="RecognitionIssue" component={RecognitionIssueScreen} />
       <Stack.Screen name="Species" component={withSafeAreaTop(FishSpeciesDetailScreen)} />
-      <Stack.Screen name="Share" component={withSafeAreaTop(ShareCenterScreen)} />
       <Stack.Screen name="CatchDetail" component={CatchDetailScreen} />
-      <Stack.Screen name="MyCatches" component={MyCatchesScreen} />
-      <Stack.Screen name="Guide" component={withSafeAreaTop(FishGuideHomeScreen)} />
+      <Stack.Screen name="MyCatches" component={CatchHubScreen} />
+      <Stack.Screen name="ShareCreate" component={ShareCreateScreen} />
+      <Stack.Screen name="SharePreview" component={SharePreviewScreen} />
+      <Stack.Screen name="AnnualReview" component={AnnualReviewScreen} />
+      <Stack.Screen name="Guide" component={FishGuideHomeScreen} />
       <Stack.Screen name="Calendar" component={RecordCalendarScreen} />
       <Stack.Screen name="SpeciesPicker" component={SpeciesPickerScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />

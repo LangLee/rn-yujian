@@ -38,7 +38,14 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 /** 轮播卡宽：两侧留出邻卡「露出」的边（参考稿卡片两侧透出邻卡边缘） */
 const CARD_WIDTH = SCREEN_WIDTH - spacing.page * 2 - 20;
 const CARD_GAP = 12;
-const CARD_HEIGHT = Math.min(SCREEN_HEIGHT * 0.46, 410);
+/**
+ * 卡片高度自适应：在「顶部品牌 + 统计条 + 轮播点 + 底部相机区」之外的剩余空间内取值，
+ * 保证任何屏幕尺寸下卡片底部都不会与相机按钮重叠（相机区约 182dp）。
+ */
+const CARD_HEIGHT = Math.max(
+  300,
+  Math.min(SCREEN_HEIGHT * 0.44, 384, SCREEN_HEIGHT - 480),
+);
 
 /**
  * P01 首页（设计文档 06 + 高保真参考稿）：

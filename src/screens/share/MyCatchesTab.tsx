@@ -13,34 +13,33 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { StackNavigationProp, RootStackParamList } from '../navigation/types';
-import { useTheme } from '../contexts/ThemeContext';
-import { useAuth } from '../contexts/AuthContext';
-import { useCatchArchive } from '../contexts/CatchContext';
-import { RemoteCatch } from '../types/models';
-import { palette } from '../constants/colors';
-import { font, radius, spacing } from '../constants/tokens';
-import { catchMemoryService, CatchMemoryData } from '../services/catchMemoryService';
-import { groupCatchesByMonth } from '../utils/formatters';
-import { WaterBackdrop } from '../components/WaterBackdrop';
-import { RemoteImage } from '../components/RemoteImage';
-import { PressableScale } from '../components/ui/PressableScale';
-import { EmptyState } from '../components/ui/EmptyState';
-import { BottomSheet } from '../components/ui/BottomSheet';
-import { RadioDot } from '../components/ui/RadioDot';
+import { StackNavigationProp, RootStackParamList } from '../../navigation/types';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCatchArchive } from '../../contexts/CatchContext';
+import { RemoteCatch } from '../../types/models';
+import { palette } from '../../constants/colors';
+import { font, radius, spacing } from '../../constants/tokens';
+import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryService';
+import { groupCatchesByMonth } from '../../utils/formatters';
+import { RemoteImage } from '../../components/RemoteImage';
+import { PressableScale } from '../../components/ui/PressableScale';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { BottomSheet } from '../../components/ui/BottomSheet';
+import { RadioDot } from '../../components/ui/RadioDot';
 
-type MyCatchesScreenNavigationProp = StackNavigationProp<RootStackParamList, 'MyCatches'>;
+type MyCatchesTabNavigationProp = StackNavigationProp<RootStackParamList, 'MyCatches'>;
 
 const COLUMNS = 2;
 const GOLD = '#C9A96A';
 
 /**
- * P06 我的渔获（设计文档 9.1 + 高保真参考稿）：
- * 大衬线标题 + 轻摘要；筛选 chips（全部 / 鱼种 / 时间 / 地点）；
- * 主内容按月份分组、两列 3:4 照片卡（底部渐变上叠鱼名与地点）；右下角相机 FAB。
+ * 我的鱼获 Tab（P20-1）：筛选 chips（全部 / 鱼种 / 时间 / 地点）；
+ * 按月份分组、两列 3:4 照片卡；右下角相机 FAB。
+ * 由 CatchHub 容器承载页面标题与分段切换，这里只负责列表本体。
  */
-export const MyCatchesScreen: React.FC = () => {
-  const navigation = useNavigation<MyCatchesScreenNavigationProp>();
+export const MyCatchesTab: React.FC = () => {
+  const navigation = useNavigation<MyCatchesTabNavigationProp>();
   const { profile } = useTheme();
   const { session } = useAuth();
   const { catches, loading, error, reload } = useCatchArchive();
@@ -115,22 +114,21 @@ export const MyCatchesScreen: React.FC = () => {
   const speciesFilterName = speciesOptions.find((option) => option.key === speciesFilter)?.name;
 
   return (
-    <View style={styles.screen}>
-      <WaterBackdrop />
+    <View style={styles.flex}>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.lg, paddingBottom: 120 + insets.bottom },
+          { paddingBottom: 120 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* 顶栏：返回 + 搜索 */}
-        <View style={styles.topRow}>
-          <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.iconHit}>
-            <Icon name="chevron-back" size={24} color={textPrimary} />
-          </PressableScale>
-          <View style={styles.topSpacer} />
+        {/* 摘要 + 搜索 */}
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryText, { color: textSecondary }]}>
+            {catches.length} 次渔获 ·{' '}
+            {new Set(catches.map((item) => item.speciesId).filter(Boolean)).size} 种鱼
+          </Text>
           <PressableScale
             onPress={() => {
               setSearchOpen((value) => !value);
@@ -139,17 +137,11 @@ export const MyCatchesScreen: React.FC = () => {
               }
             }}
             scaleTo={0.92}
-            style={styles.iconHit}
+            style={styles.searchHit}
           >
-            <Icon name={searchOpen ? 'close' : 'search'} size={22} color={textPrimary} />
+            <Icon name={searchOpen ? 'close' : 'search'} size={20} color={textPrimary} />
           </PressableScale>
         </View>
-
-        {/* 大衬线标题 + 轻摘要 */}
-        <Text style={[styles.title, { color: textPrimary }]}>我的渔获</Text>
-        <Text style={[styles.subtitle, { color: textSecondary }]}>
-          {catches.length} 次渔获 · {new Set(catches.map((item) => item.speciesId).filter(Boolean)).size} 种鱼
-        </Text>
 
         {searchOpen ? (
           <View style={[styles.searchWrap, { backgroundColor: profile.surface.glassStrong }]}>
@@ -167,7 +159,13 @@ export const MyCatchesScreen: React.FC = () => {
 
         {/* 筛选 chips：全部 / 鱼种 / 时间 / 地点 */}
         <View style={styles.chipRow}>
-          <PressableScale onPress={() => { setSpeciesFilter(null); setLocationFilter(null); }} scaleTo={0.96}>
+          <PressableScale
+            onPress={() => {
+              setSpeciesFilter(null);
+              setLocationFilter(null);
+            }}
+            scaleTo={0.96}
+          >
             <View
               style={[
                 styles.chip,
@@ -257,7 +255,6 @@ export const MyCatchesScreen: React.FC = () => {
                       item={item}
                       accessToken={session?.accessToken ?? null}
                       location={memories[item.id]?.location?.trim() ?? null}
-                      textPrimary={textPrimary}
                       onPress={() =>
                         navigation.navigate('CatchDetail', { catchId: item.id, initialCatch: item })
                       }
@@ -277,7 +274,15 @@ export const MyCatchesScreen: React.FC = () => {
         scaleTo={0.94}
         style={[styles.fab, { bottom: insets.bottom + spacing.xl }]}
       >
-        <View style={[styles.fabCircle, { backgroundColor: profile.surface.glassStrong, borderColor: 'rgba(255,255,255,0.7)' }]}>
+        <View
+          style={[
+            styles.fabCircle,
+            {
+              backgroundColor: profile.surface.glassStrong,
+              borderColor: 'rgba(255,255,255,0.7)',
+            },
+          ]}
+        >
           <Icon name="camera-outline" size={22} color={GOLD} />
         </View>
       </PressableScale>
@@ -366,7 +371,6 @@ const CatchCard: React.FC<{
   item: RemoteCatch;
   accessToken: string | null;
   location: string | null;
-  textPrimary: string;
   onPress: () => void;
 }> = ({ item, accessToken, location, onPress }) => {
   const when = formatCardDate(item.capturedAt);
@@ -434,40 +438,28 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  } as ViewStyle,
   flex: {
     flex: 1,
   } as ViewStyle,
   content: {
     paddingHorizontal: spacing.page,
+    paddingTop: spacing.md,
   } as ViewStyle,
-  topRow: {
+  summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   } as ViewStyle,
-  topSpacer: {
-    flex: 1,
-  } as ViewStyle,
-  iconHit: {
-    width: 40,
-    height: 40,
+  summaryText: {
+    fontSize: 14,
+  } as TextStyle,
+  searchHit: {
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: 19,
   } as ViewStyle,
-  title: {
-    fontFamily: font.serif,
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: 3,
-    marginTop: spacing.lg,
-  } as TextStyle,
-  subtitle: {
-    fontSize: 14,
-    marginTop: 6,
-  } as TextStyle,
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -475,7 +467,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.s,
     paddingHorizontal: spacing.md,
     height: 42,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.5)',
   } as ViewStyle,
@@ -488,7 +480,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.lg,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   } as ViewStyle,
   chip: {
     paddingHorizontal: 18,
@@ -538,7 +531,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   } as TextStyle,
   monthGroup: {
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
   } as ViewStyle,
   monthLabel: {
     fontFamily: font.serif,
