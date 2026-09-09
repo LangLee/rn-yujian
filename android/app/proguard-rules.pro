@@ -244,4 +244,18 @@
 -keepattributes SourceFile,LineNumberTable
 -keepattributes InnerClasses
 
-# 注意：已移除 TensorFlow 相关规则，因为项目中未使用
+# ============================================
+# 端侧推理（拍照识鱼）
+# ============================================
+# ONNX Runtime 的 native 层通过 JNI 按类名/方法名回调 Java 侧，
+# 被混淆改名后首次推理即抛 NoSuchMethod / ClassNotFoundException 导致闪退。
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
+
+# TensorFlow Lite（fish_classifier.tflite 的解释器与委托）。
+-keep class org.tensorflow.lite.** { *; }
+-keep class org.tensorflow.lite.gpu.** { *; }
+-dontwarn org.tensorflow.lite.**
+
+# 识鱼原生模块自身（RN 桥接与 JSON 契约类）。
+-keep class com.yujian.ai.** { *; }
