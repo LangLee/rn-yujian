@@ -21,6 +21,7 @@ import { font, spacing } from '../../constants/tokens';
 import { ShareWork, shareWorkService } from '../../services/shareWorkService';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { PressableScale } from '../../components/ui/PressableScale';
+import { ScreenHeader } from '../../components';
 import { PosterCanvas, POSTER_ASPECT } from './PosterCanvas';
 import {
   alertSaveResult,
@@ -165,16 +166,11 @@ export const SharePreviewScreen: React.FC = () => {
     return (
       <View style={styles.screen}>
         <WaterBackdrop />
-        <View style={[styles.generatingWrap, { paddingTop: insets.top + spacing.xl }]}>
-          <PressableScale
-            onPress={() => (mode === 'create' ? setStage('preview') : navigation.goBack())}
-            scaleTo={0.92}
-            style={styles.edgeHit}
-          >
-            <Icon name="chevron-back" size={24} color={textPrimary} />
-          </PressableScale>
-          <Text style={[styles.generatingTitle, { color: textPrimary }]}>正在生成</Text>
-
+        <ScreenHeader
+          title="正在生成"
+          onBack={() => (mode === 'create' ? setStage('preview') : navigation.goBack())}
+        />
+        <View style={styles.generatingWrap}>
           <View style={styles.ringWrap}>
             <ProgressRing percent={percent} size={150} />
             <View style={styles.ringCenter} pointerEvents="none">
@@ -211,47 +207,21 @@ export const SharePreviewScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + spacing.sm, paddingBottom: 48 + insets.bottom },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* 头部 */}
-        <View style={styles.topBar}>
-          <PressableScale onPress={handleBack} scaleTo={0.92} style={styles.edgeHit}>
-            <Icon name="chevron-back" size={24} color={textPrimary} />
-          </PressableScale>
-          <View style={styles.titleBlock}>
-            <Text style={[styles.title, { color: textPrimary }]}>
-              {isResult ? '生成完成' : `${templateName}预览`}
-            </Text>
-            <View style={styles.subtitleRow}>
-              {isResult ? (
-                <View style={[styles.doneBadge, { backgroundColor: 'rgba(77,158,161,0.16)' }]}>
-                  <Icon name="checkmark" size={12} color={profile.surface.accent} />
-                  <Text style={[styles.doneText, { color: profile.surface.accent }]}>
-                    你的鱼获记忆已生成
-                  </Text>
-                </View>
-              ) : (
-                <Text style={[styles.subtitle, { color: textSecondary }]}>
-                  已根据你的设置自动排版
-                </Text>
-              )}
-            </View>
-          </View>
-          {!isResult ? (
-            <PressableScale onPress={handleShare} scaleTo={0.94} style={styles.edgeHit}>
+      {/* 统一头部：返回 + 居中标题 + 分享按钮（与全应用一致） */}
+      <ScreenHeader
+        title={isResult ? '生成完成' : `${templateName}预览`}
+        subtitle={isResult ? '你的鱼获记忆已生成' : '已根据你的设置自动排版'}
+        onBack={handleBack}
+        right={
+          !isResult ? (
+            <PressableScale onPress={handleShare} scaleTo={0.94} style={styles.shareHit}>
               <View
                 style={[
                   styles.sharePill,
                   {
                     backgroundColor: profile.isDark
                       ? 'rgba(255,255,255,0.14)'
-                      : 'rgba(255,255,255,0.8)',
+                      : 'rgba(255,255,255,0.85)',
                     borderColor: profile.surface.glassBorder,
                   },
                 ]}
@@ -260,11 +230,17 @@ export const SharePreviewScreen: React.FC = () => {
                 <Text style={[styles.sharePillText, { color: textPrimary }]}>分享预览</Text>
               </View>
             </PressableScale>
-          ) : (
-            <View style={styles.edgeHit} />
-          )}
-        </View>
-
+          ) : null
+        }
+      />
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: 48 + insets.bottom },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* 海报 */}
         <View style={styles.posterHit}>
           <View
@@ -524,56 +500,26 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.page,
   } as ViewStyle,
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  } as ViewStyle,
-  edgeHit: {
-    width: 40,
+  shareHit: {
     height: 40,
-    alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
   } as ViewStyle,
-  titleBlock: {
-    flex: 1,
-    alignItems: 'center',
-  } as ViewStyle,
-  title: {
-    fontFamily: font.serif,
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: 3,
-  } as TextStyle,
-  subtitleRow: {
-    marginTop: 4,
-  } as ViewStyle,
-  subtitle: {
-    fontSize: 12.5,
-  } as TextStyle,
-  doneBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    borderRadius: 11,
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-  } as ViewStyle,
-  doneText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-  } as TextStyle,
   sharePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    borderRadius: 17,
+    gap: 5,
+    borderRadius: 999,
     borderWidth: 1,
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    shadowColor: '#173B4B',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   } as ViewStyle,
   sharePillText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '600',
   } as TextStyle,
   posterHit: {
@@ -697,13 +643,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.page,
   } as ViewStyle,
-  generatingTitle: {
-    fontFamily: font.serif,
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: 6,
-    marginTop: spacing.md,
-  } as TextStyle,
   ringWrap: {
     marginTop: spacing.xxl + spacing.lg,
     width: 150,

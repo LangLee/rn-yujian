@@ -5,3 +5,5 @@ export { EmptyState } from './EmptyState';
 export { BottomSheet } from './BottomSheet';
 export { FishGlyph } from './FishGlyph';
 export { IconButton } from './IconButton';
+export { GlassIconButton } from './GlassIconButton';
+export type { GlassIconButtonProps } from './GlassIconButton';

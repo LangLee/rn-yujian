@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Image, ImageStyle, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -50,26 +50,37 @@ const issueCopyFor = (status: FishInputStatusWire): IssueCopy => {
  */
 export const RecognitionIssueScreen: React.FC = () => {
   const navigation = useNavigation<RecognitionIssueScreenNavigationProp>();
-  const { image, result, reset } = useRecognition();
+  const isFocused = useIsFocused();
+  // 重新拍摄不再显式 reset：IdentifyScreen 重挂载时自会清空上下文；
+  // 先 reset 会触发本页「无结果则 goBack」守卫，与 navigate 打架把页面卡在空白态
+  const { image, result } = useRecognition();
   const { profile } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // 没有结果或结果其实已就绪时直接回 P02
+  // 没有结果或结果其实已就绪时退回上一页；只在获得焦点时执行，
+  // 退场转场期间 Identify 重挂载 reset 清空 result 时不再误触发 goBack
   useEffect(() => {
-    if (!result || result.ready) {
-      navigation.navigate('Identify');
+    if (!isFocused) {
+      return;
     }
-  }, [result, navigation]);
+    if (!result || result.ready) {
+      navigation.goBack();
+    }
+  }, [isFocused, result, navigation]);
 
   if (!result || result.ready) {
-    return <View style={styles.screen} />;
+    return (
+      <View style={[styles.screen, { backgroundColor: profile.surface.canvas }]}>
+        <WaterBackdrop />
+      </View>
+    );
   }
 
   const copy = issueCopyFor(result.status);
   const imageUri = toFileUri(image?.filePath);
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: profile.surface.canvas }]}>
       <WaterBackdrop />
       <View style={[styles.content, { paddingTop: insets.top + spacing.xl }]}>
         {imageUri ? (
@@ -90,10 +101,7 @@ export const RecognitionIssueScreen: React.FC = () => {
         <PrimaryButton
           label="重新拍摄或从相册选择"
           variant="ghost"
-          onPress={() => {
-            reset();
-            navigation.navigate('Identify');
-          }}
+          onPress={() => navigation.navigate('Identify')}
           style={styles.secondary}
         />
         <Text style={[styles.keepNote, { color: profile.surface.textSecondary }]}>

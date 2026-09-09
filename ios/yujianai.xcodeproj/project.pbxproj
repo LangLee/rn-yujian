@@ -292,7 +292,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.yujian.ai.rn;;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yujian.ai.rn;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = org.reactjs.native.langlee.yujianai;
 				PRODUCT_NAME = yujianai;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -321,7 +321,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.yujian.ai.rn;;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yujian.ai.rn;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = org.reactjs.native.langlee.yujianai;
 				PRODUCT_NAME = yujianai;
 				SWIFT_VERSION = 5.0;

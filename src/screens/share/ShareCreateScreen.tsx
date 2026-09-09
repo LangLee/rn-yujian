@@ -36,6 +36,7 @@ import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { RadioDot } from '../../components/ui/RadioDot';
+import { ScreenHeader } from '../../components';
 import { PosterCanvas, POSTER_ASPECT } from './PosterCanvas';
 
 type CreateNavigationProp = StackNavigationProp;
@@ -228,27 +229,20 @@ export const ShareCreateScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
+      <ScreenHeader
+        title="生成鱼获分享"
+        subtitle="把这次收获整理成一张记忆"
+        onBack={() => navigation.goBack()}
+      />
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.md, paddingBottom: 48 + insets.bottom },
+          { paddingBottom: 48 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
         {/* 头部 */}
-        <View style={styles.topBar}>
-          <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
-            <Icon name="chevron-back" size={24} color={textPrimary} />
-          </PressableScale>
-          <View style={styles.titleBlock}>
-            <Text style={[styles.title, { color: textPrimary }]}>生成鱼获分享</Text>
-            <Text style={[styles.subtitle, { color: textSecondary }]}>
-              把这次收获整理成一张记忆
-            </Text>
-          </View>
-          <View style={styles.edgeHit} />
-        </View>
         <Text style={[styles.handNote, { color: textSecondary }]}>
           每一次出发，都是与自然相遇。
         </Text>
@@ -643,31 +637,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.page,
   } as ViewStyle,
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  } as ViewStyle,
-  edgeHit: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-  } as ViewStyle,
-  titleBlock: {
-    flex: 1,
-    alignItems: 'center',
-  } as ViewStyle,
-  title: {
-    fontFamily: font.serif,
-    fontSize: 23,
-    fontWeight: '700',
-    letterSpacing: 4,
-  } as TextStyle,
-  subtitle: {
-    fontSize: 12.5,
-    marginTop: 4,
-  } as TextStyle,
   handNote: {
     fontFamily: font.serif,
     fontStyle: 'italic',

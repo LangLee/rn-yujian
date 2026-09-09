@@ -23,6 +23,7 @@ import { font, radius, spacing } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { RadioDot } from '../../components/ui/RadioDot';
+import { ScreenHeader } from '../../components';
 import { haptics } from '../../utils/haptics';
 
 type PrivacyNavigationProp = StackNavigationProp<RootStackParamList, 'PrivacySettings'>;
@@ -60,13 +61,7 @@ export const PrivacySettingsScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
-          <Icon name="chevron-back" size={24} color={textPrimary} />
-        </PressableScale>
-        <Text style={[styles.headerTitle, { color: textPrimary }]}>隐私与定位</Text>
-        <View style={styles.edgeHit} />
-      </View>
+      <ScreenHeader title="隐私与定位" onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.flex}
@@ -242,25 +237,6 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   } as ViewStyle,
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.md,
-  } as ViewStyle,
-  edgeHit: {
-    width: 44,
-    alignItems: 'flex-start',
-    paddingVertical: 6,
-  } as ViewStyle,
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: font.serif,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 3,
-  } as TextStyle,
   content: {
     paddingHorizontal: spacing.page,
   } as ViewStyle,

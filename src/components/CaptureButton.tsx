@@ -1,54 +1,88 @@
-import React, { useCallback, useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+/**
+ * CaptureButton — 主拍照入口按钮（还原设计稿快门结构）。
+ *
+ * 层次（由外到内）：
+ *  1. 柔白光晕（随 Idle Breath 明暗，直径 = size + max(20, size*0.28)）
+ *  2. 银白→淡金金属渐变外环（89% 直径）
+ *  3. 环内深色细缝（~82% 直径）
+ *  4. 半透明磨砂深灰玻璃内盘（77% 直径）+ 内侧白色高光描边
+ *  5. 实心相机图标（白色，36% 直径）
+ *
+ * 特性：
+ *  - 呼吸 Idle Breath（scale 1 → 1.022，周期 3.6s）
+ *  - Press feedback（scale 0.965）
+ *  - Reduce Motion 安全
+ */
+import React, { useCallback, useEffect, useId, useRef } from 'react';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  View,
+  ViewStyle,
+  StyleProp,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { motion } from '../constants/tokens';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface CaptureButtonProps {
   onPress: () => void;
-  /** 直径（玻璃圆） */
+  /** 磨砂外盘直径，默认 96 */
   size?: number;
   disabled?: boolean;
-  /** Idle Breath：Scale 1.000 → 1.020 → 1.000，约 3600ms（17.5） */
+  /** 是否开启呼吸动画，默认 true */
   breath?: boolean;
+  /** Ionicons 图标名，默认实心 camera */
   icon?: string;
+  /** 图标相对 size 的缩放，默认 0.36 */
+  iconRatio?: number;
+  /** 容器外部样式 */
+  style?: StyleProp<ViewStyle>;
+  /** 无障碍标签 */
+  accessibilityLabel?: string;
 }
 
-/**
- * 大圆相机按钮（参考稿：白玻璃圆 + 金色外环 + 白色相机 glyph）。
- * 呼吸光圈用 inset 0 与固定尺寸容器完全同心；整体（光圈 + 按钮）一起呼吸。
- * Reduce Motion 时 Scale 固定 1.000、Highlight 固定（17.25）。
- */
 export const CaptureButton: React.FC<CaptureButtonProps> = ({
   onPress,
-  size = 88,
+  size = 96,
   disabled,
   breath = true,
-  icon = 'camera-outline',
+  icon = 'camera',
+  iconRatio = 0.36,
+  style,
+  accessibilityLabel = '拍照识别',
 }) => {
-  const { profile, reduceMotion } = useTheme();
-  const breathScale = useRef(new Animated.Value(1)).current;
-  const highlight = useRef(new Animated.Value(0.16)).current;
+  const { reduceMotion } = useTheme();
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const ringId = `capRing${uid}`;
 
-  const D = size + 30; // 呼吸光圈直径
+  const breathScale = useRef(new Animated.Value(1)).current;
+  const glowOpacity = useRef(new Animated.Value(0.14)).current;
+
+  /** 光晕直径略大于外盘，给呼吸扩散留空间；随尺寸按比例收缩，避免小按钮带过大光晕 */
+  const D = size + Math.max(20, Math.round(size * 0.28));
+  const ringWidth = Math.max(2, size * 0.048);
 
   useEffect(() => {
     if (!breath || disabled || reduceMotion) {
       breathScale.setValue(1);
-      highlight.setValue(0.24);
+      glowOpacity.setValue(0.22);
       return;
     }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.parallel([
           Animated.timing(breathScale, {
-            toValue: 1.02,
+            toValue: 1.022,
             duration: motion.breath / 2,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
-          Animated.timing(highlight, {
-            toValue: 0.36,
+          Animated.timing(glowOpacity, {
+            toValue: 0.32,
             duration: motion.breath / 2,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
@@ -61,8 +95,8 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
-          Animated.timing(highlight, {
-            toValue: 0.16,
+          Animated.timing(glowOpacity, {
+            toValue: 0.14,
             duration: motion.breath / 2,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
@@ -72,13 +106,12 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
     );
     loop.start();
     return () => loop.stop();
-  }, [breath, disabled, reduceMotion, breathScale, highlight]);
+  }, [breath, disabled, reduceMotion, breathScale, glowOpacity]);
 
-  // 按压缩放（Press in 100ms → 0.965，松开回弹）
   const pressScale = useRef(new Animated.Value(1)).current;
   const handlePressIn = useCallback(() => {
     Animated.timing(pressScale, {
-      toValue: 0.965,
+      toValue: motion.pressScaleStrong,
       duration: motion.instant,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
@@ -93,28 +126,17 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
     }).start();
   }, [pressScale]);
 
-  const glass = profile.isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.4)';
-  const glassCore = profile.isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.52)';
-  const iconColor = profile.isDark ? '#EAF4F2' : '#1F4A56';
-  const gold = '#C9A96A';
-
   return (
-    // 固定尺寸容器 = 光圈直径；光圈与按钮命中区都 inset 0 铺满容器 → 严格同心
     <Animated.View
       style={[
         styles.container,
         { width: D, height: D, transform: [{ scale: breathScale }] },
+        style,
       ]}
     >
-      <Animated.View
-        style={[
-          styles.highlight,
-          {
-            backgroundColor: profile.backdrop.glowColor,
-            opacity: highlight,
-          },
-        ]}
-      />
+      {/* 柔白呼吸光晕 */}
+      <Animated.View style={[styles.glow, { opacity: glowOpacity }]} />
+
       <Animated.View style={[styles.pressLayer, { transform: [{ scale: pressScale }] }]}>
         <Pressable
           onPress={onPress}
@@ -123,34 +145,48 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
           disabled={disabled}
           style={styles.hitbox}
           accessibilityRole="button"
-          accessibilityLabel="拍照"
+          accessibilityLabel={accessibilityLabel}
         >
-          <View
-            style={[
-              styles.outerGlass,
-              {
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                backgroundColor: glass,
-                borderColor: gold,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.core,
-                {
-                  width: size - 22,
-                  height: size - 22,
-                  borderRadius: (size - 22) / 2,
-                  backgroundColor: glassCore,
-                  borderColor: 'rgba(255,255,255,0.55)',
-                },
-              ]}
-            >
-              <Icon name={icon} size={size * 0.34} color={iconColor} />
-            </View>
+          <View style={[styles.disc, { width: size, height: size, borderRadius: size / 2 }]}>
+            <Svg width={size} height={size} style={styles.rings} pointerEvents="none">
+              <Defs>
+                <LinearGradient id={ringId} x1="0.1" y1="0" x2="0.9" y2="1">
+                  <Stop offset="0" stopColor="#F5F2E9" />
+                  <Stop offset="0.5" stopColor="#DCD5C2" />
+                  <Stop offset="1" stopColor="#B4AC93" />
+                </LinearGradient>
+              </Defs>
+              {/* 银白→淡金金属渐变外环 */}
+              <Circle
+                cx={size / 2}
+                cy={size / 2}
+                r={size * 0.445}
+                stroke={`url(#${ringId})`}
+                strokeWidth={ringWidth}
+                fill="none"
+              />
+              {/* 环内深色细缝 */}
+              <Circle
+                cx={size / 2}
+                cy={size / 2}
+                r={size * 0.407}
+                stroke="rgba(30,44,50,0.5)"
+                strokeWidth={1}
+                fill="none"
+              />
+              {/* 半透明磨砂深灰玻璃内盘 */}
+              <Circle cx={size / 2} cy={size / 2} r={size * 0.385} fill="rgba(28,42,48,0.32)" />
+              {/* 内盘白色高光描边 */}
+              <Circle
+                cx={size / 2}
+                cy={size / 2}
+                r={size * 0.371}
+                stroke="rgba(255,255,255,0.55)"
+                strokeWidth={1}
+                fill="none"
+              />
+            </Svg>
+            <Icon name={icon} size={Math.round(size * iconRatio)} color="#F6FAF8" />
           </View>
         </Pressable>
       </Animated.View>
@@ -159,48 +195,37 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
 };
 
 const styles = StyleSheet.create({
-  /** 固定同心容器 */
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  /** 光圈铺满固定容器（inset 0），与按钮永远同心 */
-  highlight: {
+  } as ViewStyle,
+  glow: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    inset: 0,
     borderRadius: 999,
-    opacity: 0.16,
-  },
-  /** 按压层同样 inset 0，按钮在其中绝对居中 */
+    backgroundColor: 'rgba(243,247,246,0.55)',
+  } as ViewStyle,
   pressLayer: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
+    inset: 0,
+  } as ViewStyle,
   hitbox: {
     width: '100%',
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  outerGlass: {
+  } as ViewStyle,
+  disc: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    shadowColor: '#173B4B',
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
+    backgroundColor: 'rgba(28,42,48,0.10)',
+    shadowColor: '#0D2B35',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  core: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
+    elevation: 6,
+  } as ViewStyle,
+  rings: {
+    ...StyleSheet.absoluteFillObject,
+  } as ViewStyle,
 });

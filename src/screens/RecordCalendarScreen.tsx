@@ -25,6 +25,7 @@ import { RemoteImage } from '../components/RemoteImage';
 import { PressableScale } from '../components/ui/PressableScale';
 import { EmptyState } from '../components/ui/EmptyState';
 import { FishGlyph } from '../components/ui/FishGlyph';
+import { ScreenHeader } from '../components';
 
 type CalendarScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Calendar'>;
 
@@ -178,15 +179,15 @@ export const RecordCalendarScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
-          <Icon name="chevron-back" size={24} color={textPrimary} />
-        </PressableScale>
-        <Text style={[styles.headerTitle, { color: textPrimary }]}>记录</Text>
-        <PressableScale onPress={goToday} scaleTo={0.95} style={styles.edgeHit}>
-          <Text style={[styles.todayText, { color: textPrimary }]}>今天</Text>
-        </PressableScale>
-      </View>
+      <ScreenHeader
+        title="记录"
+        onBack={() => navigation.goBack()}
+        right={
+          <PressableScale onPress={goToday} scaleTo={0.95} style={styles.todayHit}>
+            <Text style={[styles.todayText, { color: textPrimary }]}>今天</Text>
+          </PressableScale>
+        }
+      />
 
       <ScrollView
         style={styles.flex}
@@ -213,47 +214,23 @@ export const RecordCalendarScreen: React.FC = () => {
               <PressableScale onPress={() => shiftMonth(1)} scaleTo={0.9} style={styles.navArrow}>
                 <Icon name="chevron-forward" size={18} color={textPrimary} />
               </PressableScale>
-              <View style={[styles.segment, { borderColor: profile.surface.glassBorder }]}>
-                {(['month', 'year'] as ViewMode[]).map((value) => (
-                  <PressableScale
-                    key={value}
-                    onPress={() => {
-                      setMode(value);
-                      hapticSelection();
-                    }}
-                    scaleTo={0.95}
-                  >
-                    <View
-                      style={[
-                        styles.segmentCell,
-                        mode === value && { backgroundColor: '#5E8D91' },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.segmentText,
-                          { color: mode === value ? '#FFFFFF' : textSecondary },
-                        ]}
-                      >
-                        {value === 'month' ? '月' : '年'}
-                      </Text>
-                    </View>
-                  </PressableScale>
-                ))}
-              </View>
+              <ModeSegment
+                mode={mode}
+                glassBorder={profile.surface.glassBorder}
+                textSecondary={textSecondary}
+                onChange={setMode}
+              />
             </View>
 
             {/* 轻摘要条：鱼 glyph + 三段数据 */}
-            <View style={[styles.summaryBar, { backgroundColor: profile.surface.glass, borderColor: profile.surface.glassBorder }]}>
-              <View style={styles.summaryGlyph}>
-                <FishGlyph size={20} color="#3E6E75" />
-              </View>
-              <SummaryCell label="连续记录" value={summary.streak} textPrimary={textPrimary} />
-              <View style={[styles.summaryDivider, { backgroundColor: profile.surface.glassBorder }]} />
-              <SummaryCell label="本周" value={summary.weekDays} textPrimary={textPrimary} />
-              <View style={[styles.summaryDivider, { backgroundColor: profile.surface.glassBorder }]} />
-              <SummaryCell label="本月" value={summary.monthDays} textPrimary={textPrimary} />
-            </View>
+            <SummaryStrip
+              streak={summary.streak}
+              weekDays={summary.weekDays}
+              monthDays={summary.monthDays}
+              glass={profile.surface.glass}
+              glassBorder={profile.surface.glassBorder}
+              textPrimary={textPrimary}
+            />
 
             {/* 月历 */}
             <View style={[styles.calendarCard, { backgroundColor: profile.surface.glassStrong, borderColor: profile.surface.glassBorder }]}>
@@ -355,16 +332,42 @@ export const RecordCalendarScreen: React.FC = () => {
           </>
         ) : (
           <>
-            {/* 年视图：12 月份索引（2 列 × 6 行） */}
-            <View style={styles.yearNav}>
-              <PressableScale onPress={() => setCursor((c) => ({ ...c, year: c.year - 1 }))} scaleTo={0.9} style={styles.navArrow}>
+            {/* 年视图：年份导航 + 月/年切换（切换常驻，随时可回月视图） */}
+            <View style={styles.monthNavRow}>
+              <PressableScale
+                onPress={() => setCursor((c) => ({ ...c, year: c.year - 1 }))}
+                scaleTo={0.9}
+                style={styles.navArrow}
+              >
                 <Icon name="chevron-back" size={18} color={textPrimary} />
               </PressableScale>
               <Text style={[styles.monthNavLabel, { color: textPrimary }]}>{cursor.year}年</Text>
-              <PressableScale onPress={() => setCursor((c) => ({ ...c, year: c.year + 1 }))} scaleTo={0.9} style={styles.navArrow}>
+              <PressableScale
+                onPress={() => setCursor((c) => ({ ...c, year: c.year + 1 }))}
+                scaleTo={0.9}
+                style={styles.navArrow}
+              >
                 <Icon name="chevron-forward" size={18} color={textPrimary} />
               </PressableScale>
+              <ModeSegment
+                mode={mode}
+                glassBorder={profile.surface.glassBorder}
+                textSecondary={textSecondary}
+                onChange={setMode}
+              />
             </View>
+
+            {/* 轻摘要条：鱼 glyph + 三段数据 */}
+            <SummaryStrip
+              streak={summary.streak}
+              weekDays={summary.weekDays}
+              monthDays={summary.monthDays}
+              glass={profile.surface.glass}
+              glassBorder={profile.surface.glassBorder}
+              textPrimary={textPrimary}
+            />
+
+            {/* 12 月份宫格（2 列 × 6 行）：月份 + 金色短线、本月徽章、天数/次数 + 小鱼评级 */}
             <View style={styles.monthIndexGrid}>
               {Array.from({ length: 12 }, (_, index) => index).map((monthIndex) => {
                 const prefix = `${cursor.year}-${pad2(monthIndex + 1)}`;
@@ -378,11 +381,14 @@ export const RecordCalendarScreen: React.FC = () => {
                 });
                 const selectedMonth = cursor.month === monthIndex;
                 const isNow = isCurrentMonth && today.getMonth() === monthIndex;
+                // 小鱼评级：8 次以上三档、3 次以上两档、有记录一档
+                const glyphTier = count >= 8 ? 3 : count >= 3 ? 2 : count > 0 ? 1 : 0;
                 return (
                   <PressableScale
                     key={monthIndex}
                     onPress={() => setCursor((c) => ({ ...c, month: monthIndex }))}
                     scaleTo={0.97}
+                    style={styles.monthIndexHit}
                   >
                     <View
                       style={[
@@ -390,36 +396,52 @@ export const RecordCalendarScreen: React.FC = () => {
                         { backgroundColor: profile.surface.glass, borderColor: profile.surface.glassBorder },
                         selectedMonth && { borderColor: GOLD, borderWidth: 1.5 },
                         isNow && !selectedMonth && { borderColor: accent },
+                        days === 0 && styles.monthIndexDim,
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.monthIndexLabel,
-                          { color: selectedMonth ? GOLD : textPrimary },
-                        ]}
-                      >
-                        {monthIndex + 1}月
-                      </Text>
-                      <Text style={[styles.monthIndexMeta, { color: textSecondary }]}>
-                        {days > 0 ? `${days} 天 · ${count} 次` : '还没有记录'}
-                      </Text>
-                      {days > 0 ? (
-                        <View style={styles.monthIndexGlyphs}>
-                          <FishGlyph size={11} color={GOLD} />
-                          {count > 1 ? <FishGlyph size={11} color={GOLD} /> : null}
-                          {count > 2 ? <FishGlyph size={11} color={GOLD} /> : null}
+                      <View style={styles.monthIndexTop}>
+                        <View style={styles.monthIndexHead}>
+                          <Text
+                            style={[
+                              styles.monthIndexLabel,
+                              { color: selectedMonth ? GOLD : textPrimary },
+                            ]}
+                          >
+                            {monthIndex + 1}月
+                          </Text>
+                          {glyphTier > 0 ? <View style={styles.monthIndexTick} /> : null}
                         </View>
-                      ) : null}
+                        {isNow ? (
+                          <View style={styles.monthIndexBadge}>
+                            <Text style={styles.monthIndexBadgeText}>本月</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.monthIndexBottom}>
+                        <Text style={[styles.monthIndexMeta, { color: textSecondary }]}>
+                          {days > 0 ? `${days} 天 · ${count} 次` : '还没有记录'}
+                        </Text>
+                        {glyphTier > 0 ? (
+                          <View style={styles.monthIndexGlyphs}>
+                            {Array.from({ length: glyphTier }, (_, i) => (
+                              <FishGlyph key={i} size={12} color={GOLD} />
+                            ))}
+                          </View>
+                        ) : null}
+                      </View>
                     </View>
                   </PressableScale>
                 );
               })}
             </View>
 
-            {/* 选中月按天聚合列表 */}
-            <Text style={[styles.timelineTitle, styles.yearListTitle, { color: textPrimary }]}>
-              {cursor.month + 1}月记录
-            </Text>
+            {/* 选中月按天聚合列表：标题 + 金色装饰短线 */}
+            <View style={styles.yearListTitleRow}>
+              <View style={styles.yearListAccent} />
+              <Text style={[styles.timelineTitle, { color: textPrimary }]}>
+                {cursor.month + 1}月记录
+              </Text>
+            </View>
             <Text style={[styles.timelineSub, { color: textSecondary }]}>
               {yearMonthDays.length} 天有鱼获 ·{' '}
               {yearMonthDays.reduce((total, entry) => total + entry.items.length, 0)} 次鱼获 ·{' '}
@@ -505,6 +527,57 @@ const hapticSelection = () => {
   // 轻量模式切换 S1（17.22：月/年切换可选）
   import('../utils/haptics').then(({ haptics }) => haptics.selection());
 };
+
+/** 月 / 年 模式切换（月、年视图都常驻，保证随时可互切） */
+const ModeSegment: React.FC<{
+  mode: ViewMode;
+  glassBorder: string;
+  textSecondary: string;
+  onChange: (mode: ViewMode) => void;
+}> = ({ mode, glassBorder, textSecondary, onChange }) => (
+  <View style={[styles.segment, { borderColor: glassBorder }]}>
+    {(['month', 'year'] as ViewMode[]).map((value) => (
+      <PressableScale
+        key={value}
+        onPress={() => {
+          onChange(value);
+          hapticSelection();
+        }}
+        scaleTo={0.95}
+      >
+        <View style={styles.segmentCell}>
+          {/* Android：backgroundColor 在无 ↔ 有间切换会重建背景 drawable 丢圆角，
+              改为常驻圆角背景层并用 opacity 显隐（opacity 变化不重建 drawable） */}
+          <View style={[styles.segmentCellPill, { opacity: mode === value ? 1 : 0 }]} />
+          <Text style={[styles.segmentText, { color: mode === value ? '#FFFFFF' : textSecondary }]}>
+            {value === 'month' ? '月' : '年'}
+          </Text>
+        </View>
+      </PressableScale>
+    ))}
+  </View>
+);
+
+/** 轻摘要条：鱼 glyph + 连续记录 / 本周 / 本月 */
+const SummaryStrip: React.FC<{
+  streak: number;
+  weekDays: number;
+  monthDays: number;
+  glass: string;
+  glassBorder: string;
+  textPrimary: string;
+}> = ({ streak, weekDays, monthDays, glass, glassBorder, textPrimary }) => (
+  <View style={[styles.summaryBar, { backgroundColor: glass, borderColor: glassBorder }]}>
+    <View style={styles.summaryGlyph}>
+      <FishGlyph size={20} color="#3E6E75" />
+    </View>
+    <SummaryCell label="连续记录" value={streak} textPrimary={textPrimary} />
+    <View style={[styles.summaryDivider, { backgroundColor: glassBorder }]} />
+    <SummaryCell label="本周" value={weekDays} textPrimary={textPrimary} />
+    <View style={[styles.summaryDivider, { backgroundColor: glassBorder }]} />
+    <SummaryCell label="本月" value={monthDays} textPrimary={textPrimary} />
+  </View>
+);
 
 const SummaryCell: React.FC<{ label: string; value: number; textPrimary: string }> = ({
   label,
@@ -599,25 +672,11 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   } as ViewStyle,
-  header: {
-    flexDirection: 'row',
+  todayHit: {
+    height: 40,
     alignItems: 'center',
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.sm,
+    justifyContent: 'center',
   } as ViewStyle,
-  edgeHit: {
-    width: 52,
-    alignItems: 'center',
-    paddingVertical: 6,
-  } as ViewStyle,
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: font.serif,
-    fontSize: 21,
-    fontWeight: '700',
-    letterSpacing: 4,
-  } as TextStyle,
   todayText: {
     fontSize: 15,
   } as TextStyle,
@@ -652,7 +711,11 @@ const styles = StyleSheet.create({
   segmentCell: {
     paddingHorizontal: 15,
     paddingVertical: 6,
+  } as ViewStyle,
+  segmentCellPill: {
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 13,
+    backgroundColor: '#5E8D91',
   } as ViewStyle,
   segmentText: {
     fontSize: 13,
@@ -761,9 +824,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: spacing.lg,
   } as ViewStyle,
-  yearListTitle: {
-    marginTop: spacing.xl,
-  } as TextStyle,
   timelineTitle: {
     fontFamily: font.serif,
     fontSize: 20,
@@ -851,39 +911,86 @@ const styles = StyleSheet.create({
   timelineLocation: {
     fontSize: 12,
   } as TextStyle,
-  yearNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
-    gap: spacing.md,
-  } as ViewStyle,
   monthIndexGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.md,
+    gap: 6,
+    marginTop: spacing.md,
+  } as ViewStyle,
+  monthIndexHit: {
+    // 宫格直接子元素是 PressableScale 外层，百分比宽度必须挂这一层才能相对宫格解析
+    width: '48.5%',
   } as ViewStyle,
   monthIndexCell: {
-    width: '47.5%',
+    width: '100%',
     borderRadius: radius.m + 2,
     borderWidth: 1,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    gap: 3,
+    // 紧凑高度：12 张卡压缩后让下方明细区在首屏露出
+    padding: spacing.sm,
+    minHeight: 64,
+    justifyContent: 'space-between',
+    gap: 6,
+  } as ViewStyle,
+  monthIndexDim: {
+    opacity: 0.55,
+  } as ViewStyle,
+  monthIndexTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  } as ViewStyle,
+  monthIndexHead: {
+    alignItems: 'flex-start',
   } as ViewStyle,
   monthIndexLabel: {
     fontFamily: font.serif,
     fontSize: 17,
     fontWeight: '700',
   } as TextStyle,
+  monthIndexTick: {
+    width: 16,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: GOLD,
+    marginTop: 2,
+  } as ViewStyle,
+  monthIndexBadge: {
+    backgroundColor: 'rgba(201,169,106,0.16)',
+    borderColor: 'rgba(201,169,106,0.45)',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  } as ViewStyle,
+  monthIndexBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: GOLD,
+    letterSpacing: 1,
+  } as TextStyle,
+  monthIndexBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  } as ViewStyle,
   monthIndexMeta: {
     fontSize: 12,
   } as TextStyle,
   monthIndexGlyphs: {
     flexDirection: 'row',
-    gap: 2,
-    marginTop: 2,
+    gap: 3,
+  } as ViewStyle,
+  yearListTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: spacing.lg,
+  } as ViewStyle,
+  yearListAccent: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: GOLD,
   } as ViewStyle,
   dayAggHit: {
     marginBottom: spacing.md,

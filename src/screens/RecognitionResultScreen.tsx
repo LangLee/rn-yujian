@@ -13,7 +13,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { useRecognition } from '../contexts/RecognitionContext';
@@ -29,6 +29,7 @@ import {
 import { catchService } from '../services/catchService';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { PressableScale } from '../components/ui/PressableScale';
+import { ScreenHeader } from '../components';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { RadioDot } from '../components/ui/RadioDot';
 import { FishGlyph } from '../components/ui/FishGlyph';
@@ -56,6 +57,7 @@ type ResultState = 'high' | 'medium' | 'low';
  */
 export const RecognitionResultScreen: React.FC = () => {
   const navigation = useNavigation<ResultScreenNavigationProp>();
+  const isFocused = useIsFocused();
   const { image, result, submitFeedback, reset } = useRecognition();
   const { session, logout } = useAuth();
   const { reload } = useCatchArchive();
@@ -97,11 +99,16 @@ export const RecognitionResultScreen: React.FC = () => {
     }
   }, [prediction, state]);
 
+  // 守卫只在获得焦点时生效：退场转场期间 IdentifyScreen 重挂载会 reset 清空 result，
+  // 若此刻再 replace 会与 pop 动画打架，把页面卡在空白中间态（重新拍摄白屏的根因）
   useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
     if (!result || !result.ready || !prediction) {
       navigation.replace('RecognitionIssue');
     }
-  }, [result, prediction, navigation]);
+  }, [isFocused, result, prediction, navigation]);
 
   // Reveal（17.8 / 17.9）：Hero 立即成为主角 + S2 Confirm 一次
   const heroOpacity = useRef(new Animated.Value(0)).current;
@@ -260,34 +267,45 @@ export const RecognitionResultScreen: React.FC = () => {
   );
 
   if (!result || !result.ready || !prediction) {
-    return <View style={styles.screen} />;
+    // 过渡期间 result 可能被清空：渲染带背景的空态，避免闪白屏
+    return (
+      <View style={[styles.screen, { backgroundColor: profile.surface.canvas }]}>
+        <WaterBackdrop />
+      </View>
+    );
   }
 
   const imageUri = toFileUri(image?.filePath);
   const textPrimary = profile.surface.textPrimary;
   const textSecondary = profile.surface.textSecondary;
   const saveDisabled = state === 'medium' && !selectedKey;
+  const rowIdleBg = profile.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.6)';
+  const rowGoldBg = profile.isDark ? 'rgba(201,169,106,0.2)' : 'rgba(201,169,106,0.14)';
 
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
+      <ScreenHeader onBack={() => navigation.goBack()} />
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.md, paddingBottom: 48 + insets.bottom },
+          { paddingBottom: 48 + insets.bottom },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* 顶部返回 */}
-        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.backHit}>
-          <Icon name="chevron-back" size={26} color={textPrimary} />
-        </PressableScale>
-
-        {/* Hero：真实鱼获照片立即成为主角 */}
+        {/* Hero + 确认卡（参考稿：鱼获照片与确认面板一体化，浮于湖面背景） */}
         <Animated.View style={{ opacity: heroOpacity, transform: [{ scale: heroScale }] }}>
-          <View style={[styles.heroCard, { borderColor: profile.surface.glassBorder }]}>
+          <View
+            style={[
+              styles.heroCard,
+              {
+                backgroundColor: profile.surface.glass,
+                borderColor: profile.surface.glassBorder,
+              },
+            ]}
+          >
             {imageUri ? (
               <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
             ) : (
@@ -295,116 +313,114 @@ export const RecognitionResultScreen: React.FC = () => {
                 <FishGlyph size={72} color={palette.fishMint} />
               </View>
             )}
+
+            <Animated.View
+              style={[
+                styles.panelBody,
+                { opacity: nameOpacity, transform: [{ translateY: nameTranslate }] },
+              ]}
+            >
+              {state === 'high' ? (
+                <View style={styles.nameRow}>
+                  <Text style={[styles.name, { color: textPrimary }]} numberOfLines={2}>
+                    {selectedName || prediction.top1.speciesName}
+                  </Text>
+                  <PressableScale onPress={pickSpecies} scaleTo={0.96} style={styles.editHit}>
+                    <View style={[styles.editChip, { backgroundColor: profile.surface.accentSoft }]}>
+                      <Icon name="create-outline" size={14} color={profile.surface.accent} />
+                      <Text style={[styles.editChipText, { color: profile.surface.accent }]}>修改</Text>
+                    </View>
+                  </PressableScale>
+                </View>
+              ) : null}
+
+              {/* 中置信度：帮我确认一下（参考稿确认列表） */}
+              {state === 'medium' ? (
+                <>
+                  <Text style={[styles.panelTitle, { color: textPrimary }]}>帮我确认一下</Text>
+                  <Text style={[styles.panelSub, { color: textSecondary }]}>
+                    这条鱼更像下面哪一种？
+                  </Text>
+                  <View style={styles.candidateList}>
+                    {candidates.map((candidate, index) => {
+                      const active = selectedKey === candidate.speciesKey;
+                      return (
+                        <PressableScale
+                          key={candidate.speciesKey}
+                          scaleTo={0.985}
+                          onPress={() => {
+                            setSelectedKey(candidate.speciesKey);
+                            setSelectedName(candidate.speciesName);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles.candidateRow,
+                              {
+                                backgroundColor: active ? rowGoldBg : rowIdleBg,
+                                borderColor: active ? GOLD : profile.surface.glassBorder,
+                              },
+                              active && styles.candidateRowActive,
+                            ]}
+                          >
+                            <View style={styles.candidateGlyph}>
+                              <FishGlyph size={30} color={active ? GOLD : palette.fishGreen} />
+                            </View>
+                            <Text style={[styles.candidateName, { color: textPrimary }]} numberOfLines={1}>
+                              {candidate.speciesName}
+                            </Text>
+                            {index === 0 ? (
+                              <View style={styles.recommendChip}>
+                                <Text style={styles.recommendText}>推荐</Text>
+                              </View>
+                            ) : null}
+                            <RadioDot selected={active} color={GOLD} idleColor={textSecondary} />
+                          </View>
+                        </PressableScale>
+                      );
+                    })}
+                  </View>
+                  <PressableScale onPress={pickSpecies} style={styles.searchLinkHit}>
+                    <View style={styles.searchLink} pointerEvents="none">
+                      <Text style={[styles.searchLinkText, { color: textSecondary }]}>
+                        都不是？搜索其他鱼种
+                      </Text>
+                      <Icon name="chevron-forward" size={14} color={textSecondary} />
+                    </View>
+                  </PressableScale>
+                </>
+              ) : null}
+
+              {/* 低置信度：还不能确定 */}
+              {state === 'low' ? (
+                <>
+                  <Text style={[styles.panelTitle, { color: textPrimary }]}>
+                    还不能确定这是什么鱼
+                  </Text>
+                  <Text style={[styles.panelSub, { color: textSecondary }]}>
+                    可以手动选择，或先保存这次鱼获
+                  </Text>
+                  <PressableScale onPress={pickSpecies} scaleTo={0.98} style={styles.manualHit}>
+                    <View style={[styles.manualRow, { backgroundColor: rowIdleBg }]} pointerEvents="none">
+                      <FishGlyph size={26} color={palette.fishGreen} />
+                      <Text style={[styles.candidateName, { color: textPrimary, flex: 1 }]}>
+                        手动选择鱼种
+                      </Text>
+                      {selectedKey && selectedKey !== UNKNOWN_KEY ? (
+                        <Text style={[styles.pickedName, { color: GOLD }]} numberOfLines={1}>
+                          {selectedName}
+                        </Text>
+                      ) : null}
+                      <Icon name="chevron-forward" size={16} color={textSecondary} />
+                    </View>
+                  </PressableScale>
+                </>
+              ) : null}
+            </Animated.View>
           </View>
         </Animated.View>
 
-        {state === 'high' ? (
-          <Animated.View
-            style={{ opacity: nameOpacity, transform: [{ translateY: nameTranslate }] }}
-          >
-            <View style={styles.nameRow}>
-              <Text style={[styles.name, { color: textPrimary }]} numberOfLines={2}>
-                {selectedName || prediction.top1.speciesName}
-              </Text>
-              <PressableScale onPress={pickSpecies} scaleTo={0.96} style={styles.editHit}>
-                <View style={[styles.editChip, { backgroundColor: profile.surface.accentSoft }]}>
-                  <Icon name="create-outline" size={14} color={profile.surface.accent} />
-                  <Text style={[styles.editChipText, { color: profile.surface.accent }]}>修改</Text>
-                </View>
-              </PressableScale>
-            </View>
-          </Animated.View>
-        ) : null}
-
-        {/* 中置信度：帮我确认一下（单一玻璃面板） */}
-        {state === 'medium' ? (
-          <Animated.View
-            style={{ opacity: nameOpacity, transform: [{ translateY: nameTranslate }] }}
-          >
-            <View style={[styles.panel, { backgroundColor: profile.surface.glass, borderColor: profile.surface.glassBorder }]}>
-              <Text style={[styles.panelTitle, { color: textPrimary }]}>帮我确认一下</Text>
-              <Text style={[styles.panelSub, { color: textSecondary }]}>
-                这条鱼更像下面哪一种？
-              </Text>
-              <View style={styles.candidateList}>
-                {candidates.map((candidate, index) => {
-                  const active = selectedKey === candidate.speciesKey;
-                  return (
-                    <PressableScale
-                      key={candidate.speciesKey}
-                      scaleTo={0.985}
-                      onPress={() => {
-                        setSelectedKey(candidate.speciesKey);
-                        setSelectedName(candidate.speciesName);
-                      }}
-                    >
-                      <View
-                        style={[
-                          styles.candidateRow,
-                          { backgroundColor: profile.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.6)' },
-                          active && { borderColor: GOLD, borderWidth: 1.5 },
-                        ]}
-                      >
-                        <View style={styles.candidateThumb}>
-                          <FishGlyph size={26} color={active ? GOLD : palette.fishGreen} />
-                        </View>
-                        <Text style={[styles.candidateName, { color: textPrimary }]} numberOfLines={1}>
-                          {candidate.speciesName}
-                        </Text>
-                        {index === 0 ? (
-                          <View style={styles.recommendChip}>
-                            <Text style={styles.recommendText}>推荐</Text>
-                          </View>
-                        ) : null}
-                        <RadioDot selected={active} color={GOLD} idleColor={textSecondary} />
-                      </View>
-                    </PressableScale>
-                  );
-                })}
-              </View>
-              <PressableScale onPress={pickSpecies} style={styles.searchLinkHit}>
-                <View style={styles.searchLink} pointerEvents="none">
-                  <Text style={[styles.searchLinkText, { color: textSecondary }]}>
-                    都不是？搜索其他鱼种
-                  </Text>
-                  <Icon name="chevron-forward" size={14} color={textSecondary} />
-                </View>
-              </PressableScale>
-            </View>
-          </Animated.View>
-        ) : null}
-
-        {/* 低置信度：还不能确定 */}
-        {state === 'low' ? (
-          <Animated.View
-            style={{ opacity: nameOpacity, transform: [{ translateY: nameTranslate }] }}
-          >
-            <View style={[styles.panel, { backgroundColor: profile.surface.glass, borderColor: profile.surface.glassBorder }]}>
-              <Text style={[styles.panelTitle, { color: textPrimary }]}>
-                还不能确定这是什么鱼
-              </Text>
-              <Text style={[styles.panelSub, { color: textSecondary }]}>
-                可以手动选择，或先保存这次鱼获
-              </Text>
-              <PressableScale onPress={pickSpecies} scaleTo={0.98} style={styles.manualHit}>
-                <View style={[styles.manualRow, { backgroundColor: profile.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.6)' }]} pointerEvents="none">
-                  <FishGlyph size={24} color={palette.fishGreen} />
-                  <Text style={[styles.candidateName, { color: textPrimary, flex: 1 }]}>
-                    手动选择鱼种
-                  </Text>
-                  {selectedKey && selectedKey !== UNKNOWN_KEY ? (
-                    <Text style={[styles.pickedName, { color: GOLD }]} numberOfLines={1}>
-                      {selectedName}
-                    </Text>
-                  ) : null}
-                  <Icon name="chevron-forward" size={16} color={textSecondary} />
-                </View>
-              </PressableScale>
-            </View>
-          </Animated.View>
-        ) : null}
-
-        {/* 长度 / 重量 / 地点：三列数据条（参考稿样式，可填写） */}
+        {/* 长度 / 重量 / 地点：三列数据条（参考稿「记录这一刻」样式，可填写） */}
         <View style={[styles.metaBar, { backgroundColor: profile.surface.glass, borderColor: profile.surface.glassBorder }]}>
           <View style={styles.metaCell}>
             <View style={styles.metaValueRow}>
@@ -461,7 +477,7 @@ export const RecognitionResultScreen: React.FC = () => {
           <Text style={[styles.slowHint, { color: textSecondary }]}>正在保存这次鱼获…</Text>
         ) : null}
 
-        {/* 保存鱼获（玻璃底 + 深青衬线字，参考稿样式） */}
+        {/* 保存鱼获（参考稿：白玻璃胶囊 + 深青衬线字，唯一主 CTA） */}
         <PrimaryButton
           label={saveDisabled ? '选择候选后保存鱼获' : '保存鱼获'}
           onPress={() => doSave()}
@@ -474,22 +490,23 @@ export const RecognitionResultScreen: React.FC = () => {
           style={styles.saveButton}
         />
 
+        {/* 次要操作：安静文字链接，不打断主 CTA */}
         {state === 'low' ? (
-          <PrimaryButton
-            label="保存为未知鱼种"
-            variant="ghost"
+          <PressableScale
             onPress={() => doSave(UNKNOWN_KEY, UNKNOWN_NAME)}
             disabled={saving || saved}
-            style={styles.secondaryButton}
-          />
+            style={styles.textLinkHit}
+          >
+            <Text style={[styles.textLink, { color: textSecondary }]}>保存为未知鱼种</Text>
+          </PressableScale>
         ) : null}
-        <PrimaryButton
-          label="重新拍摄"
-          variant="ghost"
+        <PressableScale
           onPress={() => navigation.navigate('Identify')}
           disabled={saving || saved}
-          style={styles.secondaryButton}
-        />
+          style={styles.textLinkHit}
+        >
+          <Text style={[styles.textLink, { color: textSecondary }]}>重新拍摄</Text>
+        </PressableScale>
       </ScrollView>
     </View>
   );
@@ -505,41 +522,42 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.page,
   } as ViewStyle,
-  backHit: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-    marginLeft: -8,
-    marginBottom: spacing.sm,
-  } as ViewStyle,
   heroCard: {
     borderRadius: radius.l + 6,
     borderWidth: 1,
     overflow: 'hidden',
-    backgroundColor: palette.softWater,
+    shadowColor: '#173B4B',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   } as ViewStyle,
   heroImage: {
     width: '100%',
-    aspectRatio: 3 / 2,
+    aspectRatio: 4 / 3,
   } as ImageStyle,
   heroPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: palette.softWater,
+  } as ViewStyle,
+  panelBody: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 22,
   } as ViewStyle,
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.xl,
     gap: spacing.md,
   } as ViewStyle,
   name: {
     fontFamily: font.serif,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
-    letterSpacing: 6,
+    letterSpacing: 4,
+    flexShrink: 1,
   } as TextStyle,
   editHit: {
     borderRadius: 14,
@@ -556,15 +574,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   } as TextStyle,
-  panel: {
-    marginTop: spacing.lg,
-    borderRadius: radius.l + 4,
-    borderWidth: 1,
-    padding: spacing.lg,
-  } as ViewStyle,
   panelTitle: {
     fontFamily: font.serif,
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
@@ -582,15 +594,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     borderRadius: radius.m,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   } as ViewStyle,
-  candidateThumb: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: 'rgba(220,238,235,0.7)',
+  candidateRowActive: {
+    borderWidth: 1.5,
+  } as ViewStyle,
+  candidateGlyph: {
+    width: 40,
     alignItems: 'center',
     justifyContent: 'center',
   } as ViewStyle,
@@ -643,11 +654,16 @@ const styles = StyleSheet.create({
   metaBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     borderRadius: radius.l,
     borderWidth: 1,
     paddingVertical: 14,
     paddingHorizontal: 8,
+    shadowColor: '#173B4B',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   } as ViewStyle,
   metaCell: {
     flex: 1,
@@ -695,7 +711,13 @@ const styles = StyleSheet.create({
   saveButton: {
     marginTop: spacing.xl,
   } as ViewStyle,
-  secondaryButton: {
+  textLinkHit: {
+    alignSelf: 'center',
     marginTop: spacing.sm,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   } as ViewStyle,
+  textLink: {
+    fontSize: 14,
+  } as TextStyle,
 });

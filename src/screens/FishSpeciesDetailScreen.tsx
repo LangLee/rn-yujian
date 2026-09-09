@@ -10,7 +10,8 @@ import {
 } from '../services/fishKnowledgeService';
 import { FishIllustration } from '../components/FishIllustration';
 import { RemoteImage } from '../components/RemoteImage';
-import { TagChip, YujianTopBar } from '../components/Common';
+import { TagChip } from '../components/Common';
+import { ScreenHeader } from '../components';
 import { palette } from '../constants/colors';
 import {
   FishGuideItem,
@@ -205,7 +206,7 @@ export const FishSpeciesDetailScreen: React.FC = () => {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <YujianTopBar
+      <ScreenHeader
         title={species.nameCn}
         subtitle={aliases.length > 0 ? aliases : species.id}
         onBack={() => navigation.goBack()}

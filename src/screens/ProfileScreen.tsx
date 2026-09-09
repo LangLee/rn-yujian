@@ -24,6 +24,7 @@ import { WaterBackdrop } from '../components/WaterBackdrop';
 import { PressableScale } from '../components/ui/PressableScale';
 import { BottomSheet } from '../components/ui/BottomSheet';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
+import { ScreenHeader } from '../components';
 
 type ProfileScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Profile'>;
 
@@ -68,17 +69,16 @@ export const ProfileScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
+      {/* 标题栏：左返回主页 + 居中标题 */}
+      <ScreenHeader title="我的" onBack={() => navigation.goBack()} />
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.md, paddingBottom: 48 + insets.bottom },
+          { paddingTop: spacing.md, paddingBottom: 48 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* 居中标题 */}
-        <Text style={[styles.pageTitle, { color: textPrimary }]}>我的</Text>
-
         {/* 个人大卡：身份 + 嵌套统计胶囊 */}
         <View
           style={[
@@ -294,14 +294,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.page,
   } as ViewStyle,
-  pageTitle: {
-    textAlign: 'center',
-    fontFamily: font.serif,
-    fontSize: 19,
-    fontWeight: '700',
-    letterSpacing: 6,
-    marginVertical: spacing.md,
-  } as TextStyle,
   identityCard: {
     borderRadius: radius.l + 2,
     borderWidth: 1,

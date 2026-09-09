@@ -194,6 +194,103 @@ android {
     }
 }
 
+// ---- 渔见端侧模型资产下载门禁（对齐原工程 CI：先下载校验，再打包）----
+// 模型二进制不进 git，每次构建前由 fetchModelAssets 确保就位：
+// 已存在且哈希匹配时直接跳过；缺失或不匹配才从模型工厂 Release 重新下载。
+// 版本与代码侧硬校验配套：classifier 的 SHA256 写死在 FishRecognitionEngine，
+// detector 通过 detector_metadata.json 与 onnx 二进制自洽校验；升级模型时需同步改这里。
+def modelReleaseBase = "https://github.com/pan277942135/Yujian/releases/download"
+def classifierReleaseUrl = "${modelReleaseBase}/mobile-model-v0.2/fish_classifier_v0_2.tflite"
+def detectorBundleUrl = "${modelReleaseBase}/detector-model-v0.1/det_fish_v0_1_android_bundle.zip"
+def classifierSha256 = "9575ede5c6c85b850647016d76e8e5175fa9ea6b609c47c83f54b4062e47d14e"
+def classifierBytes = 6220308L
+def modelAssetsDir = file("src/main/assets")
+// bundle 里只有这三个文件属于 App 资产；golden_cases.json 与 golden/*.jpg 是 CI 黄金回归用的
+def detectorBundleMembers = [
+    "fish_detector_yolox_nano_v0_1.onnx",
+    "detector_metadata.json",
+    "recognition_pipeline_v1.json",
+] as Set
+
+def sha256Of = { File f ->
+    def digest = java.security.MessageDigest.getInstance("SHA-256")
+    f.eachByte(1024 * 1024) { byte[] buffer, int len ->
+        digest.update(buffer, 0, len)
+    }
+    digest.digest().collect { String.format("%02x", it) }.join()
+}
+
+def downloadTo = { String url, File dest ->
+    dest.parentFile?.mkdirs()
+    def conn = new URL(url).openConnection()
+    conn.setConnectTimeout(30_000)
+    conn.setReadTimeout(300_000)
+    conn.getInputStream().withCloseable { input ->
+        dest.withOutputStream { output ->
+            byte[] buffer = new byte[64 * 1024]
+            int read
+            while ((read = input.read(buffer)) > 0) {
+                output.write(buffer, 0, read)
+            }
+        }
+    }
+}
+
+tasks.register("fetchModelAssets") {
+    description = "下载并校验端侧识别模型资产（缺失或哈希不符时重新下载）"
+    doLast {
+        def tflite = new File(modelAssetsDir, "fish_classifier.tflite")
+        if (!tflite.exists() || tflite.length() != classifierBytes || sha256Of(tflite) != classifierSha256) {
+            logger.lifecycle("模型资产: 下载 fish_classifier.tflite（mobile-model-v0.2）…")
+            downloadTo(classifierReleaseUrl, tflite)
+            if (tflite.length() != classifierBytes || sha256Of(tflite) != classifierSha256) {
+                throw new GradleException("fish_classifier.tflite 校验失败：SHA256/大小与 FishRecognitionEngine 常量不符")
+            }
+        }
+
+        def onnx = new File(modelAssetsDir, "fish_detector_yolox_nano_v0_1.onnx")
+        def metadata = new File(modelAssetsDir, "detector_metadata.json")
+        def pipeline = new File(modelAssetsDir, "recognition_pipeline_v1.json")
+        boolean detectorOk = false
+        if (onnx.exists() && metadata.exists() && pipeline.exists()) {
+            def metaJson = new groovy.json.JsonSlurper().parseText(metadata.text)
+            detectorOk = onnx.length() == metaJson.onnx_bytes && sha256Of(onnx) == metaJson.onnx_sha256
+        }
+        if (!detectorOk) {
+            logger.lifecycle("模型资产: 下载 detector bundle（detector-model-v0.1）…")
+            def bundle = File.createTempFile("det_fish_v0_1", ".zip")
+            bundle.deleteOnExit()
+            try {
+                downloadTo(detectorBundleUrl, bundle)
+                def zip = new java.util.zip.ZipFile(bundle)
+                try {
+                    modelAssetsDir.mkdirs()
+                    zip.entries().each { entry ->
+                        def name = entry.getName().split('/').last()
+                        if (!entry.isDirectory() && detectorBundleMembers.contains(name)) {
+                            zip.getInputStream(entry).withCloseable { input ->
+                                new File(modelAssetsDir, name).withOutputStream { output -> output << input }
+                            }
+                        }
+                    }
+                } finally {
+                    zip.close()
+                }
+                // 安装后复验：metadata 必须与 onnx 二进制配套
+                def metaJson = new groovy.json.JsonSlurper().parseText(metadata.text)
+                if (onnx.length() != metaJson.onnx_bytes || sha256Of(onnx) != metaJson.onnx_sha256) {
+                    throw new GradleException("detector bundle 校验失败：onnx 与 detector_metadata.json 不配套")
+                }
+            } finally {
+                bundle.delete()
+            }
+        }
+        logger.lifecycle("模型资产: 校验通过（classifier + detector 均就位）")
+    }
+}
+
+preBuild.dependsOn("fetchModelAssets")
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")

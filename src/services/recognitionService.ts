@@ -34,6 +34,31 @@ function requireModule(): YujianRecognitionNative {
   return nativeModule;
 }
 
+/** 原生 pipeline 首次推理时需要从 assets 读取的文件，缺任何一个都会加载失败。 */
+const REQUIRED_ASSET_FILES = [
+  'fish_detector_yolox_nano_v0_1.onnx',
+  'detector_metadata.json',
+  'recognition_pipeline_v1.json',
+  'fish_classifier.tflite',
+  'preprocess_contract_v1.json',
+];
+
+/** Android assets.open 缺文件时 reject 的 message 只有裸文件名，翻译成可行动的提示。 */
+async function translateAssetError<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const missing = REQUIRED_ASSET_FILES.find((name) => message.includes(name));
+    if (missing) {
+      throw new Error(
+        `AI 模型未打包进 App（缺少 ${missing}），请将模型文件放入 android/app/src/main/assets/ 后重新构建`,
+      );
+    }
+    throw error instanceof Error ? error : new Error(message);
+  }
+}
+
 /**
  * 端侧推理服务：所有 Bitmap 留在原生层，JS 只交换 JSON 契约与 file:// 预览路径。
  */
@@ -45,7 +70,7 @@ export const recognitionService = {
   },
 
   async recognize(imageId: string): Promise<ProductionRecognitionResultDTO> {
-    return requireModule().recognize(imageId);
+    return translateAssetError(() => requireModule().recognize(imageId));
   },
 
   async record(imageId: string): Promise<InferenceAssetMeta> {
@@ -74,6 +99,6 @@ export const recognitionService = {
     if (!nativeModule) {
       return false;
     }
-    return nativeModule.warmup();
+    return translateAssetError(() => nativeModule!.warmup());
   },
 };

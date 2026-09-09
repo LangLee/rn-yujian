@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   PermissionsAndroid,
   Platform,
@@ -8,26 +9,30 @@ import {
   TextStyle,
   View,
   ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
+import { RouteProp } from '@react-navigation/native';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { recognitionService } from '../services/recognitionService';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { CaptureButton } from '../components/CaptureButton';
-import { IconButton } from '../components/ui/IconButton';
+import { FishScanFrame } from '../components/FishScanFrame';
 import { BottomSheet } from '../components/ui/BottomSheet';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
+import { ScreenHeader } from '../components';
 import { palette } from '../constants/colors';
-import { radius, spacing, typeScale } from '../constants/tokens';
+import { font, spacing, typeScale } from '../constants/tokens';
 import { toFileUri } from '../utils/fileUri';
 import { haptics } from '../utils/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type IdentifyScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Identify'>;
+type IdentifyScreenRouteProp = RouteProp<RootStackParamList, 'Identify'>;
 
 const CAMERA_PERM_SEEN_KEY = '@yujian/perm_camera_seen';
 
@@ -41,14 +46,26 @@ const QUALITY_COPY: Record<string, string> = {
   fish_too_small: '让鱼占满取景框会更好认',
 };
 
+/** 状态行图标含义：ready/默认 金勾；其他 Gate 提示 感叹；error 关闭。 */
+type StatusMark = 'check' | 'warn' | 'close' | 'spinner';
+
+/** 底部快门与相册按钮（还原设计稿：快门中心约在 33.5% 屏宽、相册约在 77.4% 屏宽处）。 */
+const SHUTTER_SIZE = 90;
+const ALBUM_SIZE = 44;
+const SHUTTER_D = SHUTTER_SIZE + 34;
+const ALBUM_D = ALBUM_SIZE + 32;
+const DOCK_HEIGHT = SHUTTER_D;
+
 /**
- * P02 拍照识鱼（设计文档 7.1）：
- * 全屏取景；底部中央相机按钮；相册缩略入口位于右下角。
- * 辅助框只用于提示完整鱼身，不做人脸框 / HUD。
+ * P02 拍照识鱼（设计文档 7.1 + 高保真稿）：
+ * 全屏湖面取景 + 鱼形渐变轮廓框；框内引导文案；
+ * 底部快门（银白金属环磨砂玻璃）居左，相册入口居右。
  * 拍照后立即进入 P03，不假装已经完成识别。
  */
 export const IdentifyScreen: React.FC = () => {
   const navigation = useNavigation<IdentifyScreenNavigationProp>();
+  const route = useRoute<IdentifyScreenRouteProp>();
+  const { width: windowWidth } = useWindowDimensions();
   const { image, selectImage, reset } = useRecognition();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
@@ -63,6 +80,14 @@ export const IdentifyScreen: React.FC = () => {
     return () => undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 识别页异常退回时带回原因（Recognizing catch → navigate Identify { error }）
+  useEffect(() => {
+    if (route.params?.error) {
+      setError(route.params.error);
+      navigation.setParams({ error: undefined });
+    }
+  }, [route.params?.error, navigation]);
 
   const handlePicked = useCallback(
     async (uri: string, source: 'camera' | 'gallery') => {
@@ -149,27 +174,44 @@ export const IdentifyScreen: React.FC = () => {
   }, [handlePicked]);
 
   const imageUri = toFileUri(image?.filePath);
-  const gateCopy = error ?? (loading ? '正在准备照片…' : imageUri ? '正在认识这条鱼…' : gateStatus ? QUALITY_COPY[gateStatus] ?? null : '把鱼放进框里，保持鱼头鱼尾完整');
+
+  // 框内状态行（Quality Gate / 加载 / 错误都落在鱼身中央，不另设浮层）
+  let statusCopy: string;
+  let statusMark: StatusMark;
+  let statusError = false;
+  if (error) {
+    statusCopy = error;
+    statusMark = 'close';
+    statusError = true;
+  } else if (loading) {
+    statusCopy = '正在准备照片…';
+    statusMark = 'spinner';
+  } else if (imageUri) {
+    statusCopy = '正在认识这条鱼…';
+    statusMark = 'spinner';
+  } else if (gateStatus && gateStatus !== 'ready') {
+    statusCopy = QUALITY_COPY[gateStatus] ?? '';
+    statusMark = 'warn';
+  } else {
+    statusCopy = QUALITY_COPY.ready;
+    statusMark = 'check';
+  }
 
   return (
     <View style={styles.screen}>
-      {/* 环境照片背景 + 深色遮罩（相机氛围，透明取景） */}
+      {/* 环境照片背景 + 轻遮罩（保留湖面亮度，保证白色文案可读） */}
       <WaterBackdrop />
       <View style={[StyleSheet.absoluteFill, styles.bgScrim]} pointerEvents="none" />
-      {/* 顶部：关闭 + 标题 */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <IconButton
-          icon="close"
-          iconSize={20}
-          iconColor="#EAF4F2"
-          backgroundColor="rgba(255,255,255,0.12)"
-          onPress={() => navigation.goBack()}
-        />
-        <Text style={styles.topTitle}>拍照识鱼</Text>
-        <View style={styles.topSpacer} />
-      </View>
 
-      {/* 取景区（半透明；鱼体标记位后续由图片资产实现） */}
+      {/* 顶部：返回 + 衬线标题 */}
+      <ScreenHeader
+        title="拍照识鱼"
+        onBack={() => navigation.goBack()}
+        titleColor="#FDFEFD"
+        backColor="#FDFEFD"
+      />
+
+      {/* 取景区：全屏透明，鱼形轮廓 + 框内引导文案 */}
       <View style={styles.viewfinder}>
         {imageUri ? (
           <>
@@ -177,36 +219,66 @@ export const IdentifyScreen: React.FC = () => {
             <View style={[StyleSheet.absoluteFill, styles.viewfinderDim]} />
           </>
         ) : null}
-        {/* 辅助框：提示完整鱼身 */}
-        <View style={styles.frame} pointerEvents="none" />
-        <View style={styles.viewfinderHint} pointerEvents="none">
-          <Text style={styles.viewfinderHintText}>鱼体完整 · 光线充足 · 少遮挡</Text>
+        <View style={styles.frameWrap}>
+          <FishScanFrame width={Math.min(windowWidth * 0.84, 360)} />
+          <View style={[StyleSheet.absoluteFill, styles.frameCopy]} pointerEvents="none">
+            <Text style={styles.headline}>拍下整条鱼</Text>
+            <Text style={styles.subline}>让鱼身保持完整，识别更准确</Text>
+            <View style={styles.statusRow}>
+              {statusMark === 'spinner' ? (
+                <ActivityIndicator size="small" color="#F4F8F7" />
+              ) : (
+                <View style={[styles.statusDot, statusError && styles.statusDotError]}>
+                  {statusMark === 'check' ? (
+                    <Icon name="checkmark" size={12} color="#FFFFFF" />
+                  ) : statusMark === 'close' ? (
+                    <Icon name="close" size={11} color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.statusWarnMark}>!</Text>
+                  )}
+                </View>
+              )}
+              <Text
+                style={[styles.statusText, statusError && styles.statusTextError]}
+                numberOfLines={2}
+              >
+                {statusCopy}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
-      {/* Quality Gate 反馈 */}
-      <View style={styles.copyWrap}>
-        <Text style={[styles.copy, Boolean(error) && styles.copyError]} numberOfLines={2}>
-          {gateCopy ?? ''}
-        </Text>
-      </View>
-
-      {/* 底部：中央快门 + 右下角相册入口 */}
-      <View style={[styles.dock, { paddingBottom: insets.bottom + spacing.lg }]}>
-        <View style={styles.dockRow}>
-          <View style={styles.dockSide} />
-          <CaptureButton onPress={openCamera} disabled={loading} size={84} icon="camera" />
-          <View style={styles.dockSide}>
-            <IconButton
-              icon="images-outline"
-              size={52}
-              iconSize={22}
-              iconColor="#EAF4F2"
-              backgroundColor="rgba(255,255,255,0.12)"
-              onPress={openGallery}
-              disabled={loading}
-            />
-          </View>
+      {/* 底部：快门居左 + 相册居右（按屏宽百分比定位，随屏幕缩放） */}
+      <View
+        style={[styles.dock, { bottom: insets.bottom + spacing.md }]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[styles.dockItem, { left: windowWidth * 0.335 - SHUTTER_D / 2, top: 0 }]}
+          pointerEvents="box-none"
+        >
+          <CaptureButton onPress={openCamera} disabled={loading} size={SHUTTER_SIZE} icon="camera" />
+        </View>
+        <View
+          style={[
+            styles.dockItem,
+            {
+              right: windowWidth * 0.226 - ALBUM_D / 2,
+              top: (DOCK_HEIGHT - ALBUM_D) / 2,
+            },
+          ]}
+          pointerEvents="box-none"
+        >
+          <CaptureButton
+            onPress={openGallery}
+            disabled={loading}
+            size={ALBUM_SIZE}
+            icon="image-outline"
+            iconRatio={0.42}
+            breath={false}
+            accessibilityLabel="从相册选择照片"
+          />
         </View>
       </View>
 
@@ -247,100 +319,94 @@ export const IdentifyScreen: React.FC = () => {
   );
 };
 
+const shadowText: TextStyle = {
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 6,
+  textShadowColor: 'rgba(6,20,26,0.5)',
+};
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: palette.viewfinderDark,
   } as ViewStyle,
   bgScrim: {
-    backgroundColor: 'rgba(5,18,24,0.62)',
-  } as ViewStyle,
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.sm,
-  } as ViewStyle,
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  } as ViewStyle,
-  topTitle: {
-    flex: 1,
-    textAlign: 'center',
-    color: '#EAF4F2',
-    fontSize: typeScale.h2,
-    fontWeight: '700',
-  } as TextStyle,
-  topSpacer: {
-    width: 40,
+    backgroundColor: 'rgba(8,24,30,0.34)',
   } as ViewStyle,
   viewfinder: {
     flex: 1,
-    marginHorizontal: spacing.page,
-    borderRadius: radius.l,
-    backgroundColor: 'rgba(4,16,20,0.35)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingBottom: DOCK_HEIGHT + spacing.sm,
   } as ViewStyle,
   viewfinderDim: {
     backgroundColor: 'rgba(0,0,0,0.16)',
   } as ViewStyle,
-  frame: {
-    position: 'absolute',
-    width: '78%',
-    height: 260,
-    borderWidth: 1.5,
-    borderColor: 'rgba(188,217,213,0.55)',
-    borderRadius: radius.l,
-  } as ViewStyle,
-  viewfinderHint: {
-    position: 'absolute',
-    bottom: spacing.lg,
-    alignItems: 'center',
-  } as ViewStyle,
-  viewfinderHintText: {
-    color: 'rgba(234,244,242,0.72)',
-    fontSize: typeScale.caption,
-  } as TextStyle,
-  copyWrap: {
-    paddingHorizontal: spacing.page,
-    minHeight: 52,
+  frameWrap: {
     alignItems: 'center',
     justifyContent: 'center',
   } as ViewStyle,
-  copy: {
-    color: 'rgba(234,244,242,0.85)',
-    fontSize: typeScale.body,
-    textAlign: 'center',
-  } as TextStyle,
-  copyError: {
-    color: '#E8A79D',
-  } as TextStyle,
-  dock: {
-    paddingHorizontal: spacing.page,
+  frameCopy: {
+    alignItems: 'center',
+    justifyContent: 'center',
   } as ViewStyle,
-  dockRow: {
+  headline: {
+    color: '#FDFEFD',
+    fontFamily: font.serif,
+    fontSize: 23,
+    fontWeight: '600',
+    letterSpacing: 2,
+    ...shadowText,
+  } as TextStyle,
+  subline: {
+    marginTop: spacing.xs + 2,
+    color: 'rgba(250,252,251,0.86)',
+    fontSize: typeScale.meta + 1,
+    letterSpacing: 1,
+    ...shadowText,
+  } as TextStyle,
+  statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+    maxWidth: 240,
   } as ViewStyle,
-  dockSide: {
-    width: 84,
+  statusDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: palette.accentGold,
     alignItems: 'center',
-  } as ViewStyle,
-  albumButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
     justifyContent: 'center',
-    alignItems: 'center',
+    marginRight: spacing.sm - 2,
+  } as ViewStyle,
+  statusDotError: {
+    backgroundColor: 'rgba(214,124,110,0.92)',
+  } as ViewStyle,
+  statusWarnMark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  } as TextStyle,
+  statusText: {
+    flexShrink: 1,
+    color: 'rgba(251,253,252,0.92)',
+    fontSize: typeScale.meta + 1,
+    ...shadowText,
+  } as TextStyle,
+  statusTextError: {
+    color: '#F3C7BD',
+  } as TextStyle,
+  dock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: DOCK_HEIGHT,
+  } as ViewStyle,
+  dockItem: {
+    position: 'absolute',
   } as ViewStyle,
   permText: {
     color: palette.mutedInk,

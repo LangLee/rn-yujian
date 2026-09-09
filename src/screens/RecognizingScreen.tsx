@@ -140,12 +140,18 @@ export const RecognizingScreen: React.FC = () => {
 
   const startedAt = useMemo(() => Date.now(), []);
 
+  // latest ref：识别只随挂载执行一次；退场转场期间 IdentifyScreen 重挂载会 reset 清空
+  // image，若把 recognizeAndRecord 放进依赖会导致 effect 重跑并抛“没有可识别的照片”，
+  // 覆盖真正的失败原因。
+  const recognizeRef = useRef(recognizeAndRecord);
+  recognizeRef.current = recognizeAndRecord;
+
   // 识别主流程
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const result = await recognizeAndRecord();
+        const result = await recognizeRef.current();
         if (cancelled) {
           return;
         }
@@ -162,9 +168,14 @@ export const RecognizingScreen: React.FC = () => {
         } else {
           proceed();
         }
-      } catch {
+      } catch (e) {
+        // 异常（非识别"没认出"）直接退回 P02 并带回原因；RecognitionIssue 只承载有结果的 FAILED
         if (!cancelled) {
-          navigation.replace('RecognitionIssue');
+          navigation.navigate({
+            name: 'Identify',
+            params: { error: e instanceof Error ? e.message : '识别失败，请再试一次' },
+            merge: true,
+          });
         }
       }
     })();
@@ -177,7 +188,7 @@ export const RecognizingScreen: React.FC = () => {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [recognizeAndRecord, navigation, startedAt]);
+  }, [navigation, startedAt]);
 
   // 文案轮换 + 长等待文案（17.32）
   useEffect(() => {

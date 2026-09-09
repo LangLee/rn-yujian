@@ -15,6 +15,7 @@ import { radius, spacing, typeScale } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { PressableScale } from '../../components/ui/PressableScale';
+import { ScreenHeader } from '../../components';
 import { haptics } from '../../utils/haptics';
 
 type ThemeSettingsNavigationProp = StackNavigationProp<RootStackParamList, 'ThemeSettings'>;
@@ -47,15 +48,7 @@ export const ThemeSettingsScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.94} style={styles.backHit}>
-          <View style={styles.backCircle}>
-            <Icon name="chevron-back" size={22} color="#173B4B" />
-          </View>
-        </PressableScale>
-        <Text style={styles.title}>环境主题</Text>
-        <View style={styles.headerSide} />
-      </View>
+      <ScreenHeader title="环境主题" onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.flex}
@@ -117,33 +110,6 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   flex: {
     flex: 1,
-  } as ViewStyle,
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.sm,
-  } as ViewStyle,
-  backHit: {
-    borderRadius: 20,
-  } as ViewStyle,
-  backCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as ViewStyle,
-  title: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: typeScale.h2,
-    fontWeight: '700',
-    color: '#173B4B',
-  } as TextStyle,
-  headerSide: {
-    width: 40,
   } as ViewStyle,
   content: {
     paddingHorizontal: spacing.page,

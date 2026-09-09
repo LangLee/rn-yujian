@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
-import { font, spacing } from '../../constants/tokens';
+import { spacing } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { PressableScale } from '../../components/ui/PressableScale';
+import { ScreenHeader } from '../../components';
 import { MyCatchesTab } from './MyCatchesTab';
 import { ShareHomeTab } from './ShareHomeTab';
 import { GrowthTab } from './GrowthTab';
@@ -32,7 +31,6 @@ export const CatchHubScreen: React.FC = () => {
   const navigation = useNavigation<CatchHubNavigationProp>();
   const route = useRoute<CatchHubRoute>();
   const { profile } = useTheme();
-  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<CatchHubTab>(route.params?.tab ?? 'catches');
 
   useEffect(() => {
@@ -48,13 +46,7 @@ export const CatchHubScreen: React.FC = () => {
     <View style={styles.screen}>
       <WaterBackdrop />
       {/* 顶栏：返回 + 居中衬线标题 */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
-          <Icon name="chevron-back" size={24} color={textPrimary} />
-        </PressableScale>
-        <Text style={[styles.title, { color: textPrimary }]}>我的鱼获</Text>
-        <View style={styles.edgeHit} />
-      </View>
+      <ScreenHeader title="我的鱼获" onBack={() => navigation.goBack()} />
 
       {/* 三段式切换 */}
       <View
@@ -76,21 +68,18 @@ export const CatchHubScreen: React.FC = () => {
               scaleTo={0.96}
               style={styles.segmentHit}
             >
-              <View
-                style={[
-                  styles.segment,
-                  {
-                    // Android：背景在 null ↔ 色值间切换会重建背景 drawable 丢圆角，
-                    // 固定给背景色并在切换时重设 borderRadius
-                    backgroundColor: active
-                      ? profile.isDark
-                        ? 'rgba(255,255,255,0.16)'
-                        : '#FFFFFF'
-                      : 'transparent',
-                    borderRadius: 22,
-                  },
-                ]}
-              >
+              <View style={styles.segment}>
+                {/* Android：backgroundColor 在 transparent ↔ 色值间切换会重建背景 drawable 丢圆角，
+                    改为常驻圆角背景层并用 opacity 显隐（opacity 变化不重建 drawable） */}
+                <View
+                  style={[
+                    styles.segmentPill,
+                    {
+                      backgroundColor: profile.isDark ? 'rgba(255,255,255,0.16)' : '#FFFFFF',
+                      opacity: active ? 1 : 0,
+                    },
+                  ]}
+                />
                 <Text
                   style={[
                     styles.segmentText,
@@ -127,26 +116,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   } as ViewStyle,
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-  } as ViewStyle,
-  edgeHit: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-  } as ViewStyle,
-  title: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: font.serif,
-    fontSize: 24,
-    fontWeight: '700',
-    letterSpacing: 6,
-  } as TextStyle,
   segmentBar: {
     flexDirection: 'row',
     marginHorizontal: spacing.page,
@@ -161,6 +130,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 9,
+  } as ViewStyle,
+  segmentPill: {
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 22,
   } as ViewStyle,
   segmentText: {

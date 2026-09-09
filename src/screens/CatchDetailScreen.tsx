@@ -26,31 +26,60 @@ import { catchMemoryService, CatchMemoryData, CatchMemoryMedia } from '../servic
 import { catchService } from '../services/catchService';
 import { demoCatch } from '../constants/demoData';
 import { WaterBackdrop } from '../components/WaterBackdrop';
+import { RemoteImage } from '../components/RemoteImage';
 import { MediaViewerModal } from '../components/MediaViewerModal';
 import { PressableScale } from '../components/ui/PressableScale';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
+import { ScreenHeader, HeaderIconButton } from '../components';
 import { palette } from '../constants/colors';
 import { font, radius, spacing } from '../constants/tokens';
-import { formatCaptureFull, formatLength, formatWeight } from '../utils/formatters';
+import {
+  formatCaptureFull,
+  formatCaptureStamp,
+  formatLength,
+  formatMediaDuration,
+  formatWeight,
+} from '../utils/formatters';
 import { toFileUri } from '../utils/fileUri';
 import { haptics } from '../utils/haptics';
 import { speciesPickerHub } from '../utils/speciesPickerHub';
 
 type CatchDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, 'CatchDetail'>;
 
-const GOLD = '#C9A96A';
-const INK = '#1F4A56';
+const GOLD = palette.accentGold;
 const UNKNOWN = '未知鱼种';
 
-/** 3 列媒体格宽：屏宽 - 页边距 - 卡片内边距 - 两列间隙（8.4：3 列、约 3:4 竖向格）。 */
+/** 3 列记忆格宽：屏宽 - 页边距 - 卡片内边距 - 两列间隙（方格）。 */
 const GRID_CELL_WIDTH =
   (Dimensions.get('window').width - spacing.page * 2 - 32 - spacing.sm * 2) / 3;
 
+/** 信息卡上浮叠在照片底缘的高度（高保真稿约 44pt）。 */
+const SPECIES_CARD_LIFT = 44;
+
+/** "42.6 cm" → { value: '42.6', unit: 'cm' }；空值显示 "—"。 */
+const splitMeasure = (formatted: string | null): { value: string; unit: string } => {
+  if (!formatted) {
+    return { value: '—', unit: '' };
+  }
+  const gap = formatted.indexOf(' ');
+  if (gap < 0) {
+    return { value: formatted, unit: '' };
+  }
+  return { value: formatted.slice(0, gap), unit: formatted.slice(gap + 1) };
+};
+
+interface MemoryMediaItem {
+  uri: string;
+  authToken: string | null;
+  kind: 'photo' | 'video';
+  durationSec?: number;
+}
+
 /**
- * 鱼获详情 / 鱼获记忆（设计文档 08 + 高保真参考稿）：
- * 基础信息面板（展示/原位编辑一体：鱼种行、两列长度重量、地点、日期时间，金图标）；
- * 关于这次鱼获（标题行右侧铅笔 + 麦克风）；鱼获记忆（计数行 + 胶囊操作 chips + 3 列 Grid）。
+ * 鱼获详情 / 鱼获记忆（设计文档 08 + 千岛湖高保真稿）：
+ * 照片 Hero + 上浮鱼名卡（金色短规线、三列长度/重量/地点、时间行）；
+ * 关于这次鱼获（铅笔 + 麦克风）；鱼获记忆（计数行 + 胶囊 chips + 方格 Grid，视频格播放角标）。
  */
 export const CatchDetailScreen: React.FC = () => {
   const navigation = useNavigation<CatchDetailScreenNavigationProp>();
@@ -210,52 +239,78 @@ export const CatchDetailScreen: React.FC = () => {
   const [viewer, setViewer] = useState<{ open: boolean; index: number }>({ open: false, index: 0 });
 
   const mediaList = useMemo(() => {
-    const items: { uri: string; authToken: string | null }[] = [];
+    const items: MemoryMediaItem[] = [];
     const remoteUrl = catchService.resolveUrl(remoteCatch?.imageUrl);
     if (remoteUrl) {
-      items.push({ uri: remoteUrl, authToken: session?.accessToken ?? null });
+      items.push({ uri: remoteUrl, authToken: session?.accessToken ?? null, kind: 'photo' });
     }
-    (memory?.media ?? []).forEach((item) => items.push({ uri: item.uri, authToken: null }));
+    (memory?.media ?? []).forEach((item) =>
+      items.push({ uri: item.uri, authToken: null, kind: item.kind, durationSec: item.durationSec }),
+    );
     return items;
   }, [remoteCatch, memory, session]);
 
+  /** 图片选择器 / 相机返回的资产（仅取本页关心的字段）。 */
+  const appendPickedAssets = (assets: { uri?: string | null; type?: string | null; duration?: number }[]) => {
+    if (!memory || assets.length === 0) {
+      return;
+    }
+    const picked = assets
+      .map(
+        (asset): { uri: string; kind: 'photo' | 'video'; durationSec?: number } | null => {
+          const uri = toFileUri(asset.uri ?? null);
+          if (!uri) {
+            return null;
+          }
+          const kind: 'photo' | 'video' = asset.type?.startsWith('video/') ? 'video' : 'photo';
+          const durationSec =
+            typeof asset.duration === 'number' && asset.duration > 0
+              ? Math.round(asset.duration)
+              : undefined;
+          return { uri, kind, durationSec };
+        },
+      )
+      .filter(
+        (entry): entry is { uri: string; kind: 'photo' | 'video'; durationSec?: number } =>
+          entry !== null,
+      );
+    if (picked.length === 0) {
+      return;
+    }
+    const additions: CatchMemoryMedia[] = picked.map((entry, order) => ({
+      id: `m_${Date.now()}_${order}`,
+      uri: entry.uri,
+      kind: entry.kind,
+      durationSec: entry.durationSec,
+      addedAt: new Date().toISOString(),
+    }));
+    void persistMemory({ ...memory, media: [...memory.media, ...additions] });
+  };
+
   const addMediaFromLibrary = () => {
-    launchImageLibrary({ mediaType: 'photo', quality: 0.9, selectionLimit: 9 }, (response) => {
-      if (response.didCancel || response.errorCode || !response.assets?.length || !memory) {
+    launchImageLibrary({ mediaType: 'mixed', quality: 0.9, selectionLimit: 9 }, (response) => {
+      if (response.didCancel || response.errorCode || !response.assets?.length) {
         return;
       }
-      const additions: CatchMemoryMedia[] = response.assets
-        .map((asset, index) => ({ index, uri: toFileUri(asset.uri ?? null) }))
-        .filter((entry): entry is { index: number; uri: string } => Boolean(entry.uri))
-        .map((entry, order) => ({
-          id: `m_${Date.now()}_${order}`,
-          uri: entry.uri,
-          kind: 'photo' as const,
-          addedAt: new Date().toISOString(),
-        }));
-      if (additions.length === 0) {
-        return;
-      }
-      void persistMemory({ ...memory, media: [...memory.media, ...additions] });
+      appendPickedAssets(response.assets);
     });
   };
 
   const addMediaFromCamera = () => {
     launchCamera({ mediaType: 'photo', quality: 0.9 }, (response) => {
-      if (response.didCancel || response.errorCode || !response.assets?.[0]?.uri || !memory) {
+      if (response.didCancel || response.errorCode || !response.assets?.length) {
         return;
       }
-      const additionUri = toFileUri(response.assets[0].uri ?? null);
-      if (!additionUri) {
+      appendPickedAssets(response.assets);
+    });
+  };
+
+  const addVideoFromCamera = () => {
+    launchCamera({ mediaType: 'video', quality: 0.9 }, (response) => {
+      if (response.didCancel || response.errorCode || !response.assets?.length) {
         return;
       }
-      const addition: CatchMemoryMedia = {
-        id: `m_${Date.now()}`,
-        uri: additionUri,
-        kind: 'photo',
-        addedAt: new Date().toISOString(),
-      };
-      void persistMemory({ ...memory, media: [...memory.media, addition] });
+      appendPickedAssets(response.assets);
     });
   };
 
@@ -289,42 +344,82 @@ export const CatchDetailScreen: React.FC = () => {
 
   const textPrimary = profile.surface.textPrimary;
   const textSecondary = profile.surface.textSecondary;
-  const displaySpeciesName = speciesOverride?.name || remoteCatch.speciesName || UNKNOWN;
+  const displaySpeciesName = editing
+    ? editDraft.speciesName || UNKNOWN
+    : speciesOverride?.name || remoteCatch.speciesName || UNKNOWN;
   const displaySpeciesKey = speciesOverride?.key || remoteCatch.speciesId;
-  const lengthLabel = formatLength(memory?.lengthCm ?? null, lengthUnit);
-  const weightLabel = formatWeight(memory?.weightKg ?? null, weightUnit);
+  const lengthParts = splitMeasure(formatLength(memory?.lengthCm ?? null, lengthUnit));
+  const weightParts = splitMeasure(formatWeight(memory?.weightKg ?? null, weightUnit));
   const locationLabel = memory?.location?.trim() || null;
+  const whenStamp = formatCaptureStamp(remoteCatch.capturedAt);
   const whenLabel = formatCaptureFull(remoteCatch.capturedAt);
-  const photoCount = mediaList.length;
+  const photoCount = mediaList.filter((item) => item.kind !== 'video').length;
+  const videoCount = mediaList.length - photoCount;
+  const memorySummary = loadingMemory
+    ? '正在打开…'
+    : videoCount > 0
+      ? `${photoCount} 张照片 · ${videoCount} 段视频`
+      : `${photoCount} 张照片`;
+
+  /** 卡内分隔线：跟随次要文字色淡化（浅/深环境都可见）。 */
+  const separatorTint = { backgroundColor: textSecondary, opacity: 0.22 } as const;
+
+  const renderGridCell = (item: MemoryMediaItem, index: number) => (
+    <PressableScale
+      key={`${item.uri}-${index}`}
+      onPress={() => setViewer({ open: true, index })}
+      scaleTo={0.97}
+    >
+      <View style={styles.gridCell} pointerEvents="none">
+        {item.kind === 'video' ? (
+          <View style={styles.videoCell}>
+            {/* iOS 直接显示视频首帧；Android 无封面时保留深色底 + 播放角标 */}
+            <Image source={{ uri: item.uri }} style={styles.gridImage} resizeMode="cover" />
+            <View style={styles.videoShade} />
+            <View style={styles.videoPlayWrap}>
+              <View style={styles.videoPlayCircle}>
+                <Icon name="play" size={15} color="#FFFFFF" />
+              </View>
+            </View>
+            {item.durationSec ? (
+              <View style={styles.videoDurationBadge}>
+                <Text style={styles.videoDurationText}>
+                  {formatMediaDuration(item.durationSec)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : (
+          <Image source={{ uri: item.uri }} style={styles.gridImage} resizeMode="cover" />
+        )}
+      </View>
+    </PressableScale>
+  );
 
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
       {/* 顶部导航：Back + 标题 + 鱼鉴 / 分享 */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
-          <Icon name="chevron-back" size={24} color={textPrimary} />
-        </PressableScale>
-        <Text style={[styles.topTitle, { color: textPrimary }]}>鱼获详情</Text>
-        <View style={styles.topActions}>
-          {displaySpeciesKey && displaySpeciesKey !== 'unknown' ? (
-            <PressableScale
-              onPress={() => navigation.navigate('Species', { key: displaySpeciesKey })}
-              scaleTo={0.92}
-              style={styles.edgeHit}
-            >
-              <Icon name="book-outline" size={21} color={textPrimary} />
-            </PressableScale>
-          ) : null}
-          <PressableScale
-            onPress={() => navigation.navigate('ShareCreate', { presetCatchId: remoteCatch.id })}
-            scaleTo={0.92}
-            style={styles.edgeHit}
-          >
-            <Icon name="share-social-outline" size={21} color={textPrimary} />
-          </PressableScale>
-        </View>
-      </View>
+      <ScreenHeader
+        title="鱼获详情"
+        onBack={() => navigation.goBack()}
+        right={
+          <>
+            {displaySpeciesKey && displaySpeciesKey !== 'unknown' ? (
+              <HeaderIconButton
+                name="book-outline"
+                color={textPrimary}
+                onPress={() => navigation.navigate('Species', { key: displaySpeciesKey })}
+              />
+            ) : null}
+            <HeaderIconButton
+              name="share-social-outline"
+              color={textPrimary}
+              onPress={() => navigation.navigate('ShareCreate', { presetCatchId: remoteCatch.id })}
+            />
+          </>
+        }
+      />
 
       <ScrollView
         style={styles.flex}
@@ -332,14 +427,23 @@ export const CatchDetailScreen: React.FC = () => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* 照片 Hero */}
+        {/* 照片 Hero（信息卡上浮叠在底缘）。后端 imageUrl 为相对路径且需 Bearer，
+            与列表页一致走 RemoteImage（resolveUrl + 鉴权头），原生 Image 会加载失败 */}
         <PressableScale onPress={() => setViewer({ open: true, index: 0 })} scaleTo={0.99}>
-          <View style={[styles.heroCard, { borderColor: profile.surface.glassBorder }]}>
+          <View style={styles.heroCard}>
             {remoteCatch.imageUrl ? (
-              <Image
-                source={{ uri: remoteCatch.imageUrl }}
+              <RemoteImage
+                url={remoteCatch.imageUrl}
+                authToken={session?.accessToken ?? null}
                 style={styles.heroImage}
                 resizeMode="cover"
+                placeholder={
+                  <View style={styles.heroPlaceholder}>
+                    <Text style={[styles.heroPlaceholderText, { color: textSecondary }]}>
+                      照片加载失败
+                    </Text>
+                  </View>
+                }
               />
             ) : (
               <View style={[styles.heroImage, styles.heroPlaceholder]}>
@@ -351,24 +455,23 @@ export const CatchDetailScreen: React.FC = () => {
           </View>
         </PressableScale>
 
-        {/* 基础信息面板（展示 / 原位编辑一体） */}
-        <View
-          style={[
-            styles.panel,
-            { backgroundColor: profile.surface.glassStrong, borderColor: profile.surface.glassBorder },
-          ]}
-        >
-          <View style={styles.panelHead}>
-            <Text style={[styles.panelTitle, { color: textPrimary }]}>基础信息</Text>
+        {/* 鱼名 + 数据卡（上浮与照片叠合）。悬浮卡不带玻璃描边：
+            白色边线会横穿照片底缘，设计稿为干净的浅色卡 + 柔和投影 */}
+        <View style={[styles.speciesCard, { backgroundColor: profile.surface.glassStrong }]}>
+          <View style={styles.speciesHead}>
+            <Text style={[styles.speciesName, { color: textPrimary }]} numberOfLines={1}>
+              {displaySpeciesName}
+            </Text>
             {!editing ? (
-              <PressableScale onPress={startEdit} scaleTo={0.92}>
-                <Icon name="create-outline" size={19} color={textSecondary} />
+              <PressableScale onPress={startEdit} scaleTo={0.88} style={styles.speciesEditHit}>
+                <Icon name="pencil" size={15} color={GOLD} />
               </PressableScale>
             ) : null}
           </View>
+          <View style={styles.goldRule} />
 
           {editing ? (
-            <View>
+            <View style={styles.editForm}>
               {/* 鱼种 */}
               <PressableScale onPress={pickSpeciesForEdit} scaleTo={0.99}>
                 <View style={[styles.infoRow, styles.rowBorder, { borderColor: profile.surface.glassBorder }]} pointerEvents="none">
@@ -399,7 +502,7 @@ export const CatchDetailScreen: React.FC = () => {
                     <Text style={[styles.measureUnit, { color: textSecondary }]}>cm</Text>
                   </View>
                 </View>
-                <View style={[styles.measureDivider, { backgroundColor: profile.surface.glassBorder }]} />
+                <View style={[styles.measureDivider, separatorTint]} />
                 <View style={styles.measureCell}>
                   <View style={styles.measureLabelRow}>
                     <Icon name="scale-outline" size={14} color={GOLD} />
@@ -445,53 +548,59 @@ export const CatchDetailScreen: React.FC = () => {
             </View>
           ) : (
             <View>
-              <PressableScale onPress={startEdit} scaleTo={0.99}>
-                <View style={[styles.infoRow, styles.rowBorder, { borderColor: profile.surface.glassBorder }]} pointerEvents="none">
-                  <Icon name="fish-outline" size={16} color={GOLD} />
-                  <Text style={[styles.infoLabel, { color: textSecondary }]}>鱼种</Text>
-                  <Text style={[styles.infoValueSerif, { color: textPrimary }]} numberOfLines={1}>
-                    {displaySpeciesName}
-                  </Text>
-                  <Icon name="chevron-forward" size={15} color={textSecondary} />
-                </View>
-              </PressableScale>
-              <View style={[styles.measureRow, styles.rowBorder, { borderColor: profile.surface.glassBorder }]}>
-                <View style={styles.measureCell}>
-                  <View style={styles.measureLabelRow}>
-                    <Icon name="resize-outline" size={14} color={GOLD} />
-                    <Text style={[styles.infoLabel, { color: textSecondary }]}>长度</Text>
+              {/* 三列数据：长度 / 重量 / 地点（竖线分隔，数值在上、标签在下） */}
+              <View style={styles.statsRow}>
+                <View style={styles.statCell}>
+                  <View style={styles.statValueRow}>
+                    <Icon name="resize-outline" size={15} color={GOLD} style={styles.statIcon} />
+                    <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                      {lengthParts.value}
+                    </Text>
+                    {lengthParts.unit ? (
+                      <Text style={[styles.statUnit, { color: textSecondary }]}>{lengthParts.unit}</Text>
+                    ) : null}
                   </View>
-                  <Text style={[styles.measureValue, { color: textPrimary }]}>
-                    {lengthLabel ?? '—'}
-                  </Text>
+                  <Text style={[styles.statLabel, { color: textSecondary }]}>长度</Text>
                 </View>
-                <View style={[styles.measureDivider, { backgroundColor: profile.surface.glassBorder }]} />
-                <View style={styles.measureCell}>
-                  <View style={styles.measureLabelRow}>
-                    <Icon name="scale-outline" size={14} color={GOLD} />
-                    <Text style={[styles.infoLabel, { color: textSecondary }]}>重量</Text>
+                <View style={[styles.statDivider, separatorTint]} />
+                <View style={styles.statCell}>
+                  <View style={styles.statValueRow}>
+                    <Icon name="scale-outline" size={15} color={GOLD} style={styles.statIcon} />
+                    <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                      {weightParts.value}
+                    </Text>
+                    {weightParts.unit ? (
+                      <Text style={[styles.statUnit, { color: textSecondary }]}>{weightParts.unit}</Text>
+                    ) : null}
                   </View>
-                  <Text style={[styles.measureValue, { color: textPrimary }]}>
-                    {weightLabel ?? '—'}
-                  </Text>
+                  <Text style={[styles.statLabel, { color: textSecondary }]}>重量</Text>
+                </View>
+                <View style={[styles.statDivider, separatorTint]} />
+                <View style={styles.statCell}>
+                  <View style={styles.statValueRow}>
+                    <Icon name="location-outline" size={15} color={GOLD} style={styles.statIcon} />
+                    <Text
+                      style={[styles.statTextValue, { color: textPrimary }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.6}
+                    >
+                      {locationLabel ?? '—'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.statLabel, { color: textSecondary }]}>地点</Text>
                 </View>
               </View>
-              <PressableScale onPress={startEdit} scaleTo={0.99}>
-                <View style={[styles.infoRow, styles.rowBorder, { borderColor: profile.surface.glassBorder }]} pointerEvents="none">
-                  <Icon name="location-outline" size={16} color={GOLD} />
-                  <Text style={[styles.infoLabel, { color: textSecondary }]}>地点</Text>
-                  <Text style={[styles.infoValueSerif, { color: textPrimary }]} numberOfLines={1}>
-                    {locationLabel ?? '未记录'}
+              {/* 时间行 */}
+              <View style={[styles.statRule, separatorTint]} />
+              <View style={styles.timeRow}>
+                <View style={styles.statValueRow}>
+                  <Icon name="time-outline" size={16} color={GOLD} style={styles.statIcon} />
+                  <Text style={[styles.timeValue, { color: textPrimary }]} numberOfLines={1}>
+                    {whenStamp || '—'}
                   </Text>
-                  <Icon name="chevron-forward" size={15} color={textSecondary} />
                 </View>
-              </PressableScale>
-              <View style={[styles.infoRow, styles.rowBorderLast, { borderColor: profile.surface.glassBorder }]}>
-                <Icon name="time-outline" size={16} color={GOLD} />
-                <Text style={[styles.infoLabel, { color: textSecondary }]}>日期时间</Text>
-                <Text style={[styles.infoValue, { color: textPrimary }] } numberOfLines={1}>
-                  {whenLabel}
-                </Text>
+                <Text style={[styles.statLabel, { color: textSecondary }]}>时间</Text>
               </View>
             </View>
           )}
@@ -574,9 +683,7 @@ export const CatchDetailScreen: React.FC = () => {
           ]}
         >
           <Text style={[styles.panelTitle, { color: textPrimary }]}>鱼获记忆</Text>
-          <Text style={[styles.memoryCount, { color: textSecondary }]}>
-            {loadingMemory ? '正在打开…' : `${photoCount} 张照片`}
-          </Text>
+          <Text style={[styles.memoryCount, { color: textSecondary }]}>{memorySummary}</Text>
           {/* 胶囊操作 chips */}
           <View style={styles.memoryChips}>
             <PressableScale onPress={addMediaFromLibrary} scaleTo={0.96}>
@@ -591,21 +698,15 @@ export const CatchDetailScreen: React.FC = () => {
                 <Text style={[styles.memoryChipText, { color: textPrimary }]}>继续拍照</Text>
               </View>
             </PressableScale>
+            <PressableScale onPress={addVideoFromCamera} scaleTo={0.96}>
+              <View style={[styles.memoryChip, { borderColor: profile.surface.glassBorder }]}>
+                <Icon name="videocam-outline" size={15} color={textSecondary} />
+                <Text style={[styles.memoryChipText, { color: textPrimary }]}>录制视频</Text>
+              </View>
+            </PressableScale>
           </View>
-          {!loadingMemory && photoCount > 0 ? (
-            <View style={styles.grid}>
-              {mediaList.map((item, index) => (
-                <PressableScale
-                  key={`${item.uri}-${index}`}
-                  onPress={() => setViewer({ open: true, index })}
-                  scaleTo={0.97}
-                >
-                  <View style={styles.gridCell} pointerEvents="none">
-                    <Image source={{ uri: item.uri }} style={styles.gridImage} resizeMode="cover" />
-                  </View>
-                </PressableScale>
-              ))}
-            </View>
+          {!loadingMemory && mediaList.length > 0 ? (
+            <View style={styles.grid}>{mediaList.map(renderGridCell)}</View>
           ) : !loadingMemory ? (
             <Text style={[styles.memoryEmpty, { color: textSecondary }]}>
               还可以继续留下这次鱼获的更多记忆
@@ -641,87 +742,138 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.page,
   } as ViewStyle,
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.sm,
-  } as ViewStyle,
-  edgeHit: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 19,
-  } as ViewStyle,
-  topTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: font.serif,
-    fontSize: 19,
-    fontWeight: '700',
-    letterSpacing: 5,
-  } as TextStyle,
-  topActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  } as ViewStyle,
   content: {
     paddingHorizontal: spacing.page,
   } as ViewStyle,
   heroCard: {
     borderRadius: radius.l,
-    borderWidth: 1,
     overflow: 'hidden',
     backgroundColor: palette.softWater,
   } as ViewStyle,
   heroImage: {
     width: '100%',
-    aspectRatio: 3 / 2,
+    aspectRatio: 4 / 3,
   } as ImageStyle,
   heroPlaceholder: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   } as ViewStyle,
   heroPlaceholderText: {
     fontSize: 13,
   } as TextStyle,
-  panel: {
+  // ---------------------------------------------------------------------
+  // 鱼名 + 数据卡（上浮叠在照片底缘）
+  // ---------------------------------------------------------------------
+  speciesCard: {
+    marginTop: -SPECIES_CARD_LIFT,
+    paddingTop: SPECIES_CARD_LIFT + spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg + 2,
     borderRadius: radius.l + 2,
-    borderWidth: 1,
-    padding: spacing.lg,
-    marginTop: spacing.lg,
+    shadowColor: palette.deepInk,
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   } as ViewStyle,
-  panelHead: {
+  speciesHead: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
+    gap: spacing.sm,
   } as ViewStyle,
-  panelHeadActions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  } as ViewStyle,
-  headIconHit: {
-    padding: 2,
-  } as ViewStyle,
-  panelTitle: {
+  speciesName: {
+    flexShrink: 1,
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: 23,
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
+  speciesEditHit: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+  } as ViewStyle,
+  goldRule: {
+    width: 56,
+    height: 2,
+    borderRadius: 1,
+    marginTop: spacing.sm + 2,
+    backgroundColor: GOLD,
+  } as ViewStyle,
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginTop: spacing.lg + 2,
+  } as ViewStyle,
+  statCell: {
+    flex: 1,
+  } as ViewStyle,
+  statValueRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 5,
+  } as ViewStyle,
+  statIcon: {
+    marginBottom: 4,
+  } as ViewStyle,
+  statValue: {
+    fontFamily: font.serif,
+    fontSize: 22,
+    fontWeight: '600',
+    lineHeight: 27,
+  } as TextStyle,
+  statTextValue: {
+    flexShrink: 1,
+    fontFamily: font.serif,
+    fontSize: 15,
+    fontWeight: '600',
+    paddingBottom: 3,
+    lineHeight: 21,
+  } as TextStyle,
+  statUnit: {
+    fontSize: 12,
+    paddingBottom: 3,
+  } as TextStyle,
+  statLabel: {
+    fontSize: 12,
+    letterSpacing: 2,
+    marginTop: 6,
+  } as TextStyle,
+  statDivider: {
+    width: 1,
+    marginHorizontal: spacing.md,
+  } as ViewStyle,
+  statRule: {
+    height: StyleSheet.hairlineWidth,
+    marginTop: spacing.lg + 2,
+  } as ViewStyle,
+  timeRow: {
+    marginTop: spacing.md,
+  } as ViewStyle,
+  timeValue: {
+    fontFamily: font.serif,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 1,
+    paddingBottom: 1,
+    lineHeight: 21,
+  } as TextStyle,
+  // ---------------------------------------------------------------------
+  // 原位编辑表单
+  // ---------------------------------------------------------------------
+  editForm: {
+    marginTop: spacing.md,
+  } as ViewStyle,
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: 15,
-    borderTopWidth: StyleSheet.hairlineWidth,
   } as ViewStyle,
   rowBorder: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-  } as ViewStyle,
-  rowBorderLast: {
     borderTopWidth: StyleSheet.hairlineWidth,
   } as ViewStyle,
   infoLabel: {
@@ -769,12 +921,6 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 6,
   } as ViewStyle,
-  measureValue: {
-    fontFamily: font.serif,
-    fontSize: 22,
-    fontWeight: '600',
-    marginTop: 6,
-  } as TextStyle,
   measureInput: {
     fontFamily: font.serif,
     fontSize: 22,
@@ -789,7 +935,6 @@ const styles = StyleSheet.create({
   measureDivider: {
     width: 1,
     marginHorizontal: spacing.lg,
-    opacity: 0.7,
   } as ViewStyle,
   editActions: {
     flexDirection: 'row',
@@ -799,6 +944,34 @@ const styles = StyleSheet.create({
   editAction: {
     flex: 1,
   } as ViewStyle,
+  // ---------------------------------------------------------------------
+  // 关于这次鱼获 / 鱼获记忆
+  // ---------------------------------------------------------------------
+  panel: {
+    borderRadius: radius.l + 2,
+    borderWidth: 1,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+  } as ViewStyle,
+  panelHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  } as ViewStyle,
+  panelHeadActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  } as ViewStyle,
+  headIconHit: {
+    padding: 2,
+  } as ViewStyle,
+  panelTitle: {
+    fontFamily: font.serif,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 2,
+  } as TextStyle,
   storyText: {
     fontSize: 15,
     lineHeight: 24,
@@ -855,8 +1028,8 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   gridCell: {
     width: GRID_CELL_WIDTH,
-    aspectRatio: 3 / 4,
-    borderRadius: radius.s,
+    aspectRatio: 1,
+    borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: palette.softWater,
   } as ViewStyle,
@@ -864,4 +1037,42 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   } as ImageStyle,
+  videoCell: {
+    flex: 1,
+    backgroundColor: '#17303A',
+  } as ViewStyle,
+  videoShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(9,26,32,0.34)',
+  } as ViewStyle,
+  videoPlayWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as ViewStyle,
+  videoPlayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.26)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+  } as ViewStyle,
+  videoDurationBadge: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(9,26,32,0.62)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  } as ViewStyle,
+  videoDurationText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  } as TextStyle,
 });

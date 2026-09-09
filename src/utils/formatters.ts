@@ -266,6 +266,28 @@ export const formatCaptureFull = (iso: string): string => {
   )}:${pad(date.getMinutes())}`;
 };
 
+/** 详情页数据行时间戳：2026.09.05 15:26 */
+export const formatCaptureStamp = (iso: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+};
+
+/** 媒体时长角标：0:12 / 1:05 */
+export const formatMediaDuration = (seconds?: number): string => {
+  if (!seconds || seconds <= 0 || !Number.isFinite(seconds)) {
+    return '';
+  }
+  const total = Math.round(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${pad(secs)}`;
+};
+
 export const formatMonthLabel = (year: number, month: number): string =>
   `${year}年${month + 1}月`;
 

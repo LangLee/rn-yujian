@@ -18,8 +18,8 @@ export type RootStackParamList = {
   Register: undefined;
   /** P01 首页 */
   Home: undefined;
-  /** P02 拍照识鱼 */
-  Identify: undefined;
+  /** P02 拍照识鱼（识别异常退回时携带原因） */
+  Identify: { error?: string } | undefined;
   /** P03 识别处理中 */
   Recognizing: undefined;
   /** P04 识别结果（高/中/低置信度同一容器） */

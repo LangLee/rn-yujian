@@ -116,6 +116,7 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
       <View
         style={[
           styles.button,
+          variant === 'glass' && styles.glassShape,
           { backgroundColor: background, borderColor },
           variant !== 'ghost' && styles.shadow,
         ]}
@@ -167,6 +168,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   } as ViewStyle,
+  /** 参考稿保存按钮：加高胶囊（白玻璃底 + 深青衬线字） */
+  glassShape: {
+    height: 56,
+    borderRadius: 28,
+  } as ViewStyle,
   shadow: {
     shadowColor: '#173B4B',
     shadowOpacity: 0.1,
@@ -180,7 +186,7 @@ const styles = StyleSheet.create({
   } as TextStyle,
   labelSerif: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     letterSpacing: 4,
   } as TextStyle,

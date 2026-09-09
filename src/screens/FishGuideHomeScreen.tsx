@@ -24,6 +24,7 @@ import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { PressableScale } from '../components/ui/PressableScale';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ScreenHeader, HeaderIconButton } from '../components';
 
 type FishGuideHomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Guide'>;
 
@@ -92,24 +93,22 @@ export const FishGuideHomeScreen: React.FC = () => {
     <View style={styles.screen}>
       <WaterBackdrop />
       {/* 顶栏：返回 / 渔见 / 搜索 */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
-          <Icon name="chevron-back" size={24} color={textPrimary} />
-        </PressableScale>
-        <Text style={[styles.topTitle, { color: textPrimary }]}>渔见</Text>
-        <PressableScale
-          onPress={() => {
-            setSearchOpen((value) => !value);
-            if (searchOpen) {
-              setQuery('');
-            }
-          }}
-          scaleTo={0.92}
-          style={[styles.edgeHit, styles.edgeRight]}
-        >
-          <Icon name={searchOpen ? 'close' : 'search-outline'} size={21} color={textPrimary} />
-        </PressableScale>
-      </View>
+      <ScreenHeader
+        title="渔见"
+        onBack={() => navigation.goBack()}
+        right={
+          <HeaderIconButton
+            name={searchOpen ? 'close' : 'search-outline'}
+            color={textPrimary}
+            onPress={() => {
+              setSearchOpen((value) => !value);
+              if (searchOpen) {
+                setQuery('');
+              }
+            }}
+          />
+        }
+      />
 
       <ScrollView
         style={styles.flex}
@@ -263,28 +262,6 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   } as ViewStyle,
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.sm,
-  } as ViewStyle,
-  edgeHit: {
-    width: 44,
-    alignItems: 'flex-start',
-    paddingVertical: 6,
-  } as ViewStyle,
-  edgeRight: {
-    alignItems: 'flex-end',
-  } as ViewStyle,
-  topTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: font.serif,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 4,
-  } as TextStyle,
   content: {
     paddingHorizontal: spacing.page,
   } as ViewStyle,

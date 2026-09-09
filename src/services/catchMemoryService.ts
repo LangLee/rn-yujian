@@ -9,7 +9,9 @@ export interface CatchMemoryMedia {
   id: string;
   /** file:// 或远程 URL */
   uri: string;
-  kind: 'photo';
+  kind: 'photo' | 'video';
+  /** 视频时长（秒，由选择器返回） */
+  durationSec?: number;
   /** 加入时间 ISO */
   addedAt: string;
 }
@@ -21,7 +23,7 @@ export interface CatchMemoryData {
   lengthCm?: number | null;
   weightKg?: number | null;
   location?: string | null;
-  /** 媒体（照片平级；视频 V1 暂缺播放能力） */
+  /** 媒体（照片 / 视频平级；视频 V1 暂缺在线播放，详情页展示封面 + 时长） */
   media: CatchMemoryMedia[];
 }
 

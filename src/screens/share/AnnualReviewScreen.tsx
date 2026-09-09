@@ -35,6 +35,7 @@ import { RemoteImage } from '../../components/RemoteImage';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { FishGlyph } from '../../components/ui/FishGlyph';
+import { ScreenHeader, HeaderIconButton } from '../../components';
 import { Alert } from '../../utils/alert';
 
 type ReviewNavigationProp = StackNavigationProp;
@@ -133,13 +134,7 @@ export const AnnualReviewScreen: React.FC = () => {
     return (
       <View style={styles.screen}>
         <WaterBackdrop />
-        <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-          <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
-            <Icon name="chevron-back" size={24} color={textPrimary} />
-          </PressableScale>
-          <Text style={[styles.topTitle, { color: textPrimary }]}>年度回顾</Text>
-          <View style={styles.edgeHit} />
-        </View>
+        <ScreenHeader title="年度回顾" onBack={() => navigation.goBack()} />
         <EmptyState
           title={`${activeYear} 年还没有鱼获记录`}
           description="新的记录会让这一年的回顾慢慢丰满起来"
@@ -152,24 +147,21 @@ export const AnnualReviewScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
+      <ScreenHeader
+        onBack={() => navigation.goBack()}
+        right={
+          <HeaderIconButton name="share-social-outline" color={textPrimary} onPress={shareAnnual} />
+        }
+      />
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.sm, paddingBottom: 48 + insets.bottom },
+          { paddingBottom: 48 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
         {/* 头部 */}
-        <View style={styles.topBar}>
-          <PressableScale onPress={() => navigation.goBack()} scaleTo={0.92} style={styles.edgeHit}>
-            <Icon name="chevron-back" size={24} color={textPrimary} />
-          </PressableScale>
-          <View style={styles.topSpacer} />
-          <PressableScale onPress={shareAnnual} scaleTo={0.92} style={styles.edgeHit}>
-            <Icon name="share-social-outline" size={21} color={textPrimary} />
-          </PressableScale>
-        </View>
         <View style={styles.heroRow}>
           <View style={styles.heroText}>
             <Text style={[styles.heroTitle, { color: textPrimary }]}>
@@ -618,28 +610,6 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   empty: {
     marginTop: spacing.xxl,
-  } as ViewStyle,
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  } as ViewStyle,
-  topTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: font.serif,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 3,
-  } as TextStyle,
-  topSpacer: {
-    flex: 1,
-  } as ViewStyle,
-  edgeHit: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
   } as ViewStyle,
   heroRow: {
     flexDirection: 'row',

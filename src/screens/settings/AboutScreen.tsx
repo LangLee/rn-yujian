@@ -2,14 +2,13 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp, RootStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { palette } from '../../constants/colors';
 import { radius, spacing, typeScale } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { GlassCard } from '../../components/ui/GlassCard';
-import { PressableScale } from '../../components/ui/PressableScale';
+import { ScreenHeader } from '../../components';
 import { FishGlyph } from '../../components/ui/FishGlyph';
 
 type AboutNavigationProp = StackNavigationProp<RootStackParamList, 'About'>;
@@ -26,15 +25,7 @@ export const AboutScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.94} style={styles.backHit}>
-          <View style={styles.backCircle}>
-            <Icon name="chevron-back" size={22} color={textPrimary} />
-          </View>
-        </PressableScale>
-        <Text style={[styles.title, { color: textPrimary }]}>关于渔见</Text>
-        <View style={styles.headerSide} />
-      </View>
+      <ScreenHeader title="关于渔见" onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.flex}
@@ -71,32 +62,6 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   flex: {
     flex: 1,
-  } as ViewStyle,
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.sm,
-  } as ViewStyle,
-  backHit: {
-    borderRadius: 20,
-  } as ViewStyle,
-  backCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as ViewStyle,
-  title: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: typeScale.h2,
-    fontWeight: '700',
-  } as TextStyle,
-  headerSide: {
-    width: 40,
   } as ViewStyle,
   content: {
     paddingHorizontal: spacing.page,
