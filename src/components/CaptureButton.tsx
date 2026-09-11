@@ -35,6 +35,10 @@ interface CaptureButtonProps {
   disabled?: boolean;
   /** 是否开启呼吸动画，默认 true */
   breath?: boolean;
+  /** 呼吸周期（ms），默认 motion.breath */
+  breathPeriodMs?: number;
+  /** 呼吸峰值缩放，默认 1.022 */
+  breathScaleTo?: number;
   /** Ionicons 图标名，默认实心 camera */
   icon?: string;
   /** 图标相对 size 的缩放，默认 0.36 */
@@ -50,6 +54,8 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
   size = 96,
   disabled,
   breath = true,
+  breathPeriodMs = motion.breath,
+  breathScaleTo = 1.022,
   icon = 'camera',
   iconRatio = 0.36,
   style,
@@ -76,14 +82,14 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
       Animated.sequence([
         Animated.parallel([
           Animated.timing(breathScale, {
-            toValue: 1.022,
-            duration: motion.breath / 2,
+            toValue: breathScaleTo,
+            duration: breathPeriodMs / 2,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
           Animated.timing(glowOpacity, {
             toValue: 0.32,
-            duration: motion.breath / 2,
+            duration: breathPeriodMs / 2,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
@@ -91,13 +97,13 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
         Animated.parallel([
           Animated.timing(breathScale, {
             toValue: 1,
-            duration: motion.breath / 2,
+            duration: breathPeriodMs / 2,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
           Animated.timing(glowOpacity, {
             toValue: 0.14,
-            duration: motion.breath / 2,
+            duration: breathPeriodMs / 2,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
@@ -106,7 +112,7 @@ export const CaptureButton: React.FC<CaptureButtonProps> = ({
     );
     loop.start();
     return () => loop.stop();
-  }, [breath, disabled, reduceMotion, breathScale, glowOpacity]);
+  }, [breath, disabled, reduceMotion, breathScale, glowOpacity, breathPeriodMs, breathScaleTo]);
 
   const pressScale = useRef(new Animated.Value(1)).current;
   const handlePressIn = useCallback(() => {

@@ -54,9 +54,6 @@ const UNKNOWN = '未知鱼种';
 const GRID_CELL_WIDTH =
   (Dimensions.get('window').width - spacing.page * 2 - 32 - spacing.sm * 2) / 3;
 
-/** 信息卡上浮叠在照片底缘的高度（高保真稿约 44pt）。 */
-const SPECIES_CARD_LIFT = 44;
-
 /** "42.6 cm" → { value: '42.6', unit: 'cm' }；空值显示 "—"。 */
 const splitMeasure = (formatted: string | null): { value: string; unit: string } => {
   if (!formatted) {
@@ -430,7 +427,12 @@ export const CatchDetailScreen: React.FC = () => {
         {/* 照片 Hero（信息卡上浮叠在底缘）。后端 imageUrl 为相对路径且需 Bearer，
             与列表页一致走 RemoteImage（resolveUrl + 鉴权头），原生 Image 会加载失败 */}
         <PressableScale onPress={() => setViewer({ open: true, index: 0 })} scaleTo={0.99}>
-          <View style={styles.heroCard}>
+          <View
+            style={[
+              styles.heroCard,
+              { borderColor: profile.surface.glassBorder },
+            ]}
+          >
             {remoteCatch.imageUrl ? (
               <RemoteImage
                 url={remoteCatch.imageUrl}
@@ -455,9 +457,13 @@ export const CatchDetailScreen: React.FC = () => {
           </View>
         </PressableScale>
 
-        {/* 鱼名 + 数据卡（上浮与照片叠合）。悬浮卡不带玻璃描边：
-            白色边线会横穿照片底缘，设计稿为干净的浅色卡 + 柔和投影 */}
-        <View style={[styles.speciesCard, { backgroundColor: profile.surface.glassStrong }]}>
+        {/* 鱼名 + 数据卡（与照片卡片留出间距，不重叠，风格与下方面板一致） */}
+        <View
+          style={[
+            styles.speciesCard,
+            { backgroundColor: profile.surface.glassStrong, borderColor: profile.surface.glassBorder },
+          ]}
+        >
           <View style={styles.speciesHead}>
             <Text style={[styles.speciesName, { color: textPrimary }]} numberOfLines={1}>
               {displaySpeciesName}
@@ -746,13 +752,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.page,
   } as ViewStyle,
   heroCard: {
-    borderRadius: radius.l,
+    borderRadius: radius.l + 2,
+    borderWidth: 1,
     overflow: 'hidden',
+    opacity: 0.9,
     backgroundColor: palette.softWater,
   } as ViewStyle,
   heroImage: {
     width: '100%',
-    aspectRatio: 4 / 3,
+    aspectRatio: 16 / 10,
   } as ImageStyle,
   heroPlaceholder: {
     flex: 1,
@@ -763,19 +771,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
   } as TextStyle,
   // ---------------------------------------------------------------------
-  // 鱼名 + 数据卡（上浮叠在照片底缘）
+  // 鱼名 + 数据卡（与照片卡片间隔排列，不重叠）
   // ---------------------------------------------------------------------
   speciesCard: {
-    marginTop: -SPECIES_CARD_LIFT,
-    paddingTop: SPECIES_CARD_LIFT + spacing.md,
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg + 2,
     borderRadius: radius.l + 2,
-    shadowColor: palette.deepInk,
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    borderWidth: 1,
+    opacity: 0.9,
   } as ViewStyle,
   speciesHead: {
     flexDirection: 'row',
@@ -950,6 +955,7 @@ const styles = StyleSheet.create({
   panel: {
     borderRadius: radius.l + 2,
     borderWidth: 1,
+    opacity: 0.9,
     padding: spacing.lg,
     marginTop: spacing.lg,
   } as ViewStyle,

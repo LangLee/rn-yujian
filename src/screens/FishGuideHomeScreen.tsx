@@ -361,15 +361,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 2,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     paddingHorizontal: 2,
   } as TextStyle,
   grid: {
-    gap: spacing.md,
+    gap: spacing.sm,
   } as ViewStyle,
   gridRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   } as ViewStyle,
   gridFiller: {
     flex: 1,
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   imageWrap: {
     width: '100%',
-    height: 86,
+    height: 62,
     backgroundColor: 'rgba(220,238,235,0.4)',
   } as ViewStyle,
   imageDim: {
@@ -401,22 +401,23 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   fallbackText: {
     fontFamily: font.serif,
-    fontSize: 26,
+    fontSize: 20,
     color: palette.waterTeal,
   } as TextStyle,
   cardBody: {
-    padding: spacing.md,
-    gap: 3,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 7,
+    gap: 2,
   } as ViewStyle,
   cardName: {
     fontFamily: font.serif,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     letterSpacing: 1,
     color: '#1F4A56',
   } as TextStyle,
   cardMeta: {
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 0.5,
   } as TextStyle,
 });

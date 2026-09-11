@@ -1,9 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
-  PermissionsAndroid,
-  Platform,
   StyleSheet,
   Text,
   TextStyle,
@@ -12,22 +9,20 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { RouteProp } from '@react-navigation/native';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { recognitionService } from '../services/recognitionService';
-import { WaterBackdrop } from '../components/WaterBackdrop';
-import { CaptureButton } from '../components/CaptureButton';
 import { FishScanFrame } from '../components/FishScanFrame';
 import { BottomSheet } from '../components/ui/BottomSheet';
+import { PressableScale } from '../components/ui/PressableScale';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
-import { ScreenHeader } from '../components';
 import { palette } from '../constants/colors';
 import { font, spacing, typeScale } from '../constants/tokens';
-import { toFileUri } from '../utils/fileUri';
 import { haptics } from '../utils/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -36,43 +31,36 @@ type IdentifyScreenRouteProp = RouteProp<RootStackParamList, 'Identify'>;
 
 const CAMERA_PERM_SEEN_KEY = '@yujian/perm_camera_seen';
 
-/** Quality Gate 文案：只说用户可行动的信息（7.1）。 */
-const QUALITY_COPY: Record<string, string> = {
-  ready: '鱼体完整，可以拍摄',
-  no_fish: '没有看到完整的鱼，调整一下角度再试试',
-  uncertain: '鱼看得不太清楚，靠近一点、拍亮一点',
-  multiple_fish: '一次拍一条鱼会认得更准',
-  incomplete_fish: '保持鱼头鱼尾完整',
-  fish_too_small: '让鱼占满取景框会更好认',
-};
-
-/** 状态行图标含义：ready/默认 金勾；其他 Gate 提示 感叹；error 关闭。 */
-type StatusMark = 'check' | 'warn' | 'close' | 'spinner';
-
-/** 底部快门与相册按钮（还原设计稿：快门中心约在 33.5% 屏宽、相册约在 77.4% 屏宽处）。 */
-const SHUTTER_SIZE = 90;
-const ALBUM_SIZE = 44;
-const SHUTTER_D = SHUTTER_SIZE + 34;
-const ALBUM_D = ALBUM_SIZE + 32;
-const DOCK_HEIGHT = SHUTTER_D;
+/** 底部快门与相册按钮（简化版：快门水平居中，相册在其右侧）。 */
+const SHUTTER_SIZE = 74;
+const SHUTTER_INNER = 56;
+const ALBUM_SIZE = 46;
+const DOCK_HEIGHT = SHUTTER_SIZE;
 
 /**
- * P02 拍照识鱼（设计文档 7.1 + 高保真稿）：
- * 全屏湖面取景 + 鱼形渐变轮廓框；框内引导文案；
- * 底部快门（银白金属环磨砂玻璃）居左，相册入口居右。
- * 拍照后立即进入 P03，不假装已经完成识别。
+ * P02 拍照识鱼（自定义相机页）：
+ * 全屏实时取景（react-native-vision-camera）+ 写实鱼形渐变轮廓框；
+ * 顶部仅保留右上角透明圆形关闭按钮；
+ * 底部为简化的白环快门 + 半透明相册图标按钮。
+ * 拍照后立即进入 P03，识别走原有端侧 pipeline（normalizeImage → Recognizing）。
  */
 export const IdentifyScreen: React.FC = () => {
   const navigation = useNavigation<IdentifyScreenNavigationProp>();
   const route = useRoute<IdentifyScreenRouteProp>();
   const { width: windowWidth } = useWindowDimensions();
-  const { image, selectImage, reset } = useRecognition();
+  const { selectImage, reset } = useRecognition();
   const insets = useSafeAreaInsets();
+
+  const device = useCameraDevice('back');
+  const photoOutput = usePhotoOutput({ qualityPrioritization: 'quality' });
+  const { hasPermission, requestPermission } = useCameraPermission();
+
+  const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [shooting, setShooting] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [gateStatus, setGateStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permSheet, setPermSheet] = useState(false);
-  const pendingCameraRef = useRef(false);
+  const permAskedRef = useRef(false);
 
   // 进入 P02 时清理上一条流程的残留状态
   useEffect(() => {
@@ -80,6 +68,14 @@ export const IdentifyScreen: React.FC = () => {
     return () => undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 离开页面时停用相机，回到页面再恢复取景
+  useFocusEffect(
+    useCallback(() => {
+      setCameraEnabled(true);
+      return () => setCameraEnabled(false);
+    }, []),
+  );
 
   // 识别页异常退回时带回原因（Recognizing catch → navigate Identify { error }）
   useEffect(() => {
@@ -93,7 +89,6 @@ export const IdentifyScreen: React.FC = () => {
     async (uri: string, source: 'camera' | 'gallery') => {
       setLoading(true);
       setError(null);
-      setGateStatus(null);
       try {
         const meta = await recognitionService.normalizeImage(uri, source);
         selectImage(meta);
@@ -108,51 +103,50 @@ export const IdentifyScreen: React.FC = () => {
     [selectImage, navigation],
   );
 
-  const requestCameraAndShoot = useCallback(async () => {
-    if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
-        title: '相机权限',
-        message: '只有在你主动拍摄时，渔见才会使用相机',
-        buttonPositive: '允许',
-        buttonNegative: '拒绝',
-      });
-      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+  /** 快门：直接在取景页拍摄，不再跳系统相机 */
+  const shoot = useCallback(async () => {
+    if (shooting || loading) {
+      return;
+    }
+    setError(null);
+    if (!hasPermission) {
+      const seen = await AsyncStorage.getItem(CAMERA_PERM_SEEN_KEY);
+      if (!seen && !permAskedRef.current) {
+        permAskedRef.current = true;
+        setPermSheet(true);
+        return;
+      }
+      const granted = await requestPermission();
+      if (!granted) {
         setError('需要相机权限才能拍照，也可以从右下角选择相册照片');
         return;
       }
     }
-    launchCamera({ mediaType: 'photo', quality: 1 }, (response) => {
-      if (response.didCancel) {
-        return;
-      }
-      if (response.errorCode) {
-        setError(
-          response.errorCode === 'permission'
-            ? '需要相机权限才能拍照，也可以从右下角选择相册照片'
-            : response.errorMessage ?? '相机启动失败，请再试一次',
-        );
-        return;
-      }
-      const uri = response.assets?.[0]?.uri;
-      if (!uri) {
-        setError('没有拍到照片，请重新拍摄');
-        return;
-      }
-      void handlePicked(uri, 'camera');
-    });
-  }, [handlePicked]);
-
-  const openCamera = useCallback(async () => {
-    setError(null);
-    haptics.confirm(); // S2：拍照核心确认（17.6）
-    const seen = await AsyncStorage.getItem(CAMERA_PERM_SEEN_KEY);
-    if (!seen) {
-      pendingCameraRef.current = true;
-      setPermSheet(true);
+    if (!device) {
+      setError('相机启动中，请稍候再试');
       return;
     }
-    await requestCameraAndShoot();
-  }, [requestCameraAndShoot]);
+    haptics.confirm(); // S2：拍照核心确认（17.6）
+    setShooting(true);
+    try {
+      // PhotoFile.filePath 是文件系统路径，不是 file:// URL
+      const photoFile = await photoOutput.capturePhotoToFile({ flashMode: 'off' }, {});
+      const uri = `file://${photoFile.filePath}`;
+      await handlePicked(uri, 'camera');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '拍摄失败，请再试一次');
+    } finally {
+      setShooting(false);
+    }
+  }, [
+    shooting,
+    loading,
+    hasPermission,
+    requestPermission,
+    device,
+    photoOutput,
+    handlePicked,
+  ]);
 
   const openGallery = useCallback(() => {
     setError(null);
@@ -173,66 +167,57 @@ export const IdentifyScreen: React.FC = () => {
     });
   }, [handlePicked]);
 
-  const imageUri = toFileUri(image?.filePath);
-
-  // 框内状态行（Quality Gate / 加载 / 错误都落在鱼身中央，不另设浮层）
   let statusCopy: string;
-  let statusMark: StatusMark;
+  let statusMark: 'check' | 'warn' | 'close' | 'spinner';
   let statusError = false;
   if (error) {
     statusCopy = error;
     statusMark = 'close';
     statusError = true;
-  } else if (loading) {
+  } else if (loading || shooting) {
     statusCopy = '正在准备照片…';
     statusMark = 'spinner';
-  } else if (imageUri) {
-    statusCopy = '正在认识这条鱼…';
+  } else if (!device) {
+    statusCopy = '相机启动中…';
     statusMark = 'spinner';
-  } else if (gateStatus && gateStatus !== 'ready') {
-    statusCopy = QUALITY_COPY[gateStatus] ?? '';
-    statusMark = 'warn';
   } else {
-    statusCopy = QUALITY_COPY.ready;
+    statusCopy = '让鱼身保持完整，识别更准确';
     statusMark = 'check';
   }
 
   return (
     <View style={styles.screen}>
-      {/* 环境照片背景 + 轻遮罩（保留湖面亮度，保证白色文案可读） */}
-      <WaterBackdrop />
+      {/* 实时取景背景（权限就绪后自动出画面） */}
+      {device ? (
+        <Camera
+          style={StyleSheet.absoluteFill}
+          device={device}
+          outputs={[photoOutput]}
+          isActive={cameraEnabled && hasPermission}
+          onError={(e) => {
+            if (!error) {
+              setError(e.message || '相机出错，请重新进入页面');
+            }
+          }}
+        />
+      ) : null}
       <View style={[StyleSheet.absoluteFill, styles.bgScrim]} pointerEvents="none" />
 
-      {/* 顶部：返回 + 衬线标题 */}
-      <ScreenHeader
-        title="拍照识鱼"
-        onBack={() => navigation.goBack()}
-        titleColor="#FDFEFD"
-        backColor="#FDFEFD"
-      />
-
-      {/* 取景区：全屏透明，鱼形轮廓 + 框内引导文案 */}
+      {/* 取景区：写实鱼形轮廓 + 框下引导文案 */}
       <View style={styles.viewfinder}>
-        {imageUri ? (
-          <>
-            <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            <View style={[StyleSheet.absoluteFill, styles.viewfinderDim]} />
-          </>
-        ) : null}
         <View style={styles.frameWrap}>
-          <FishScanFrame width={Math.min(windowWidth * 0.84, 360)} />
-          <View style={[StyleSheet.absoluteFill, styles.frameCopy]} pointerEvents="none">
+          <FishScanFrame width={Math.min(windowWidth * 0.88, 400)} />
+          <View style={styles.frameCopy}>
             <Text style={styles.headline}>拍下整条鱼</Text>
-            <Text style={styles.subline}>让鱼身保持完整，识别更准确</Text>
             <View style={styles.statusRow}>
               {statusMark === 'spinner' ? (
                 <ActivityIndicator size="small" color="#F4F8F7" />
               ) : (
                 <View style={[styles.statusDot, statusError && styles.statusDotError]}>
                   {statusMark === 'check' ? (
-                    <Icon name="checkmark" size={12} color="#FFFFFF" />
+                    <Icon name="checkmark" size={10} color="#FFFFFF" />
                   ) : statusMark === 'close' ? (
-                    <Icon name="close" size={11} color="#FFFFFF" />
+                    <Icon name="close" size={9} color="#FFFFFF" />
                   ) : (
                     <Text style={styles.statusWarnMark}>!</Text>
                   )}
@@ -249,46 +234,41 @@ export const IdentifyScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* 底部：快门居左 + 相册居右（按屏宽百分比定位，随屏幕缩放） */}
+      {/* 底部：简化白环快门水平居中，相册按钮在其右侧 */}
       <View
         style={[styles.dock, { bottom: insets.bottom + spacing.md }]}
         pointerEvents="box-none"
       >
-        <View
-          style={[styles.dockItem, { left: windowWidth * 0.335 - SHUTTER_D / 2, top: 0 }]}
-          pointerEvents="box-none"
+        <PressableScale
+          onPress={shoot}
+          disabled={loading || shooting}
+          scaleTo={0.9}
+          style={[styles.dockItem, styles.shutterItem]}
+          accessibilityLabel="拍照识别"
+          accessibilityRole="button"
         >
-          <CaptureButton onPress={openCamera} disabled={loading} size={SHUTTER_SIZE} icon="camera" />
-        </View>
-        <View
-          style={[
-            styles.dockItem,
-            {
-              right: windowWidth * 0.226 - ALBUM_D / 2,
-              top: (DOCK_HEIGHT - ALBUM_D) / 2,
-            },
-          ]}
-          pointerEvents="box-none"
+          <View style={styles.shutter}>
+            <View style={styles.shutterCore} />
+          </View>
+        </PressableScale>
+        <PressableScale
+          onPress={openGallery}
+          disabled={loading}
+          scaleTo={0.9}
+          style={[styles.dockItem, styles.albumItem]}
+          accessibilityLabel="从相册选择照片"
+          accessibilityRole="button"
         >
-          <CaptureButton
-            onPress={openGallery}
-            disabled={loading}
-            size={ALBUM_SIZE}
-            icon="image-outline"
-            iconRatio={0.42}
-            breath={false}
-            accessibilityLabel="从相册选择照片"
-          />
-        </View>
+          <View style={styles.albumBtn}>
+            <Icon name="images-outline" size={22} color="#F6FAF8" />
+          </View>
+        </PressableScale>
       </View>
 
-      {/* 首次相机权限引导（16：自有说明 Sheet → 继续 → 系统权限弹窗） */}
+      {/* 首次相机权限引导（自有说明 Sheet → 继续 → 系统权限弹窗） */}
       <BottomSheet
         visible={permSheet}
-        onClose={() => {
-          setPermSheet(false);
-          pendingCameraRef.current = false;
-        }}
+        onClose={() => setPermSheet(false)}
         title="使用相机"
       >
         <Text style={styles.permText}>
@@ -299,19 +279,16 @@ export const IdentifyScreen: React.FC = () => {
           onPress={async () => {
             setPermSheet(false);
             AsyncStorage.setItem(CAMERA_PERM_SEEN_KEY, '1').catch(() => undefined);
-            if (pendingCameraRef.current) {
-              pendingCameraRef.current = false;
-              await requestCameraAndShoot();
+            const granted = await requestPermission();
+            if (!granted) {
+              setError('需要相机权限才能拍照，也可以从右下角选择相册照片');
             }
           }}
         />
         <PrimaryButton
           label="先不用"
           variant="ghost"
-          onPress={() => {
-            setPermSheet(false);
-            pendingCameraRef.current = false;
-          }}
+          onPress={() => setPermSheet(false)}
           style={styles.permSecondary}
         />
       </BottomSheet>
@@ -331,16 +308,13 @@ const styles = StyleSheet.create({
     backgroundColor: palette.viewfinderDark,
   } as ViewStyle,
   bgScrim: {
-    backgroundColor: 'rgba(8,24,30,0.34)',
+    backgroundColor: 'rgba(8,24,30,0.18)',
   } as ViewStyle,
   viewfinder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: DOCK_HEIGHT + spacing.sm,
-  } as ViewStyle,
-  viewfinderDim: {
-    backgroundColor: 'rgba(0,0,0,0.16)',
+    paddingBottom: DOCK_HEIGHT + spacing.xl,
   } as ViewStyle,
   frameWrap: {
     alignItems: 'center',
@@ -348,33 +322,26 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   frameCopy: {
     alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: spacing.xl,
   } as ViewStyle,
   headline: {
     color: '#FDFEFD',
     fontFamily: font.serif,
-    fontSize: 23,
+    fontSize: 17,
     fontWeight: '600',
-    letterSpacing: 2,
-    ...shadowText,
-  } as TextStyle,
-  subline: {
-    marginTop: spacing.xs + 2,
-    color: 'rgba(250,252,251,0.86)',
-    fontSize: typeScale.meta + 1,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
     ...shadowText,
   } as TextStyle,
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.lg,
-    maxWidth: 240,
+    marginTop: spacing.sm,
+    maxWidth: 220,
   } as ViewStyle,
   statusDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
     backgroundColor: palette.accentGold,
     alignItems: 'center',
     justifyContent: 'center',
@@ -385,7 +352,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   statusWarnMark: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     includeFontPadding: false,
     textAlignVertical: 'center',
@@ -393,7 +360,7 @@ const styles = StyleSheet.create({
   statusText: {
     flexShrink: 1,
     color: 'rgba(251,253,252,0.92)',
-    fontSize: typeScale.meta + 1,
+    fontSize: typeScale.caption,
     ...shadowText,
   } as TextStyle,
   statusTextError: {
@@ -407,6 +374,48 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   dockItem: {
     position: 'absolute',
+  } as ViewStyle,
+  /** 快门整圆中心对准屏幕水平中线 */
+  shutterItem: {
+    left: '50%',
+    marginLeft: -SHUTTER_SIZE / 2,
+    width: SHUTTER_SIZE,
+    height: SHUTTER_SIZE,
+  } as ViewStyle,
+  /** 相册按钮：与快门保持明显间距，垂直居中对齐 */
+  albumItem: {
+    left: '50%',
+    marginLeft: SHUTTER_SIZE / 2 + spacing.xxl + 8,
+    top: (DOCK_HEIGHT - ALBUM_SIZE) / 2,
+    width: ALBUM_SIZE,
+    height: ALBUM_SIZE,
+  } as ViewStyle,
+  /** 简化快门：白色细环 + 实心白芯 */
+  shutter: {
+    width: SHUTTER_SIZE,
+    height: SHUTTER_SIZE,
+    borderRadius: SHUTTER_SIZE / 2,
+    borderWidth: 2.5,
+    borderColor: 'rgba(253,254,253,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as ViewStyle,
+  shutterCore: {
+    width: SHUTTER_INNER,
+    height: SHUTTER_INNER,
+    borderRadius: SHUTTER_INNER / 2,
+    backgroundColor: '#FDFEFD',
+  } as ViewStyle,
+  /** 相册按钮：半透明深色圆底 + 细白描边 */
+  albumBtn: {
+    width: ALBUM_SIZE,
+    height: ALBUM_SIZE,
+    borderRadius: ALBUM_SIZE / 2,
+    backgroundColor: 'rgba(10,26,32,0.38)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   } as ViewStyle,
   permText: {
     color: palette.mutedInk,

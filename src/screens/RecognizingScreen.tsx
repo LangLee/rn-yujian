@@ -2,17 +2,24 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { FishIllustration } from '../components/FishIllustration';
+import { FishScanFrame } from '../components/FishScanFrame';
 import { WaterBackdrop } from '../components/WaterBackdrop';
-import { spacing, typeScale } from '../constants/tokens';
+import { palette } from '../constants/colors';
+import { font, spacing, typeScale } from '../constants/tokens';
 
 type RecognizingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Recognizing'>;
 
 /** P03 状态文案：单步轮换，不显示技术流程列表（7.2 / 17.7）。 */
 const PHASES = ['正在观察鱼体', '正在寻找它的特征', '正在匹配鱼种'];
+const PHASE_HINTS = [
+  '让鱼身保持完整，识别会更顺利',
+  '鱼鳞、鱼鳍、体型……每一个特征都在比对',
+  '正在鱼鉴里为它寻找名字',
+];
 const LONG_WAIT_COPY = '还在仔细看看这条鱼……';
 const VERY_LONG_COPY = '这次识别花得久一点';
 
@@ -65,57 +72,58 @@ const PhaseText: React.FC<{ text: string; color: string }> = ({ text, color }) =
   return <Animated.Text style={[styles.phase, { color, opacity }]}>{shown}</Animated.Text>;
 };
 
-/** 极轻水波扩散：Alpha 0.10 → 0，Duration 1800-2600ms，间隔不规则（17.7）。 */
-const Ripple: React.FC<{ index: number; color: string; amplitude: number }> = ({
-  index,
-  color,
-  amplitude,
-}) => {
-  const scale = useRef(new Animated.Value(0.5)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+/**
+ * 圆形向外扩散水波纹：
+ * 多圈同心正圆由鱼身中心向外扩散并淡出，相位错开形成连续水纹。
+ * Reduce Motion 时保留静态几圈，不做扩散。
+ */
+const Ripple: React.FC<{ index: number; reduceMotion: boolean }> = ({ index, reduceMotion }) => {
+  const scale = useRef(new Animated.Value(0.42)).current;
+  const opacity = useRef(new Animated.Value(0.55)).current;
+  const DURATION = 3000;
 
   useEffect(() => {
+    if (reduceMotion) {
+      scale.setValue(0.6 + index * 0.22);
+      opacity.setValue(0.3 - index * 0.08);
+      return;
+    }
     let active = true;
-    const runOnce = () =>
-      new Promise<void>((resolve) => {
-        scale.setValue(0.5);
-        opacity.setValue(0.1 * amplitude);
-        Animated.parallel([
-          Animated.timing(scale, {
-            toValue: 1.7,
-            duration: 2200,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 0,
-            duration: 2200,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]).start(() => resolve());
-      });
     const loop = async () => {
-      // 不同初始相位去同步（17.34）
-      await new Promise<void>((resolve) => setTimeout(() => resolve(), index * 1300));
+      // 相位错开：每圈延迟 1/4 周期
+      await new Promise<void>((resolve) => setTimeout(() => resolve(), (index * DURATION) / 4));
       while (active) {
-        await runOnce();
-        const gap = 1600 + Math.random() * 1800;
-        await new Promise<void>((resolve) => setTimeout(() => resolve(), gap));
+        scale.setValue(0.42);
+        opacity.setValue(0.55);
+        await new Promise<void>((resolve) => {
+          Animated.parallel([
+            Animated.timing(scale, {
+              toValue: 1.45,
+              duration: DURATION,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(opacity, {
+              toValue: 0,
+              duration: DURATION,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]).start(() => resolve());
+        });
       }
     };
     void loop();
     return () => {
       active = false;
     };
-  }, [scale, opacity, index, amplitude]);
+  }, [scale, opacity, index, reduceMotion]);
 
   return (
     <Animated.View
       style={[
         styles.ripple,
         {
-          borderColor: color,
           transform: [{ scale }],
           opacity,
         },
@@ -125,14 +133,15 @@ const Ripple: React.FC<{ index: number; color: string; amplitude: number }> = ({
 };
 
 /**
- * P03 识别处理中（设计文档 7.2 / 17.7 / 17.32）：
- * 等待自然、安静；不展示"分离好的鱼"、不显示百分比 / 流程列表 / 扫描圈。
+ * P03 识别处理中（设计稿还原版）：
+ * 主题环境照片背景 + 中央写实鱼形（与取景框同款）与圆形水波扩散；
+ * 上方衬线标题，中部状态轮换文案，底部小贴士气泡。
  * 业务状态优先：识别 Ready 立即进入 P04，不为播完动画延迟结果。
  */
 export const RecognizingScreen: React.FC = () => {
   const navigation = useNavigation<RecognizingScreenNavigationProp>();
   const { recognizeAndRecord } = useRecognition();
-  const { profile, reduceMotion } = useTheme();
+  const { reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [longWait, setLongWait] = useState(false);
@@ -204,26 +213,28 @@ export const RecognizingScreen: React.FC = () => {
     };
   }, []);
 
-  const copy = veryLong ? VERY_LONG_COPY : longWait ? LONG_WAIT_COPY : PHASES[phaseIndex];
+  const waitingLong = veryLong || longWait;
+  const statusTitle = waitingLong ? (veryLong ? VERY_LONG_COPY : LONG_WAIT_COPY) : PHASES[phaseIndex];
+  const statusHint = waitingLong ? '网络或设备繁忙时，多等一下下' : PHASE_HINTS[phaseIndex];
 
-  // 鱼影呼吸：Alpha 0.08 → 0.14 → 0.08（2600-3600ms，禁止描边跑光与 CT 扫描感）
-  const silhouetteOpacity = useRef(new Animated.Value(0.1)).current;
+  // 鱼影呼吸：Alpha 0.75 → 1 → 0.75（3.2s，Reduce Motion 静止）
+  const silhouetteOpacity = useRef(new Animated.Value(0.78)).current;
   useEffect(() => {
     if (reduceMotion) {
-      silhouetteOpacity.setValue(0.12);
+      silhouetteOpacity.setValue(0.9);
       return;
     }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(silhouetteOpacity, {
-          toValue: 0.16,
-          duration: 1500,
+          toValue: 1,
+          duration: 1600,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(silhouetteOpacity, {
-          toValue: 0.08,
-          duration: 1500,
+          toValue: 0.78,
+          duration: 1600,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -236,54 +247,157 @@ export const RecognizingScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
-      <View style={[styles.center, { paddingBottom: insets.bottom }]} pointerEvents="none">
-        {/* 极轻水波 */}
-        <Ripple
-          index={0}
-          color={profile.surface.accent}
-          amplitude={profile.motion.rippleAlpha}
-        />
-        <Ripple
-          index={1}
-          color={profile.surface.accent}
-          amplitude={profile.motion.rippleAlpha}
-        />
-        {/* 鱼影 */}
-        <Animated.View style={{ opacity: silhouetteOpacity }}>
-          <FishIllustration size={150} bodyColor={profile.surface.textPrimary} />
+      <View style={[StyleSheet.absoluteFill, styles.scrim]} pointerEvents="none" />
+
+      {/* 顶部：衬线标题（识别中不提供返回，避免中断流程） */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+        <Text style={styles.title}>
+          正在认识这条
+          <Text style={styles.titleAccent}>鱼</Text>
+        </Text>
+        <Text style={styles.subtitle}>AI 正在安静地观察并理解它</Text>
+      </View>
+
+      {/* 中央：写实鱼形（与取景框同款）+ 圆形水波向外扩散 */}
+      <View style={styles.center} pointerEvents="none">
+        <Ripple index={0} reduceMotion={reduceMotion} />
+        <Ripple index={1} reduceMotion={reduceMotion} />
+        <Ripple index={2} reduceMotion={reduceMotion} />
+        <Ripple index={3} reduceMotion={reduceMotion} />
+        <Animated.View style={styles.fishGlow}>
+          <Animated.View
+            style={{ opacity: silhouetteOpacity, transform: [{ rotate: '-8deg' }] }}
+          >
+            <FishScanFrame width={200} />
+          </Animated.View>
         </Animated.View>
-        {/* 单步轮换状态文案 */}
-        <View style={styles.copyWrap}>
-          <PhaseText text={copy} color={profile.surface.textSecondary} />
+      </View>
+
+      {/* 中部：状态轮换文案（金色眼睛图标 + 主文案 + 灰色提示） */}
+      <View style={styles.statusWrap} pointerEvents="none">
+        <View style={styles.statusRow}>
+          <Icon name="eye" size={16} color={palette.accentGold} />
+          <PhaseText text={statusTitle} color={palette.accentGold} />
+        </View>
+        <Text style={styles.statusHint} numberOfLines={2}>
+          {statusHint}
+        </Text>
+      </View>
+
+      {/* 底部：小贴士深色磨砂气泡 */}
+      <View style={[styles.tipWrap, { bottom: insets.bottom + spacing.xl }]} pointerEvents="none">
+        <View style={styles.tipBubble}>
+          <Icon name="leaf" size={14} color="#D9C9A3" />
+          <Text style={styles.tipText}>小贴士：清晰的鱼体、自然光线有助于更准确识别</Text>
         </View>
       </View>
     </View>
   );
 };
 
+const shadowText: TextStyle = {
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 8,
+  textShadowColor: 'rgba(6,20,26,0.55)',
+};
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
   } as ViewStyle,
+  scrim: {
+    backgroundColor: 'rgba(8,24,30,0.30)',
+  } as ViewStyle,
+  header: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.xl,
+  } as ViewStyle,
+  title: {
+    color: '#FDFEFD',
+    fontFamily: font.serif,
+    fontSize: 24,
+    fontWeight: '600',
+    letterSpacing: 3,
+    ...shadowText,
+  } as TextStyle,
+  titleAccent: {
+    color: palette.accentGold,
+  } as TextStyle,
+  subtitle: {
+    marginTop: spacing.sm,
+    color: 'rgba(250,252,251,0.82)',
+    fontSize: typeScale.meta + 1,
+    letterSpacing: 1.5,
+    ...shadowText,
+  } as TextStyle,
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   } as ViewStyle,
+  /** 圆形水波：正圆细描边，自鱼身中心向外扩散 */
   ripple: {
     position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
+    width: 250,
+    height: 250,
+    borderRadius: 125,
     borderWidth: 1.5,
+    borderColor: 'rgba(246,250,248,0.78)',
   } as ViewStyle,
-  copyWrap: {
-    marginTop: spacing.xl + 12,
-    minHeight: 32,
-    justifyContent: 'center',
+  fishGlow: {
+    shadowColor: '#F6FAF8',
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
+  } as ViewStyle,
+  statusWrap: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.xl,
+    minHeight: 64,
+  } as ViewStyle,
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   } as ViewStyle,
   phase: {
-    fontSize: typeScale.body,
+    marginLeft: spacing.sm,
+    fontFamily: font.serif,
+    fontSize: typeScale.body + 1,
+    fontWeight: '600',
+    letterSpacing: 2,
+    ...shadowText,
+  } as TextStyle,
+  statusHint: {
+    marginTop: spacing.sm,
+    color: 'rgba(250,252,251,0.66)',
+    fontSize: typeScale.meta,
     letterSpacing: 1,
+    textAlign: 'center',
+    ...shadowText,
+  } as TextStyle,
+  tipWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  } as ViewStyle,
+  tipBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(10,26,32,0.62)',
+    borderWidth: 1,
+    borderColor: 'rgba(246,250,248,0.14)',
+  } as ViewStyle,
+  tipText: {
+    marginLeft: spacing.sm - 2,
+    color: 'rgba(243,246,244,0.88)',
+    fontSize: typeScale.meta - 1,
+    letterSpacing: 0.5,
   } as TextStyle,
 });

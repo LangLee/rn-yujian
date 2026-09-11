@@ -31,23 +31,6 @@ import { RootStackParamList } from './types';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
-/** 顶部安全区包装（环境画布底色，用于未自管安全区的屏幕）。 */
-const withSafeAreaTop = <P extends object>(Component: React.ComponentType<P>): React.FC<P> => {
-  const Wrapped: React.FC<P> = (props) => {
-    const { profile } = useTheme();
-    return (
-      <SafeAreaView
-        edges={['top', 'left', 'right']}
-        style={{ flex: 1, backgroundColor: profile.surface.canvas }}
-      >
-        <Component {...props} />
-      </SafeAreaView>
-    );
-  };
-  Wrapped.displayName = `WithSafeAreaTop(${Component.displayName ?? Component.name ?? 'Component'})`;
-  return Wrapped;
-};
-
 /**
  * 根导航（设计文档 02 信息架构与导航）：
  * 不使用传统底部 Tab —— 首页沉浸式结构承载全部长期入口：
@@ -108,7 +91,8 @@ export const AppNavigator: React.FC = () => {
       <Stack.Screen name="Recognizing" component={RecognizingScreen} />
       <Stack.Screen name="Result" component={RecognitionResultScreen} />
       <Stack.Screen name="RecognitionIssue" component={RecognitionIssueScreen} />
-      <Stack.Screen name="Species" component={withSafeAreaTop(FishSpeciesDetailScreen)} />
+      {/* ScreenHeader 自带 insets.top 安全区 padding，再包 withSafeAreaTop 会双倍顶部间距 */}
+      <Stack.Screen name="Species" component={FishSpeciesDetailScreen} />
       <Stack.Screen name="CatchDetail" component={CatchDetailScreen} />
       <Stack.Screen name="MyCatches" component={CatchHubScreen} />
       <Stack.Screen name="ShareCreate" component={ShareCreateScreen} />

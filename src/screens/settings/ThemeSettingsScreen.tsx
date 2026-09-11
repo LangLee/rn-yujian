@@ -1,5 +1,5 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Switch, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -17,6 +17,7 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { ScreenHeader } from '../../components';
 import { haptics } from '../../utils/haptics';
+import { homeFeedback } from '../../services/homeFeedback';
 
 type ThemeSettingsNavigationProp = StackNavigationProp<RootStackParamList, 'ThemeSettings'>;
 
@@ -44,6 +45,22 @@ export const ThemeSettingsScreen: React.FC = () => {
   const navigation = useNavigation<ThemeSettingsNavigationProp>();
   const { themeMode, setThemeMode } = useTheme();
   const insets = useSafeAreaInsets();
+  const [ambientOn, setAmbientOn] = useState(false);
+
+  useEffect(() => {
+    homeFeedback.isAmbientEnabled().then(setAmbientOn);
+  }, []);
+
+  const toggleAmbient = (next: boolean) => {
+    setAmbientOn(next);
+    homeFeedback.setAmbientEnabled(next);
+    if (next) {
+      homeFeedback.startAmbient();
+    } else {
+      homeFeedback.stopAmbient();
+    }
+    haptics.selection();
+  };
 
   return (
     <View style={styles.screen}>
@@ -96,6 +113,26 @@ export const ThemeSettingsScreen: React.FC = () => {
             </PressableScale>
           );
         })}
+        {/* 首页环境水声（Audio_Spec：默认关闭、必须可关） */}
+        <GlassCard style={styles.soundCard}>
+          <View style={styles.optionRow}>
+            <View style={styles.swatchWrap}>
+              <View style={[styles.swatch, styles.swatchAuto]}>
+                <Icon name="water-outline" size={16} color={palette.waterTeal} />
+              </View>
+            </View>
+            <View style={styles.optionBody}>
+              <Text style={styles.optionLabel}>首页环境水声</Text>
+              <Text style={styles.optionHint}>湖畔轻水声循环 · 很小音量</Text>
+            </View>
+            <Switch
+              value={ambientOn}
+              onValueChange={toggleAmbient}
+              trackColor={{ false: 'rgba(23,59,75,0.15)', true: palette.waterTeal }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </GlassCard>
         <Text style={styles.note}>
           环境只改变水面、光线与文字对比，不改变任何页面结构。渔见在夜晚依然安静、克制。
         </Text>
@@ -124,6 +161,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: palette.waterTeal,
     backgroundColor: palette.softWater,
+  } as ViewStyle,
+  soundCard: {
+    marginTop: spacing.xl,
   } as ViewStyle,
   optionRow: {
     flexDirection: 'row',

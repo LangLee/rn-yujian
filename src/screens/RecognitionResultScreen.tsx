@@ -15,6 +15,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { useAuth, isUnauthorizedError } from '../contexts/AuthContext';
@@ -27,6 +29,7 @@ import {
   RecognitionCandidate,
 } from '../types/models';
 import { catchService } from '../services/catchService';
+import { recognitionService } from '../services/recognitionService';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { PressableScale } from '../components/ui/PressableScale';
 import { ScreenHeader } from '../components';
@@ -58,7 +61,7 @@ type ResultState = 'high' | 'medium' | 'low';
 export const RecognitionResultScreen: React.FC = () => {
   const navigation = useNavigation<ResultScreenNavigationProp>();
   const isFocused = useIsFocused();
-  const { image, result, submitFeedback, reset } = useRecognition();
+  const { image, result, selectImage, submitFeedback, reset } = useRecognition();
   const { session, logout } = useAuth();
   const { reload } = useCatchArchive();
   const { profile } = useTheme();
@@ -172,6 +175,29 @@ export const RecognitionResultScreen: React.FC = () => {
     }
   }, [navigation]);
 
+  // 低置信度参考稿：「从相册选择」次级胶囊 —— 换一张照片重新识别
+  const repickFromGallery = useCallback(() => {
+    haptics.selection();
+    launchImageLibrary({ mediaType: 'photo', quality: 1, selectionLimit: 1 }, (response) => {
+      if (response.didCancel || response.errorCode) {
+        return;
+      }
+      const uri = response.assets?.[0]?.uri;
+      if (!uri) {
+        return;
+      }
+      void (async () => {
+        try {
+          const meta = await recognitionService.normalizeImage(uri, 'gallery');
+          selectImage(meta);
+          navigation.navigate('Recognizing');
+        } catch {
+          // 选片失败静默返回，不打断当前结果页
+        }
+      })();
+    });
+  }, [selectImage, navigation]);
+
   const doSave = useCallback(
     async (overrideKey?: string, overrideName?: string) => {
       if (!session || !image || !prediction) {
@@ -279,8 +305,11 @@ export const RecognitionResultScreen: React.FC = () => {
   const textPrimary = profile.surface.textPrimary;
   const textSecondary = profile.surface.textSecondary;
   const saveDisabled = state === 'medium' && !selectedKey;
-  const rowIdleBg = profile.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.6)';
+  const rowIdleBg = profile.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)';
   const rowGoldBg = profile.isDark ? 'rgba(201,169,106,0.2)' : 'rgba(201,169,106,0.14)';
+  /** 表单区域底色：比全局 glass 更实，避免填写区显得过透 */
+  const formBg = profile.isDark ? 'rgba(16,46,56,0.92)' : 'rgba(255,255,255,0.93)';
+  const dividerColor = profile.isDark ? 'rgba(255,255,255,0.12)' : 'rgba(23,59,75,0.10)';
 
   return (
     <View style={styles.screen}>
@@ -295,13 +324,13 @@ export const RecognitionResultScreen: React.FC = () => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero + 确认卡（参考稿：鱼获照片与确认面板一体化，浮于湖面背景） */}
+        {/* 照片卡（设计稿：独立圆角照片卡，浮于湖面背景） */}
         <Animated.View style={{ opacity: heroOpacity, transform: [{ scale: heroScale }] }}>
           <View
             style={[
-              styles.heroCard,
+              styles.photoCard,
               {
-                backgroundColor: profile.surface.glass,
+                backgroundColor: formBg,
                 borderColor: profile.surface.glassBorder,
               },
             ]}
@@ -310,121 +339,150 @@ export const RecognitionResultScreen: React.FC = () => {
               <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
             ) : (
               <View style={[styles.heroImage, styles.heroPlaceholder]}>
-                <FishGlyph size={72} color={palette.fishMint} />
+                <FishGlyph size={64} color={palette.fishMint} />
               </View>
             )}
-
-            <Animated.View
-              style={[
-                styles.panelBody,
-                { opacity: nameOpacity, transform: [{ translateY: nameTranslate }] },
-              ]}
-            >
-              {state === 'high' ? (
-                <View style={styles.nameRow}>
-                  <Text style={[styles.name, { color: textPrimary }]} numberOfLines={2}>
-                    {selectedName || prediction.top1.speciesName}
-                  </Text>
-                  <PressableScale onPress={pickSpecies} scaleTo={0.96} style={styles.editHit}>
-                    <View style={[styles.editChip, { backgroundColor: profile.surface.accentSoft }]}>
-                      <Icon name="create-outline" size={14} color={profile.surface.accent} />
-                      <Text style={[styles.editChipText, { color: profile.surface.accent }]}>修改</Text>
-                    </View>
-                  </PressableScale>
-                </View>
-              ) : null}
-
-              {/* 中置信度：帮我确认一下（参考稿确认列表） */}
-              {state === 'medium' ? (
-                <>
-                  <Text style={[styles.panelTitle, { color: textPrimary }]}>帮我确认一下</Text>
-                  <Text style={[styles.panelSub, { color: textSecondary }]}>
-                    这条鱼更像下面哪一种？
-                  </Text>
-                  <View style={styles.candidateList}>
-                    {candidates.map((candidate, index) => {
-                      const active = selectedKey === candidate.speciesKey;
-                      return (
-                        <PressableScale
-                          key={candidate.speciesKey}
-                          scaleTo={0.985}
-                          onPress={() => {
-                            setSelectedKey(candidate.speciesKey);
-                            setSelectedName(candidate.speciesName);
-                          }}
-                        >
-                          <View
-                            style={[
-                              styles.candidateRow,
-                              {
-                                backgroundColor: active ? rowGoldBg : rowIdleBg,
-                                borderColor: active ? GOLD : profile.surface.glassBorder,
-                              },
-                              active && styles.candidateRowActive,
-                            ]}
-                          >
-                            <View style={styles.candidateGlyph}>
-                              <FishGlyph size={30} color={active ? GOLD : palette.fishGreen} />
-                            </View>
-                            <Text style={[styles.candidateName, { color: textPrimary }]} numberOfLines={1}>
-                              {candidate.speciesName}
-                            </Text>
-                            {index === 0 ? (
-                              <View style={styles.recommendChip}>
-                                <Text style={styles.recommendText}>推荐</Text>
-                              </View>
-                            ) : null}
-                            <RadioDot selected={active} color={GOLD} idleColor={textSecondary} />
-                          </View>
-                        </PressableScale>
-                      );
-                    })}
-                  </View>
-                  <PressableScale onPress={pickSpecies} style={styles.searchLinkHit}>
-                    <View style={styles.searchLink} pointerEvents="none">
-                      <Text style={[styles.searchLinkText, { color: textSecondary }]}>
-                        都不是？搜索其他鱼种
-                      </Text>
-                      <Icon name="chevron-forward" size={14} color={textSecondary} />
-                    </View>
-                  </PressableScale>
-                </>
-              ) : null}
-
-              {/* 低置信度：还不能确定 */}
-              {state === 'low' ? (
-                <>
-                  <Text style={[styles.panelTitle, { color: textPrimary }]}>
-                    还不能确定这是什么鱼
-                  </Text>
-                  <Text style={[styles.panelSub, { color: textSecondary }]}>
-                    可以手动选择，或先保存这次鱼获
-                  </Text>
-                  <PressableScale onPress={pickSpecies} scaleTo={0.98} style={styles.manualHit}>
-                    <View style={[styles.manualRow, { backgroundColor: rowIdleBg }]} pointerEvents="none">
-                      <FishGlyph size={26} color={palette.fishGreen} />
-                      <Text style={[styles.candidateName, { color: textPrimary, flex: 1 }]}>
-                        手动选择鱼种
-                      </Text>
-                      {selectedKey && selectedKey !== UNKNOWN_KEY ? (
-                        <Text style={[styles.pickedName, { color: GOLD }]} numberOfLines={1}>
-                          {selectedName}
-                        </Text>
-                      ) : null}
-                      <Icon name="chevron-forward" size={16} color={textSecondary} />
-                    </View>
-                  </PressableScale>
-                </>
-              ) : null}
-            </Animated.View>
           </View>
         </Animated.View>
 
-        {/* 长度 / 重量 / 地点：三列数据条（参考稿「记录这一刻」样式，可填写） */}
-        <View style={[styles.metaBar, { backgroundColor: profile.surface.glass, borderColor: profile.surface.glassBorder }]}>
-          <View style={styles.metaCell}>
+        {/* 确认面板（设计稿：照片下方毛玻璃长条面板，标题左对齐） */}
+        <Animated.View
+          style={{ opacity: nameOpacity, transform: [{ translateY: nameTranslate }] }}
+        >
+          <View
+            style={[
+              styles.panelCard,
+              {
+                backgroundColor: formBg,
+                borderColor: profile.surface.glassBorder,
+              },
+            ]}
+          >
+            {state === 'high' ? (
+              <View style={styles.nameRow}>
+                <Text style={[styles.name, { color: textPrimary }]} numberOfLines={2}>
+                  {selectedName || prediction.top1.speciesName}
+                </Text>
+                <PressableScale onPress={pickSpecies} scaleTo={0.96} style={styles.editHit}>
+                  <View
+                    style={[styles.editChip, { borderColor: profile.surface.textSecondary }]}
+                    pointerEvents="none"
+                  >
+                    <Icon name="create-outline" size={12} color={textSecondary} />
+                    <Text style={[styles.editChipText, { color: textSecondary }]}>修改鱼种</Text>
+                    <Icon name="chevron-forward" size={12} color={textSecondary} />
+                  </View>
+                </PressableScale>
+              </View>
+            ) : null}
+
+            {/* 中置信度：帮我确认一下（设计稿：标题左对齐 + 候选列表） */}
+            {state === 'medium' ? (
+              <>
+                <Text style={[styles.panelTitle, { color: textPrimary }]}>帮我确认一下</Text>
+                <Text style={[styles.panelSub, { color: textSecondary }]}>
+                  这条鱼更像下面哪一种？
+                </Text>
+                <View style={styles.candidateList}>
+                  {candidates.map((candidate, index) => {
+                    const active = selectedKey === candidate.speciesKey;
+                    return (
+                      <PressableScale
+                        key={candidate.speciesKey}
+                        scaleTo={0.985}
+                        onPress={() => {
+                          setSelectedKey(candidate.speciesKey);
+                          setSelectedName(candidate.speciesName);
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.candidateRow,
+                            {
+                              backgroundColor: active ? rowGoldBg : rowIdleBg,
+                              borderColor: active ? GOLD : profile.surface.glassBorder,
+                            },
+                            active && styles.candidateRowActive,
+                          ]}
+                        >
+                          <View style={styles.candidateGlyph}>
+                            <FishGlyph size={24} color={active ? GOLD : palette.fishGreen} />
+                          </View>
+                          <Text style={[styles.candidateName, { color: textPrimary }]} numberOfLines={1}>
+                            {candidate.speciesName}
+                          </Text>
+                          {index === 0 ? (
+                            <View style={styles.recommendChip}>
+                              <Text style={styles.recommendText}>推荐</Text>
+                            </View>
+                          ) : null}
+                          <RadioDot selected={active} color={GOLD} idleColor={textSecondary} />
+                        </View>
+                      </PressableScale>
+                    );
+                  })}
+                </View>
+                <PressableScale onPress={pickSpecies} style={styles.searchLinkHit}>
+                  <View style={styles.searchLink} pointerEvents="none">
+                    <Text style={[styles.searchLinkText, { color: textSecondary }]}>
+                      都不是？搜索其他鱼种
+                    </Text>
+                    <Icon name="chevron-forward" size={13} color={textSecondary} />
+                  </View>
+                </PressableScale>
+              </>
+            ) : null}
+
+            {/* 低置信度：还不能确定 */}
+            {state === 'low' ? (
+              <>
+                <View style={styles.questionBadge}>
+                  <Svg width={42} height={42}>
+                    <Defs>
+                      <LinearGradient id="questionGold" x1="0" y1="0" x2="1" y2="1">
+                        <Stop offset="0" stopColor="#E7CF96" />
+                        <Stop offset="1" stopColor={GOLD} />
+                      </LinearGradient>
+                    </Defs>
+                    <Circle cx={21} cy={21} r={21} fill="url(#questionGold)" />
+                  </Svg>
+                  <Text style={styles.questionMark}>?</Text>
+                </View>
+                <Text style={[styles.panelTitle, styles.panelTitleCenter, { color: textPrimary }]}>
+                  还不能确定这是什么鱼
+                </Text>
+                <Text style={[styles.panelSub, styles.panelSubCenter, { color: textSecondary }]}>
+                  可以手动选择，或先保存这次鱼获
+                </Text>
+                <PressableScale onPress={pickSpecies} scaleTo={0.98} style={styles.manualHit}>
+                  <View style={[styles.manualRow, { backgroundColor: rowIdleBg }]} pointerEvents="none">
+                    <FishGlyph size={22} color={palette.fishGreen} />
+                    <Text style={[styles.candidateName, { color: textPrimary, flex: 1 }]}>
+                      手动选择鱼种
+                    </Text>
+                    {selectedKey && selectedKey !== UNKNOWN_KEY ? (
+                      <Text style={[styles.pickedName, { color: GOLD }]} numberOfLines={1}>
+                        {selectedName}
+                      </Text>
+                    ) : null}
+                    <Icon name="chevron-forward" size={15} color={textSecondary} />
+                  </View>
+                </PressableScale>
+              </>
+            ) : null}
+          </View>
+        </Animated.View>
+
+        {/* 长度 / 重量 / 钓点：三列合一信息条（设计稿：icon + 值在上、label 在下） */}
+        <View
+          style={[
+            styles.metaBar,
+            { backgroundColor: formBg, borderColor: profile.surface.glassBorder },
+          ]}
+        >
+          <View style={styles.metaCol}>
             <View style={styles.metaValueRow}>
-              <Icon name="resize-outline" size={14} color={GOLD} />
+              <Icon name="resize-outline" size={13} color={GOLD} />
               <TextInput
                 style={[styles.metaInput, { color: textPrimary }]}
                 value={lengthText}
@@ -437,10 +495,10 @@ export const RecognitionResultScreen: React.FC = () => {
             </View>
             <Text style={[styles.metaLabel, { color: textSecondary }]}>长度</Text>
           </View>
-          <View style={[styles.metaDivider, { backgroundColor: profile.surface.glassBorder }]} />
-          <View style={styles.metaCell}>
+          <View style={[styles.metaDivider, { backgroundColor: dividerColor }]} />
+          <View style={styles.metaCol}>
             <View style={styles.metaValueRow}>
-              <Icon name="scale-outline" size={14} color={GOLD} />
+              <Icon name="scale-outline" size={13} color={GOLD} />
               <TextInput
                 style={[styles.metaInput, { color: textPrimary }]}
                 value={weightText}
@@ -453,20 +511,20 @@ export const RecognitionResultScreen: React.FC = () => {
             </View>
             <Text style={[styles.metaLabel, { color: textSecondary }]}>重量</Text>
           </View>
-          <View style={[styles.metaDivider, { backgroundColor: profile.surface.glassBorder }]} />
-          <View style={styles.metaCell}>
+          <View style={[styles.metaDivider, { backgroundColor: dividerColor }]} />
+          <View style={styles.metaCol}>
             <View style={styles.metaValueRow}>
-              <Icon name="location-outline" size={14} color={GOLD} />
+              <Icon name="location-outline" size={13} color={GOLD} />
               <TextInput
                 style={[styles.metaInput, styles.metaInputLocation, { color: textPrimary }]}
                 value={locationText}
                 onChangeText={setLocationText}
-                placeholder="地点"
+                placeholder="钓点"
                 placeholderTextColor={textSecondary}
                 maxLength={20}
               />
             </View>
-            <Text style={[styles.metaLabel, { color: textSecondary }]}>地点</Text>
+            <Text style={[styles.metaLabel, { color: textSecondary }]}>钓点</Text>
           </View>
         </View>
 
@@ -477,36 +535,59 @@ export const RecognitionResultScreen: React.FC = () => {
           <Text style={[styles.slowHint, { color: textSecondary }]}>正在保存这次鱼获…</Text>
         ) : null}
 
-        {/* 保存鱼获（参考稿：白玻璃胶囊 + 深青衬线字，唯一主 CTA） */}
-        <PrimaryButton
-          label={saveDisabled ? '选择候选后保存鱼获' : '保存鱼获'}
-          onPress={() => doSave()}
-          disabled={saveDisabled}
-          loading={saving}
-          saved={saved}
-          savedLabel="已保存"
-          variant="glass"
-          serif
-          style={styles.saveButton}
-        />
-
-        {/* 次要操作：安静文字链接，不打断主 CTA */}
+        {/* 主 CTA：高/中置信度 —— 白玻璃胶囊；低置信度 —— 金色渐变「保存为未知鱼种」 */}
         {state === 'low' ? (
-          <PressableScale
+          <PrimaryButton
+            label="保存为未知鱼种"
             onPress={() => doSave(UNKNOWN_KEY, UNKNOWN_NAME)}
+            loading={saving}
+            saved={saved}
+            savedLabel="已保存"
+            variant="gold"
+            serif
+            style={styles.saveButton}
+          />
+        ) : (
+          <PrimaryButton
+            label={saveDisabled ? '选择候选后保存鱼获' : '保存鱼获'}
+            onPress={() => doSave()}
+            disabled={saveDisabled}
+            loading={saving}
+            saved={saved}
+            savedLabel="已保存"
+            variant="glass"
+            serif
+            style={styles.saveButton}
+          />
+        )}
+
+        {/* 次要操作：低置信度为两个白底胶囊（重新拍摄 / 从相册选择），其余为安静文字链接 */}
+        {state === 'low' ? (
+          <View style={styles.secondaryRow}>
+            <PrimaryButton
+              label="重新拍摄"
+              variant="ghost"
+              onPress={() => navigation.navigate('Identify')}
+              disabled={saving || saved}
+              style={styles.secondaryHalf}
+            />
+            <PrimaryButton
+              label="从相册选择"
+              variant="ghost"
+              onPress={repickFromGallery}
+              disabled={saving || saved}
+              style={styles.secondaryHalf}
+            />
+          </View>
+        ) : (
+          <PressableScale
+            onPress={() => navigation.navigate('Identify')}
             disabled={saving || saved}
             style={styles.textLinkHit}
           >
-            <Text style={[styles.textLink, { color: textSecondary }]}>保存为未知鱼种</Text>
+            <Text style={[styles.textLink, { color: textSecondary }]}>重新拍摄</Text>
           </PressableScale>
-        ) : null}
-        <PressableScale
-          onPress={() => navigation.navigate('Identify')}
-          disabled={saving || saved}
-          style={styles.textLinkHit}
-        >
-          <Text style={[styles.textLink, { color: textSecondary }]}>重新拍摄</Text>
-        </PressableScale>
+        )}
       </ScrollView>
     </View>
   );
@@ -522,8 +603,8 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.page,
   } as ViewStyle,
-  heroCard: {
-    borderRadius: radius.l + 6,
+  photoCard: {
+    borderRadius: radius.l,
     borderWidth: 1,
     overflow: 'hidden',
     shadowColor: '#173B4B',
@@ -541,91 +622,126 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: palette.softWater,
   } as ViewStyle,
-  panelBody: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 22,
+  panelCard: {
+    marginTop: spacing.md,
+    borderRadius: radius.m + 2,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: '#173B4B',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   } as ViewStyle,
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   } as ViewStyle,
   name: {
     fontFamily: font.serif,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
-    letterSpacing: 4,
+    letterSpacing: 2,
     flexShrink: 1,
   } as TextStyle,
   editHit: {
-    borderRadius: 14,
+    borderRadius: 12,
   } as ViewStyle,
   editChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingVertical: 5,
+    borderRadius: 13,
+    borderWidth: 1,
   } as ViewStyle,
   editChipText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
+    letterSpacing: 1,
   } as TextStyle,
   panelTitle: {
     fontFamily: font.serif,
-    fontSize: 26,
+    fontSize: 19,
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
+  panelTitleCenter: {
+    textAlign: 'center',
+  } as TextStyle,
   panelSub: {
-    fontSize: 15,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 4,
+  } as TextStyle,
+  panelSubCenter: {
+    textAlign: 'center',
+  } as TextStyle,
+  questionBadge: {
+    alignSelf: 'center',
+    width: 42,
+    height: 42,
+    marginBottom: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#A5854D',
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  } as ViewStyle,
+  questionMark: {
+    position: 'absolute',
+    fontFamily: font.serif,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
   } as TextStyle,
   candidateList: {
-    marginTop: spacing.lg,
-    gap: spacing.md,
+    marginTop: spacing.sm,
+    gap: 10,
   } as ViewStyle,
   candidateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    borderRadius: radius.m,
+    gap: 10,
+    borderRadius: radius.m - 4,
     borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
   } as ViewStyle,
   candidateRowActive: {
     borderWidth: 1.5,
   } as ViewStyle,
   candidateGlyph: {
-    width: 40,
+    width: 30,
     alignItems: 'center',
     justifyContent: 'center',
   } as ViewStyle,
   candidateName: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: 1,
     flexShrink: 1,
   } as TextStyle,
   recommendChip: {
     backgroundColor: 'rgba(201,169,106,0.18)',
-    borderRadius: 9,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   } as ViewStyle,
   recommendText: {
     color: '#A5854D',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   } as TextStyle,
   searchLinkHit: {
     alignSelf: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.sm,
   } as ViewStyle,
   searchLink: {
     flexDirection: 'row',
@@ -633,83 +749,93 @@ const styles = StyleSheet.create({
     gap: 2,
   } as ViewStyle,
   searchLinkText: {
-    fontSize: 14,
+    fontSize: 13,
   } as TextStyle,
   manualHit: {
-    marginTop: spacing.lg,
+    marginTop: spacing.sm,
   } as ViewStyle,
   manualRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    borderRadius: radius.m,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    gap: 10,
+    borderRadius: radius.m - 4,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
   } as ViewStyle,
   pickedName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    maxWidth: 80,
+    maxWidth: 72,
   } as TextStyle,
   metaBar: {
+    marginTop: spacing.md,
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xl,
-    borderRadius: radius.l,
+    alignItems: 'stretch',
+    borderRadius: radius.m,
     borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     shadowColor: '#173B4B',
     shadowOpacity: 0.08,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   } as ViewStyle,
-  metaCell: {
+  metaCol: {
     flex: 1,
     alignItems: 'center',
-    gap: 3,
+    justifyContent: 'center',
+    gap: 2,
+  } as ViewStyle,
+  metaDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    marginVertical: 3,
   } as ViewStyle,
   metaValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   } as ViewStyle,
   metaInput: {
     fontFamily: font.serif,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     paddingVertical: 0,
-    minWidth: 40,
+    minWidth: 34,
     textAlign: 'center',
   } as TextStyle,
   metaInputLocation: {
-    fontSize: 14,
-    minWidth: 56,
+    fontSize: 13,
+    minWidth: 0,
+    flexShrink: 1,
   } as TextStyle,
   metaUnit: {
-    fontSize: 12,
+    fontSize: 11,
   } as TextStyle,
   metaLabel: {
-    fontSize: 12,
+    fontSize: 11,
   } as TextStyle,
-  metaDivider: {
-    width: 1,
-    height: 30,
-    opacity: 0.7,
-  } as ViewStyle,
   errorText: {
     textAlign: 'center',
-    marginTop: spacing.lg,
-    fontSize: 13,
+    marginTop: spacing.sm,
+    fontSize: 12,
   } as TextStyle,
   slowHint: {
     textAlign: 'center',
-    marginTop: spacing.lg,
-    fontSize: 13,
+    marginTop: spacing.sm,
+    fontSize: 12,
   } as TextStyle,
   saveButton: {
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
+  } as ViewStyle,
+  secondaryRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  } as ViewStyle,
+  secondaryHalf: {
+    flex: 1,
   } as ViewStyle,
   textLinkHit: {
     alignSelf: 'center',
@@ -718,6 +844,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   } as ViewStyle,
   textLink: {
-    fontSize: 14,
+    fontSize: 13,
   } as TextStyle,
 });

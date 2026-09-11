@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   card: {
     width: '100%',
-    aspectRatio: 0.62,
+    aspectRatio: 0.78,
     borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',

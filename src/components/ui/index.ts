@@ -7,3 +7,5 @@ export { FishGlyph } from './FishGlyph';
 export { IconButton } from './IconButton';
 export { GlassIconButton } from './GlassIconButton';
 export type { GlassIconButtonProps } from './GlassIconButton';
+export { CardCarousel, useCarouselCardTransform } from './CardCarousel';
+export type { CardCarouselRenderInfo } from './CardCarousel';

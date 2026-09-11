@@ -11,6 +11,7 @@ import {
   StyleProp,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { font, motion, radius } from '../../constants/tokens';
 import { palette } from '../../constants/colors';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -26,8 +27,9 @@ interface PrimaryButtonProps {
   saved?: boolean;
   savedLabel?: string;
   /** primary：水青实底；ghost：细描边胶囊；danger：危险 CTA；
-   * glass：参考稿保存按钮 —— 白玻璃底 + 深青衬线字 */
-  variant?: 'primary' | 'ghost' | 'danger' | 'glass';
+   * glass：参考稿保存按钮 —— 白玻璃底 + 深青衬线字；
+   * gold：低置信度参考稿 —— 金色渐变胶囊 + 白衬线字 */
+  variant?: 'primary' | 'ghost' | 'danger' | 'glass' | 'gold';
   haptic?: HapticLevel | null;
   serif?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -96,6 +98,20 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
           : isDisabled
             ? profile.surface.textSecondary
             : '#FFFFFF';
+
+  const goldBadge = variant === 'gold' ? (
+    <View style={[StyleSheet.absoluteFillObject, styles.goldLayer]} pointerEvents="none">
+      <Svg width="100%" height="100%" preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id="btnGold" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#E7CF96" />
+            <Stop offset="1" stopColor={palette.accentGold} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#btnGold)" />
+      </Svg>
+    </View>
+  ) : null;
   const borderColor =
     variant === 'ghost'
       ? profile.surface.glassBorder
@@ -116,11 +132,12 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
       <View
         style={[
           styles.button,
-          variant === 'glass' && styles.glassShape,
+          (variant === 'glass' || variant === 'gold') && styles.glassShape,
           { backgroundColor: background, borderColor },
           variant !== 'ghost' && styles.shadow,
         ]}
       >
+        {goldBadge}
         {loading ? (
           <ActivityIndicator size="small" color={textColor} />
         ) : variant === 'ghost' ? (
@@ -171,6 +188,10 @@ const styles = StyleSheet.create({
   /** 参考稿保存按钮：加高胶囊（白玻璃底 + 深青衬线字） */
   glassShape: {
     height: 56,
+    borderRadius: 28,
+  } as ViewStyle,
+  goldLayer: {
+    overflow: 'hidden',
     borderRadius: 28,
   } as ViewStyle,
   shadow: {

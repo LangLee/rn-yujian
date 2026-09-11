@@ -116,7 +116,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
-        versionName "2.3.1-rn"
+        versionName "1.0.0"
         multiDexEnabled true
 
         // 渔见后端配置，与原 Android 工程 BuildConfig 字段同名
