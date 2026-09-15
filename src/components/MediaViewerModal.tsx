@@ -15,7 +15,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { motion, radius, spacing } from '../constants/tokens';
+import { fs, motion, radius, spacing } from '../constants/tokens';
 import { palette } from '../constants/colors';
 import { RemoteImage } from './RemoteImage';
 import { BottomSheet } from './ui/BottomSheet';
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   counter: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '600',
   } as TextStyle,
   page: {
@@ -266,13 +266,13 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   videoDuration: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '600',
     letterSpacing: 1,
   } as TextStyle,
   videoHint: {
     color: 'rgba(255,255,255,0.72)',
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 2,
   } as TextStyle,
   menuButton: {
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     color: palette.mutedInk,
-    fontSize: 14,
+    fontSize: fs(14),
     lineHeight: 22,
     marginBottom: spacing.lg,
   } as TextStyle,

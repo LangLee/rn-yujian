@@ -17,7 +17,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { font, spacing } from '../../constants/tokens';
+import { font, fs, spacing } from '../../constants/tokens';
 import { ShareWork, shareWorkService } from '../../services/shareWorkService';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { PressableScale } from '../../components/ui/PressableScale';
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   } as ViewStyle,
   sharePillText: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     fontWeight: '600',
   } as TextStyle,
   posterHit: {
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   } as ViewStyle,
   layoutTitle: {
-    fontSize: 14.5,
+    fontSize: fs(14.5),
     fontWeight: '700',
   } as TextStyle,
   layoutShuffle: {
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
     gap: 4,
   } as ViewStyle,
   layoutShuffleText: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     fontWeight: '600',
   } as TextStyle,
   layoutRow: {
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     gap: 6,
   } as ViewStyle,
   secondaryText: {
-    fontSize: 14.5,
+    fontSize: fs(14.5),
     fontWeight: '600',
   } as TextStyle,
   primaryButton: {
@@ -626,7 +626,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   primaryText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   } as ViewStyle,
   remakeText: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     textDecorationLine: 'underline',
   } as TextStyle,
   generatingWrap: {
@@ -655,20 +655,20 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   ringPercent: {
     fontFamily: font.serif,
-    fontSize: 34,
+    fontSize: fs(34),
     fontWeight: '700',
   } as TextStyle,
   genStepTitle: {
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '700',
     marginTop: spacing.xl,
   } as TextStyle,
   genStepText: {
-    fontSize: 13,
+    fontSize: fs(13),
     marginTop: 8,
   } as TextStyle,
   genEta: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 5,
     opacity: 0.8,
   } as TextStyle,
@@ -680,12 +680,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl + spacing.xl,
   } as ViewStyle,
   tipTitle: {
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
   tipText: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     lineHeight: 19,
     marginTop: 4,
   } as TextStyle,

@@ -18,7 +18,7 @@ import { useCatchArchive } from '../contexts/CatchContext';
 import { usePreferences } from '../contexts/PreferencesContext';
 import { countDistinctDays } from '../utils/formatters';
 import { environmentProfiles } from '../constants/environments';
-import { font, radius, spacing } from '../constants/tokens';
+import { font, fs, radius, spacing } from '../constants/tokens';
 import { haptics } from '../utils/haptics';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { PressableScale } from '../components/ui/PressableScale';
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   avatarText: {
     fontFamily: font.serif,
-    fontSize: 30,
+    fontSize: fs(30),
     fontWeight: '700',
   } as TextStyle,
   identityBody: {
@@ -324,12 +324,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   name: {
     fontFamily: font.serif,
-    fontSize: 24,
+    fontSize: fs(24),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
   signature: {
-    fontSize: 14,
+    fontSize: fs(14),
     marginTop: 4,
   } as TextStyle,
   statsPill: {
@@ -355,12 +355,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   statValue: {
     fontFamily: font.serif,
-    fontSize: 22,
+    fontSize: fs(22),
     fontWeight: '600',
     lineHeight: 25,
   } as TextStyle,
   statLabel: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 2,
   } as TextStyle,
   statDivider: {
@@ -385,11 +385,11 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   menuLabel: {
     flex: 1,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '500',
   } as TextStyle,
   menuValue: {
-    fontSize: 14,
+    fontSize: fs(14),
   } as TextStyle,
   noteRow: {
     flexDirection: 'row',
@@ -408,19 +408,19 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   noteText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: fs(11),
     lineHeight: 16,
     opacity: 0.85,
   } as TextStyle,
   sheetLabel: {
-    fontSize: 13,
+    fontSize: fs(13),
     marginBottom: spacing.sm,
   } as TextStyle,
   sheetInput: {
     height: 46,
     borderRadius: radius.s,
     paddingHorizontal: spacing.md,
-    fontSize: 15,
+    fontSize: fs(15),
   } as ViewStyle,
   sheetButton: {
     marginTop: spacing.lg,

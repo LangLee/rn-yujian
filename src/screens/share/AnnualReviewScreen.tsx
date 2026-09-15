@@ -17,7 +17,7 @@ import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCatchArchive } from '../../contexts/CatchContext';
-import { font, spacing } from '../../constants/tokens';
+import { font, fs, spacing } from '../../constants/tokens';
 import { palette } from '../../constants/colors';
 import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryService';
 import { ShareWork } from '../../services/shareWorkService';
@@ -136,6 +136,7 @@ export const AnnualReviewScreen: React.FC = () => {
         <WaterBackdrop />
         <ScreenHeader title="年度回顾" onBack={() => navigation.goBack()} />
         <EmptyState
+          variant="memory"
           title={`${activeYear} 年还没有鱼获记录`}
           description="新的记录会让这一年的回顾慢慢丰满起来"
           style={styles.empty}
@@ -622,18 +623,18 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   heroTitle: {
     fontFamily: font.serif,
-    fontSize: 27,
+    fontSize: fs(27),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
   heroSubtitle: {
-    fontSize: 13,
+    fontSize: fs(13),
     marginTop: 6,
   } as TextStyle,
   handNote: {
     fontFamily: font.serif,
     fontStyle: 'italic',
-    fontSize: 11.5,
+    fontSize: fs(11.5),
     lineHeight: 18,
     textAlign: 'right',
     marginTop: 6,
@@ -661,14 +662,14 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   overviewValue: {
     fontFamily: font.serif,
-    fontSize: 24,
+    fontSize: fs(24),
     fontWeight: '700',
   } as TextStyle,
   overviewLabel: {
-    fontSize: 10.5,
+    fontSize: fs(10.5),
   } as TextStyle,
   overviewSub: {
-    fontSize: 9.5,
+    fontSize: fs(9.5),
     opacity: 0.85,
   } as TextStyle,
   cellDivider: {
@@ -685,12 +686,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   sectionTitle: {
     fontFamily: font.serif,
-    fontSize: 20,
+    fontSize: fs(20),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
   sectionHint: {
-    fontSize: 12,
+    fontSize: fs(12),
   } as TextStyle,
   hScroll: {
     gap: spacing.md,
@@ -706,12 +707,12 @@ const styles = StyleSheet.create({
     gap: 4,
   } as ViewStyle,
   firstDate: {
-    fontSize: 11.5,
+    fontSize: fs(11.5),
     fontWeight: '700',
   } as TextStyle,
   firstTitle: {
     fontFamily: font.serif,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
     letterSpacing: 0.5,
   } as TextStyle,
@@ -728,7 +729,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#D8E8E5',
   } as ViewStyle,
   firstSize: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 2,
   } as TextStyle,
   locationRow: {
@@ -737,7 +738,7 @@ const styles = StyleSheet.create({
     gap: 2,
   } as ViewStyle,
   locationText: {
-    fontSize: 11,
+    fontSize: fs(11),
     flexShrink: 1,
   } as TextStyle,
   breakthroughRow: {
@@ -767,11 +768,11 @@ const styles = StyleSheet.create({
     flex: 1,
   } as ViewStyle,
   breakTitle: {
-    fontSize: 13.5,
+    fontSize: fs(13.5),
     fontWeight: '700',
   } as TextStyle,
   breakSub: {
-    fontSize: 10.5,
+    fontSize: fs(10.5),
     marginTop: 1,
   } as TextStyle,
   progressionRow: {
@@ -798,14 +799,14 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   progressionWeight: {
     fontFamily: font.serif,
-    fontSize: 13,
+    fontSize: fs(13),
     fontWeight: '700',
   } as TextStyle,
   progressionDate: {
-    fontSize: 9.5,
+    fontSize: fs(9.5),
   } as TextStyle,
   breakEmpty: {
-    fontSize: 11.5,
+    fontSize: fs(11.5),
     lineHeight: 17,
   } as TextStyle,
   speciesRow: {
@@ -821,14 +822,14 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   speciesValue: {
     fontFamily: font.serif,
-    fontSize: 21,
+    fontSize: fs(21),
     fontWeight: '700',
   } as TextStyle,
   speciesDate: {
-    fontSize: 10,
+    fontSize: fs(10),
   } as TextStyle,
   speciesNote: {
-    fontSize: 10.5,
+    fontSize: fs(10.5),
     lineHeight: 16,
     textAlign: 'center',
     marginTop: spacing.sm,
@@ -849,7 +850,7 @@ const styles = StyleSheet.create({
     gap: 4,
   } as ViewStyle,
   barValue: {
-    fontSize: 10,
+    fontSize: fs(10),
     fontWeight: '700',
     color: BLUE,
   } as TextStyle,
@@ -866,7 +867,7 @@ const styles = StyleSheet.create({
     backgroundColor: BLUE,
   } as ViewStyle,
   barLabel: {
-    fontSize: 9.5,
+    fontSize: fs(9.5),
     color: 'rgba(23,59,75,0.6)',
   } as TextStyle,
   memoryCard: {
@@ -887,16 +888,16 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   memoryTitle: {
     fontFamily: font.serif,
-    fontSize: 14.5,
+    fontSize: fs(14.5),
     fontWeight: '700',
     letterSpacing: 0.5,
   } as TextStyle,
   memoryDesc: {
-    fontSize: 11.5,
+    fontSize: fs(11.5),
     lineHeight: 16,
   } as TextStyle,
   memoryEmpty: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     paddingVertical: spacing.xl,
   } as TextStyle,
   bottomRow: {
@@ -916,7 +917,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   } as ViewStyle,
   backText: {
-    fontSize: 13.5,
+    fontSize: fs(13.5),
     fontWeight: '600',
   } as TextStyle,
   annualHit: {
@@ -946,12 +947,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   annualTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
   annualSub: {
     color: 'rgba(255,255,255,0.78)',
-    fontSize: 10.5,
+    fontSize: fs(10.5),
   } as TextStyle,
 });

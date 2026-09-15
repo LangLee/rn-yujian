@@ -8,7 +8,7 @@ import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCatchArchive } from '../../contexts/CatchContext';
-import { font, spacing } from '../../constants/tokens';
+import { font, fs, spacing } from '../../constants/tokens';
 import { palette } from '../../constants/colors';
 import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryService';
 import { ShareRangeKey, ShareTemplateId, ShareWork, shareWorkService } from '../../services/shareWorkService';
@@ -202,6 +202,7 @@ export const ShareHomeTab: React.FC = () => {
 
         {!hasAnyCatch ? (
           <EmptyState
+            variant="home"
             title="还没有可以分享的鱼获"
             description="拍下第一条鱼，AI 会把它整理成值得收藏的作品"
             actionLabel="拍照识鱼"
@@ -678,12 +679,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   heroTitle: {
     fontFamily: font.serif,
-    fontSize: 21,
+    fontSize: fs(21),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
   heroSubtitle: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     lineHeight: 19,
     marginTop: 6,
   } as TextStyle,
@@ -699,13 +700,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
   } as ViewStyle,
   rangeChipText: {
-    fontSize: 13,
+    fontSize: fs(13),
     fontWeight: '600',
   } as TextStyle,
   heroNote: {
     fontFamily: font.serif,
     fontStyle: 'italic',
-    fontSize: 12,
+    fontSize: fs(12),
     textAlign: 'right',
     marginTop: spacing.md,
     opacity: 0.8,
@@ -730,7 +731,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   goldPillText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
@@ -750,7 +751,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   sectionTitle: {
     fontFamily: font.serif,
-    fontSize: 20,
+    fontSize: fs(20),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
@@ -760,10 +761,10 @@ const styles = StyleSheet.create({
     gap: 1,
   } as ViewStyle,
   sectionLinkText: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
   sectionDesc: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     marginTop: 4,
     marginBottom: spacing.md,
   } as TextStyle,
@@ -801,7 +802,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   badgeEventText: {
     color: GOLD_DEEP_TEXT,
-    fontSize: 11,
+    fontSize: fs(11),
     fontWeight: '600',
   } as TextStyle,
   badgeAI: {
@@ -815,24 +816,24 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   badgeAIText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: fs(11),
     fontWeight: '600',
   } as TextStyle,
   featureTitle: {
     fontFamily: font.serif,
-    fontSize: 23,
+    fontSize: fs(23),
     fontWeight: '700',
     letterSpacing: 2,
     marginTop: spacing.md,
   } as TextStyle,
   featureMeta: {
-    fontSize: 13,
+    fontSize: fs(13),
     marginTop: 6,
   } as TextStyle,
   featureQuote: {
     fontFamily: font.serif,
     fontStyle: 'italic',
-    fontSize: 13.5,
+    fontSize: fs(13.5),
     lineHeight: 20,
     marginTop: 6,
     flex: 1,
@@ -871,7 +872,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   thumbMoreText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '700',
   } as TextStyle,
   featureCta: {
@@ -895,7 +896,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   featureCtaText: {
     color: '#FFFFFF',
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
@@ -921,20 +922,20 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   sideTitle: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '700',
     letterSpacing: 1,
     marginTop: spacing.sm + 2,
   } as TextStyle,
   sideMeta: {
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 17,
     marginTop: 4,
   } as TextStyle,
   sideQuote: {
     fontFamily: font.serif,
     fontStyle: 'italic',
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 17,
     marginTop: 4,
     marginBottom: spacing.sm,
@@ -970,12 +971,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   workTitle: {
     fontFamily: font.serif,
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '700',
     letterSpacing: 0.5,
   } as TextStyle,
   workMeta: {
-    fontSize: 12,
+    fontSize: fs(12),
   } as TextStyle,
   workRight: {
     alignItems: 'flex-end',
@@ -984,7 +985,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   } as ViewStyle,
   workDate: {
-    fontSize: 11,
+    fontSize: fs(11),
   } as TextStyle,
   worksEmpty: {
     borderRadius: 18,
@@ -1003,11 +1004,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   } as ViewStyle,
   worksEmptyTitle: {
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '700',
   } as TextStyle,
   worksEmptyDesc: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     textAlign: 'center',
     lineHeight: 19,
     marginTop: 6,
@@ -1023,7 +1024,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   worksEmptyButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
@@ -1035,7 +1036,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   } as ViewStyle,
   sheetActionText: {
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '500',
   } as TextStyle,
 });

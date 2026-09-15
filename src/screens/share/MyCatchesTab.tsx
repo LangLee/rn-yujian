@@ -19,7 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCatchArchive } from '../../contexts/CatchContext';
 import { RemoteCatch } from '../../types/models';
 import { palette } from '../../constants/colors';
-import { font, radius, spacing } from '../../constants/tokens';
+import { font, fs, radius, spacing } from '../../constants/tokens';
 import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryService';
 import { groupCatchesByMonth } from '../../utils/formatters';
 import { RemoteImage } from '../../components/RemoteImage';
@@ -227,6 +227,7 @@ export const MyCatchesTab: React.FC = () => {
           </View>
         ) : catches.length === 0 ? (
           <EmptyState
+            variant="myCatch"
             title="你的鱼获会收藏在这里"
             description="每次拍照识别后的渔获，都会按时间收进这本收藏册"
             actionLabel="拍照识鱼"
@@ -234,6 +235,7 @@ export const MyCatchesTab: React.FC = () => {
           />
         ) : groups.length === 0 ? (
           <EmptyState
+            variant="search"
             title="没有找到这个鱼种"
             description="可以试试其他名称，或清除筛选浏览全部鱼获"
             actionLabel="清除筛选"
@@ -451,7 +453,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   } as ViewStyle,
   summaryText: {
-    fontSize: 14,
+    fontSize: fs(14),
   } as TextStyle,
   searchHit: {
     width: 38,
@@ -473,7 +475,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: fs(15),
     paddingVertical: 0,
   } as TextStyle,
   chipRow: {
@@ -505,7 +507,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   } as ViewStyle,
   chipText: {
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '500',
   } as TextStyle,
   stateWrap: {
@@ -514,11 +516,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   } as ViewStyle,
   stateTitle: {
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '600',
   } as TextStyle,
   stateText: {
-    fontSize: 13,
+    fontSize: fs(13),
     textAlign: 'center',
     paddingVertical: spacing.xl,
   } as TextStyle,
@@ -527,7 +529,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   } as ViewStyle,
   retryText: {
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '600',
   } as TextStyle,
   monthGroup: {
@@ -535,7 +537,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   monthLabel: {
     fontFamily: font.serif,
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '600',
     marginBottom: spacing.md,
     paddingHorizontal: 2,
@@ -570,7 +572,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   fallbackText: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: fs(18),
     color: palette.waterTeal,
     letterSpacing: 3,
   } as TextStyle,
@@ -585,7 +587,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   cardName: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '700',
     letterSpacing: 2,
     color: '#FFFFFF',
@@ -599,7 +601,7 @@ const styles = StyleSheet.create({
     gap: 4,
   } as ViewStyle,
   cardMetaText: {
-    fontSize: 12,
+    fontSize: fs(12),
     letterSpacing: 0.5,
     color: 'rgba(255,255,255,0.88)',
     textShadowColor: 'rgba(8,26,34,0.5)',
@@ -634,7 +636,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   } as ViewStyle,
   optionLabel: {
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '500',
   } as TextStyle,
 });

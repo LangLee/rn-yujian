@@ -7,7 +7,7 @@ import { StackNavigationProp, RootStackParamList } from '../../navigation/types'
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { palette } from '../../constants/colors';
-import { radius, spacing, typeScale } from '../../constants/tokens';
+import { fs, radius, spacing, typeScale } from '../../constants/tokens';
 import {
   LENGTH_UNIT_LABEL,
   LengthUnit,
@@ -147,11 +147,11 @@ const styles = StyleSheet.create({
     backgroundColor: palette.softWater,
   } as ViewStyle,
   rowLabel: {
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     fontWeight: '500',
   } as TextStyle,
   note: {
-    fontSize: typeScale.caption,
+    fontSize: fs(typeScale.caption),
     lineHeight: 19,
     marginTop: spacing.xl,
     textAlign: 'center',

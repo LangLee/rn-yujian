@@ -5,7 +5,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { RemoteImage } from '../../components/RemoteImage';
 import { FishGlyph } from '../../components/ui/FishGlyph';
 import { environmentBackgrounds } from '../../constants/environmentAssets';
-import { font } from '../../constants/tokens';
+import { font, fs } from '../../constants/tokens';
 import { ShareWork } from '../../services/shareWorkService';
 import { ShareSnapshotFish } from '../../services/shareWorkService';
 
@@ -61,8 +61,8 @@ const CatchPhoto: React.FC<{
     />
   ) : (
     <View style={[StyleSheet.absoluteFill, styles.photoFallback]}>
-      <FishGlyph size={u(fontSize ?? 30)} color={GOLD} opacity={0.9} />
-      <Text style={[styles.photoFallbackText, { fontSize: u(10) }]} numberOfLines={1}>
+      <FishGlyph size={u(fontSize ?? fs(30))} color={GOLD} opacity={0.9} />
+      <Text style={[styles.photoFallbackText, { fontSize: fs(u(10)) }]} numberOfLines={1}>
         {name}
       </Text>
     </View>
@@ -81,7 +81,7 @@ const HandNote: React.FC<{ text: string; u: Scale; color?: string; align?: 'left
         styles.handNote,
         {
           color,
-          fontSize: u(12),
+          fontSize: fs(u(12)),
           lineHeight: u(19),
           textAlign: align,
           transform: [{ rotate: '-2deg' }],
@@ -105,12 +105,12 @@ const HandNote: React.FC<{ text: string; u: Scale; color?: string; align?: 'left
 
 const BrandFooter: React.FC<{ u: Scale; ink?: string }> = ({ u, ink = INK }) => (
   <View style={{ alignItems: 'center' }}>
-    <Text style={[styles.brandName, { color: ink, fontSize: u(17), letterSpacing: u(6) }]}>
+    <Text style={[styles.brandName, { color: ink, fontSize: fs(u(17)), letterSpacing: u(6) }]}>
       渔见
     </Text>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(8), marginTop: u(5) }}>
       <View style={{ width: u(26), height: StyleSheet.hairlineWidth, backgroundColor: ink, opacity: 0.5 }} />
-      <Text style={[styles.brandSlogan, { color: ink, fontSize: u(9), letterSpacing: u(2) }]}>
+      <Text style={[styles.brandSlogan, { color: ink, fontSize: fs(u(9)), letterSpacing: u(2) }]}>
         遇见更大的水域
       </Text>
       <View style={{ width: u(26), height: StyleSheet.hairlineWidth, backgroundColor: ink, opacity: 0.5 }} />
@@ -168,7 +168,7 @@ const ScorePoster: React.FC<{
         {/* 头部：标题 + 随记 */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <View style={{ flex: 1, marginRight: u(8) }}>
-            <Text style={[styles.scoreTitle, { color: INK, fontSize: u(34), letterSpacing: u(2) }]}>
+            <Text style={[styles.scoreTitle, { color: INK, fontSize: fs(u(34)), letterSpacing: u(2) }]}>
               {work.title}
             </Text>
             <View
@@ -182,13 +182,13 @@ const ScorePoster: React.FC<{
                 transform: [{ rotate: '-1deg' }],
               }}
             />
-            <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: u(14) }]}>
+            <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: fs(u(14)) }]}>
               {work.rangeLabel}
             </Text>
             {work.location ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(3), marginTop: u(3) }}>
                 <Icon name="location" size={u(12)} color={GOLD_DEEP} />
-                <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: u(12) }]}>
+                <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: fs(u(12)) }]}>
                   {work.location}
                 </Text>
               </View>
@@ -218,15 +218,15 @@ const ScorePoster: React.FC<{
           <View style={{ flex: 1.35 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(3) }}>
               <Icon name="trophy" size={u(12)} color={GOLD_DEEP} />
-              <Text style={[styles.scoreMeta, { color: GOLD_DEEP, fontSize: u(11) }]}>最大鱼获</Text>
+              <Text style={[styles.scoreMeta, { color: GOLD_DEEP, fontSize: fs(u(11)) }]}>最大鱼获</Text>
             </View>
             <Text
-              style={[styles.scoreFishName, { color: INK, fontSize: u(16), marginTop: u(2) }]}
+              style={[styles.scoreFishName, { color: INK, fontSize: fs(u(16)), marginTop: u(2) }]}
               numberOfLines={1}
             >
               {work.biggest?.name ?? '—'}
             </Text>
-            <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: u(11) }]}>
+            <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: fs(u(11)) }]}>
               {work.biggest ? sizeText(work.biggest) || '—' : '—'}
             </Text>
           </View>
@@ -237,7 +237,7 @@ const ScorePoster: React.FC<{
           <View style={{ marginTop: u(12), alignItems: 'center' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(4), marginBottom: u(6) }}>
               <Icon name="ribbon" size={u(14)} color={GOLD_DEEP} />
-              <Text style={[styles.topBadgeText, { color: GOLD_DEEP, fontSize: u(14) }]}>TOP 1</Text>
+              <Text style={[styles.topBadgeText, { color: GOLD_DEEP, fontSize: fs(u(14)) }]}>TOP 1</Text>
             </View>
             <View
               style={{
@@ -255,12 +255,12 @@ const ScorePoster: React.FC<{
                 elevation: 6,
               }}
             >
-              <CatchPhoto uri={hero.imageUri} authToken={authToken} name={hero.name} u={u} fontSize={40} />
+              <CatchPhoto uri={hero.imageUri} authToken={authToken} name={hero.name} u={u} fontSize={fs(40)} />
             </View>
-            <Text style={[styles.scoreFishName, { color: INK, fontSize: u(15), marginTop: u(6) }]}>
+            <Text style={[styles.scoreFishName, { color: INK, fontSize: fs(u(15)), marginTop: u(6) }]}>
               {hero.name}
             </Text>
-            <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: u(11), marginTop: u(1) }]}>
+            <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: fs(u(11)), marginTop: u(1) }]}>
               {sizeText(hero) || `${hero.count} 尾`}
             </Text>
           </View>
@@ -287,15 +287,15 @@ const ScorePoster: React.FC<{
                     elevation: 4,
                   }}
                 >
-                  <CatchPhoto uri={fish.imageUri} authToken={authToken} name={fish.name} u={u} fontSize={22} />
+                  <CatchPhoto uri={fish.imageUri} authToken={authToken} name={fish.name} u={u} fontSize={fs(22)} />
                 </View>
-                <Text style={[styles.topBadgeText, { color: INK_SOFT, fontSize: u(10), marginTop: u(4) }]}>
+                <Text style={[styles.topBadgeText, { color: INK_SOFT, fontSize: fs(u(10)), marginTop: u(4) }]}>
                   TOP {index + 2}
                 </Text>
-                <Text style={[styles.scoreFishName, { color: INK, fontSize: u(12), marginTop: u(1) }]} numberOfLines={1}>
+                <Text style={[styles.scoreFishName, { color: INK, fontSize: fs(u(12)), marginTop: u(1) }]} numberOfLines={1}>
                   {fish.name}
                 </Text>
-                <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: u(10) }]}>
+                <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: fs(u(10)) }]}>
                   {sizeText(fish) || `${fish.count} 尾`}
                 </Text>
               </View>
@@ -316,7 +316,7 @@ const ScorePoster: React.FC<{
               },
             ]}
           >
-            <Text style={[styles.scoreMeta, { color: INK, fontSize: u(12), fontWeight: '700' }]}>
+            <Text style={[styles.scoreMeta, { color: INK, fontSize: fs(u(12)), fontWeight: '700' }]}>
               其他鱼获：
             </Text>
             <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-evenly' }}>
@@ -325,13 +325,13 @@ const ScorePoster: React.FC<{
                   <View style={{ width: u(44), height: u(20), justifyContent: 'center', alignItems: 'center' }}>
                     {fish.imageUri ? (
                       <View style={{ width: u(40), height: u(20), borderRadius: u(5), overflow: 'hidden', borderWidth: 1, borderColor: '#FFFFFF' }}>
-                        <CatchPhoto uri={fish.imageUri} authToken={authToken} name={fish.name} u={u} fontSize={12} />
+                        <CatchPhoto uri={fish.imageUri} authToken={authToken} name={fish.name} u={u} fontSize={fs(12)} />
                       </View>
                     ) : (
                       <FishGlyph size={u(22)} color={GOLD_DEEP} opacity={0.85} />
                     )}
                   </View>
-                  <Text style={[styles.scoreMeta, { color: INK, fontSize: u(10) }]}>
+                  <Text style={[styles.scoreMeta, { color: INK, fontSize: fs(u(10)) }]}>
                     {fish.name} ×{fish.count}
                   </Text>
                 </View>
@@ -351,8 +351,8 @@ const ScorePoster: React.FC<{
 
 const StatCell: React.FC<{ u: Scale; value: string; label: string }> = ({ u, value, label }) => (
   <View style={{ flex: 1, alignItems: 'center' }}>
-    <Text style={[styles.scoreStatValue, { color: INK, fontSize: u(26) }]}>{value}</Text>
-    <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: u(11) }]}>{label}</Text>
+    <Text style={[styles.scoreStatValue, { color: INK, fontSize: fs(u(26)) }]}>{value}</Text>
+    <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: fs(u(11)) }]}>{label}</Text>
   </View>
 );
 
@@ -381,7 +381,7 @@ const PhotoStrip: React.FC<{
           authToken={authToken}
           name={work.top[index]?.name ?? '渔见'}
           u={u}
-          fontSize={18}
+          fontSize={fs(18)}
         />
       </View>
     ))}
@@ -430,7 +430,7 @@ const StoryPoster: React.FC<{
         {/* 头部 */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.storyTitle, { color: PAPER_INK, fontSize: u(33), letterSpacing: u(3) }]}>
+            <Text style={[styles.storyTitle, { color: PAPER_INK, fontSize: fs(u(33)), letterSpacing: u(3) }]}>
               水边故事
             </Text>
             <View
@@ -444,7 +444,7 @@ const StoryPoster: React.FC<{
                 transform: [{ rotate: '-1.2deg' }],
               }}
             />
-            <Text style={[styles.scoreMeta, { color: 'rgba(51,66,74,0.8)', fontSize: u(12) }]}>
+            <Text style={[styles.scoreMeta, { color: 'rgba(51,66,74,0.8)', fontSize: fs(u(12)) }]}>
               {work.rangeLabel}
               {work.location ? ` ｜ ${work.location}` : ''}
             </Text>
@@ -464,7 +464,7 @@ const StoryPoster: React.FC<{
               style={{ flex: 1.08 }}
             >
               <View style={[styles.storyChip, { borderRadius: u(8), paddingVertical: u(4), paddingHorizontal: u(9) }]}>
-                <Text style={[styles.storyChipText, { fontSize: u(12), color: PAPER_INK }]}>
+                <Text style={[styles.storyChipText, { fontSize: fs(u(12)), color: PAPER_INK }]}>
                   {work.count} 尾鱼获
                 </Text>
               </View>
@@ -478,13 +478,13 @@ const StoryPoster: React.FC<{
               style={{ flex: 1 }}
             >
               <View style={[styles.storyChip, { borderRadius: u(8), paddingVertical: u(4), paddingHorizontal: u(9), alignSelf: 'flex-end' }]}>
-                <Text style={[styles.storyChipText, { fontSize: u(11), color: PAPER_INK }]}>
+                <Text style={[styles.storyChipText, { fontSize: fs(u(11)), color: PAPER_INK }]}>
                   {work.speciesCount} 种鱼
                 </Text>
               </View>
               {biggest?.weightKg ? (
                 <View style={[styles.storyChip, { borderRadius: u(8), paddingVertical: u(4), paddingHorizontal: u(9), marginTop: u(5) }]}>
-                  <Text style={[styles.storyChipText, { fontSize: u(11), color: PAPER_INK }]} numberOfLines={1}>
+                  <Text style={[styles.storyChipText, { fontSize: fs(u(11)), color: PAPER_INK }]} numberOfLines={1}>
                     最大 {biggest.name} {biggest.weightKg}kg
                   </Text>
                 </View>
@@ -502,7 +502,7 @@ const StoryPoster: React.FC<{
               style={{ width: '76%', height: u(112), alignSelf: 'flex-start' }}
             >
               <View style={[styles.storyChip, { borderRadius: u(8), paddingVertical: u(4), paddingHorizontal: u(9) }]}>
-                <Text style={[styles.storyChipText, { fontSize: u(11), color: PAPER_INK }]} numberOfLines={1}>
+                <Text style={[styles.storyChipText, { fontSize: fs(u(11)), color: PAPER_INK }]} numberOfLines={1}>
                   {work.count} 尾鱼获 · {work.speciesCount} 种鱼
                 </Text>
               </View>
@@ -519,7 +519,7 @@ const StoryPoster: React.FC<{
               <View style={{ flex: 1, justifyContent: 'flex-end', paddingBottom: u(4) }}>
                 {biggest?.weightKg ? (
                   <View style={[styles.storyChip, { borderRadius: u(8), paddingVertical: u(5), paddingHorizontal: u(10), alignSelf: 'flex-start' }]}>
-                    <Text style={[styles.storyChipText, { fontSize: u(11), color: PAPER_INK }]} numberOfLines={1}>
+                    <Text style={[styles.storyChipText, { fontSize: fs(u(11)), color: PAPER_INK }]} numberOfLines={1}>
                       最大鱼获 {biggest.name} {biggest.weightKg}kg
                     </Text>
                   </View>
@@ -538,14 +538,14 @@ const StoryPoster: React.FC<{
               style={{ width: '84%', height: u(120), flex: 0 }}
             >
               <View style={[styles.storyChip, { borderRadius: u(8), paddingVertical: u(4), paddingHorizontal: u(9) }]}>
-                <Text style={[styles.storyChipText, { fontSize: u(11), color: PAPER_INK }]} numberOfLines={1}>
+                <Text style={[styles.storyChipText, { fontSize: fs(u(11)), color: PAPER_INK }]} numberOfLines={1}>
                   {work.count} 尾鱼获 · {work.speciesCount} 种鱼
                 </Text>
               </View>
             </Polaroid>
             <View style={{ marginTop: u(-32), transform: [{ rotate: '2.2deg' }] }}>
               <View style={{ width: u(116), height: u(68), borderRadius: u(8), borderWidth: u(3), borderColor: '#FFFFFF', overflow: 'hidden', backgroundColor: '#F2EDE2' }}>
-                <CatchPhoto uri={photos[1]} authToken={authToken} name={work.top[1]?.name ?? biggest?.name ?? '水边'} u={u} fontSize={22} />
+                <CatchPhoto uri={photos[1]} authToken={authToken} name={work.top[1]?.name ?? biggest?.name ?? '水边'} u={u} fontSize={fs(22)} />
               </View>
             </View>
           </View>
@@ -566,7 +566,7 @@ const StoryPoster: React.FC<{
             },
           ]}
         >
-          <Text style={[styles.storyMeetTitle, { fontSize: u(14), color: PAPER_INK }]}>
+          <Text style={[styles.storyMeetTitle, { fontSize: fs(u(14)), color: PAPER_INK }]}>
             这次遇见
           </Text>
           <View style={{ width: StyleSheet.hairlineWidth, height: u(22), backgroundColor: 'rgba(51,66,74,0.25)' }} />
@@ -575,12 +575,12 @@ const StoryPoster: React.FC<{
               <View key={`${fish.name}-${index}`} style={{ flexDirection: 'row', alignItems: 'center', gap: u(4) }}>
                 {fish.imageUri ? (
                   <View style={{ width: u(34), height: u(20), borderRadius: u(5), overflow: 'hidden', borderWidth: 1, borderColor: '#FFFFFF' }}>
-                    <CatchPhoto uri={fish.imageUri} authToken={authToken} name={fish.name} u={u} fontSize={12} />
+                    <CatchPhoto uri={fish.imageUri} authToken={authToken} name={fish.name} u={u} fontSize={fs(12)} />
                   </View>
                 ) : (
                   <FishGlyph size={u(20)} color={GOLD_DEEP} opacity={0.85} />
                 )}
-                <Text style={[styles.storyChipText, { fontSize: u(12), color: PAPER_INK }]}>
+                <Text style={[styles.storyChipText, { fontSize: fs(u(12)), color: PAPER_INK }]}>
                   {fish.name} ×{fish.count}
                 </Text>
               </View>
@@ -601,11 +601,11 @@ const StoryPoster: React.FC<{
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(5) }}>
             <Icon name="book-outline" size={u(13)} color={PAPER_INK} />
-            <Text style={[styles.storyChipText, { fontSize: u(12), color: PAPER_INK, fontWeight: '700' }]}>
+            <Text style={[styles.storyChipText, { fontSize: fs(u(12)), color: PAPER_INK, fontWeight: '700' }]}>
               我的记录
             </Text>
           </View>
-          <Text style={[styles.storyNoteText, { fontSize: u(13), lineHeight: u(21), marginTop: u(6) }]} numberOfLines={3}>
+          <Text style={[styles.storyNoteText, { fontSize: fs(u(13)), lineHeight: u(21), marginTop: u(6) }]} numberOfLines={3}>
             {storyText}
           </Text>
           <Text
@@ -613,7 +613,7 @@ const StoryPoster: React.FC<{
               styles.handNote,
               {
                 color: 'rgba(51,66,74,0.5)',
-                fontSize: u(11),
+                fontSize: fs(u(11)),
                 textAlign: 'right',
                 marginTop: u(4),
                 transform: [{ rotate: '-1.5deg' }],
@@ -663,7 +663,7 @@ const Polaroid: React.FC<{
     ]}
   >
     <View style={{ width: '100%', height: '100%' }}>
-      <CatchPhoto uri={uri} authToken={authToken} name={name} u={u} fontSize={26} />
+      <CatchPhoto uri={uri} authToken={authToken} name={name} u={u} fontSize={fs(26)} />
     </View>
     {children ? (
       <View style={{ position: 'absolute', left: u(7), bottom: u(7), right: u(7) }}>{children}</View>

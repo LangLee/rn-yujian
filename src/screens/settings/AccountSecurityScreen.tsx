@@ -7,7 +7,7 @@ import { StackNavigationProp, RootStackParamList } from '../../navigation/types'
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { palette } from '../../constants/colors';
-import { radius, spacing, typeScale } from '../../constants/tokens';
+import { fs, radius, spacing, typeScale } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { PressableScale } from '../../components/ui/PressableScale';
@@ -149,10 +149,10 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   } as ViewStyle,
   infoLabel: {
-    fontSize: typeScale.meta,
+    fontSize: fs(typeScale.meta),
   } as TextStyle,
   infoValue: {
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     fontWeight: '600',
   } as TextStyle,
   actionRow: {
@@ -165,17 +165,17 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   rowBorder: {} as ViewStyle,
   actionLabel: {
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     fontWeight: '500',
   } as TextStyle,
   note: {
-    fontSize: typeScale.caption,
+    fontSize: fs(typeScale.caption),
     lineHeight: 19,
     marginTop: spacing.xl,
     textAlign: 'center',
   } as TextStyle,
   sheetText: {
-    fontSize: typeScale.meta,
+    fontSize: fs(typeScale.meta),
     lineHeight: 21,
     marginBottom: spacing.lg,
   } as TextStyle,

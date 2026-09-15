@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp, RootStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { palette } from '../../constants/colors';
-import { radius, spacing, typeScale } from '../../constants/tokens';
+import { fs, radius, spacing, typeScale } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { ScreenHeader } from '../../components';
@@ -78,17 +78,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   } as ViewStyle,
   brandName: {
-    fontSize: typeScale.display,
+    fontSize: fs(typeScale.display),
     fontWeight: '800',
     letterSpacing: 2,
     marginTop: spacing.lg,
   } as TextStyle,
   brandSlogan: {
-    fontSize: typeScale.meta,
+    fontSize: fs(typeScale.meta),
     marginTop: spacing.xs,
   } as TextStyle,
   version: {
-    fontSize: typeScale.caption,
+    fontSize: fs(typeScale.caption),
     marginTop: spacing.sm,
     opacity: 0.7,
   } as TextStyle,
@@ -96,12 +96,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
   } as ViewStyle,
   coreTitle: {
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     fontWeight: '700',
     marginBottom: spacing.md,
   } as TextStyle,
   coreText: {
-    fontSize: typeScale.meta,
+    fontSize: fs(typeScale.meta),
     lineHeight: 22,
     marginBottom: spacing.md,
   } as TextStyle,

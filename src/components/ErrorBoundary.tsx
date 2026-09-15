@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { fs } from '../constants/tokens';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -101,14 +102,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
-    fontSize: 24,
+    fontSize: fs(24),
     fontWeight: '700',
     color: '#0f172a',
     marginBottom: 12,
     textAlign: 'center',
   },
   message: {
-    fontSize: 16,
+    fontSize: fs(16),
     color: '#64748b',
     textAlign: 'center',
     marginBottom: 24,
@@ -123,13 +124,13 @@ const styles = StyleSheet.create({
     maxHeight: 200,
   },
   errorTitle: {
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '700',
     color: '#991b1b',
     marginBottom: 8,
   },
   errorText: {
-    fontSize: 12,
+    fontSize: fs(12),
     color: '#991b1b',
     fontFamily: 'monospace',
   },
@@ -149,7 +150,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '700',
   },
 });

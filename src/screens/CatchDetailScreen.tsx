@@ -33,7 +33,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { ScreenHeader, HeaderIconButton } from '../components';
 import { palette } from '../constants/colors';
-import { font, radius, spacing } from '../constants/tokens';
+import { font, fs, radius, spacing } from '../constants/tokens';
 import {
   formatCaptureFull,
   formatCaptureStamp,
@@ -329,6 +329,7 @@ export const CatchDetailScreen: React.FC = () => {
         <WaterBackdrop />
         <View style={[styles.wrap, { paddingTop: insets.top + spacing.xl }]}>
           <EmptyState
+            variant="memory"
             title="没有找到这条鱼获"
             description="它可能已经不在你的收藏里了"
             actionLabel="回到我的渔获"
@@ -768,7 +769,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   } as ViewStyle,
   heroPlaceholderText: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
   // ---------------------------------------------------------------------
   // 鱼名 + 数据卡（与照片卡片间隔排列，不重叠）
@@ -790,7 +791,7 @@ const styles = StyleSheet.create({
   speciesName: {
     flexShrink: 1,
     fontFamily: font.serif,
-    fontSize: 23,
+    fontSize: fs(23),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
@@ -826,24 +827,24 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   statValue: {
     fontFamily: font.serif,
-    fontSize: 22,
+    fontSize: fs(22),
     fontWeight: '600',
     lineHeight: 27,
   } as TextStyle,
   statTextValue: {
     flexShrink: 1,
     fontFamily: font.serif,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '600',
     paddingBottom: 3,
     lineHeight: 21,
   } as TextStyle,
   statUnit: {
-    fontSize: 12,
+    fontSize: fs(12),
     paddingBottom: 3,
   } as TextStyle,
   statLabel: {
-    fontSize: 12,
+    fontSize: fs(12),
     letterSpacing: 2,
     marginTop: 6,
   } as TextStyle,
@@ -860,7 +861,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   timeValue: {
     fontFamily: font.serif,
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '600',
     letterSpacing: 1,
     paddingBottom: 1,
@@ -882,26 +883,26 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   } as ViewStyle,
   infoLabel: {
-    fontSize: 13,
+    fontSize: fs(13),
     width: 62,
   } as TextStyle,
   infoValueSerif: {
     fontFamily: font.serif,
-    fontSize: 17,
+    fontSize: fs(17),
     fontWeight: '600',
     letterSpacing: 1,
     flex: 1,
     textAlign: 'right',
   } as TextStyle,
   infoValue: {
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '500',
     flex: 1,
     textAlign: 'right',
   } as TextStyle,
   inlineInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: fs(15),
     textAlign: 'right',
     paddingVertical: 0,
   } as TextStyle,
@@ -928,13 +929,13 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   measureInput: {
     fontFamily: font.serif,
-    fontSize: 22,
+    fontSize: fs(22),
     fontWeight: '600',
     paddingVertical: 0,
     minWidth: 60,
   } as TextStyle,
   measureUnit: {
-    fontSize: 13,
+    fontSize: fs(13),
     paddingBottom: 3,
   } as TextStyle,
   measureDivider: {
@@ -974,30 +975,30 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   panelTitle: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
   storyText: {
-    fontSize: 15,
+    fontSize: fs(15),
     lineHeight: 24,
   } as TextStyle,
   storyPlaceholder: {
     color: palette.mutedInk,
   } as TextStyle,
   storyInput: {
-    fontSize: 15,
+    fontSize: fs(15),
     lineHeight: 24,
     minHeight: 100,
     textAlignVertical: 'top',
     paddingTop: 0,
   } as TextStyle,
   voiceHint: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 6,
   } as TextStyle,
   memoryCount: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 2,
     marginBottom: spacing.md,
   } as TextStyle,
@@ -1017,10 +1018,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   } as ViewStyle,
   memoryChipText: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
   memoryEmpty: {
-    fontSize: 13,
+    fontSize: fs(13),
     lineHeight: 20,
   } as TextStyle,
   memoryLoading: {
@@ -1077,7 +1078,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   videoDurationText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: fs(10),
     fontWeight: '600',
     letterSpacing: 0.5,
   } as TextStyle,

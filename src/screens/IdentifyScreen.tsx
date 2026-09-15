@@ -22,7 +22,7 @@ import { BottomSheet } from '../components/ui/BottomSheet';
 import { PressableScale } from '../components/ui/PressableScale';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { palette } from '../constants/colors';
-import { font, spacing, typeScale } from '../constants/tokens';
+import { font, fs, spacing, typeScale } from '../constants/tokens';
 import { haptics } from '../utils/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -234,9 +234,9 @@ export const IdentifyScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* 底部：简化白环快门水平居中，相册按钮在其右侧 */}
+      {/* 底部：简化白环快门水平居中，相册按钮在其右侧（垂直位置与主页拍照按钮对齐） */}
       <View
-        style={[styles.dock, { bottom: insets.bottom + spacing.md }]}
+        style={[styles.dock, { bottom: insets.bottom + spacing.xl + 12 }]}
         pointerEvents="box-none"
       >
         <PressableScale
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: DOCK_HEIGHT + spacing.xl,
+    paddingBottom: DOCK_HEIGHT + spacing.xl + 20,
   } as ViewStyle,
   frameWrap: {
     alignItems: 'center',
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
   headline: {
     color: '#FDFEFD',
     fontFamily: font.serif,
-    fontSize: 17,
+    fontSize: fs(17),
     fontWeight: '600',
     letterSpacing: 1.5,
     ...shadowText,
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   statusWarnMark: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: fs(10),
     fontWeight: '700',
     includeFontPadding: false,
     textAlignVertical: 'center',
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
   statusText: {
     flexShrink: 1,
     color: 'rgba(251,253,252,0.92)',
-    fontSize: typeScale.caption,
+    fontSize: fs(typeScale.caption),
     ...shadowText,
   } as TextStyle,
   statusTextError: {
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   permText: {
     color: palette.mutedInk,
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     lineHeight: 24,
     marginBottom: spacing.lg,
   } as TextStyle,

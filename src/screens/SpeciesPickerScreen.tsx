@@ -18,7 +18,7 @@ import { FishGuideItem } from '../types/models';
 import { fishKnowledgeService, localGuideItems, mergeGuideItems } from '../services/fishKnowledgeService';
 import { catchMemoryService } from '../services/catchMemoryService';
 import { palette } from '../constants/colors';
-import { radius, spacing, typeScale } from '../constants/tokens';
+import { fs, radius, spacing, typeScale } from '../constants/tokens';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { RemoteImage } from '../components/RemoteImage';
 import { GlassCard } from '../components/ui/GlassCard';
@@ -43,6 +43,7 @@ export const SpeciesPickerScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [browseAll, setBrowseAll] = useState(false);
+  const [waterFilter, setWaterFilter] = useState('全部');
   const [remote, setRemote] = useState<FishGuideItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [recent, setRecent] = useState<{ key: string; name: string }[]>([]);
@@ -82,6 +83,18 @@ export const SpeciesPickerScreen: React.FC = () => {
     [remote],
   );
 
+  // 最近选择只有 key/name，封面从鱼鉴列表里补齐
+  const coverByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of all) {
+      const url = fishKnowledgeService.resolveAssetUrl(item.coverImage);
+      if (url) {
+        map.set(item.id, url);
+      }
+    }
+    return map;
+  }, [all]);
+
   const results = useMemo(() => {
     const keyword = query.trim();
     if (!keyword) {
@@ -98,6 +111,26 @@ export const SpeciesPickerScreen: React.FC = () => {
   const commonSpecies = useMemo(
     () => all.filter((item) => item.discovered).slice(0, 6),
     [all],
+  );
+
+  // 水域快捷过滤：取 category 首段（如「淡水鱼 · 鲤科」→「淡水鱼」），选项随数据生成
+  const waterOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of all) {
+      const water = item.category.split('·')[0].trim();
+      if (water) {
+        set.add(water);
+      }
+    }
+    return ['全部', ...Array.from(set)];
+  }, [all]);
+
+  const filteredAll = useMemo(
+    () =>
+      waterFilter === '全部'
+        ? all
+        : all.filter((item) => item.category.split('·')[0].trim() === waterFilter),
+    [all, waterFilter],
   );
 
   const complete = (key: string, name: string) => {
@@ -148,6 +181,41 @@ export const SpeciesPickerScreen: React.FC = () => {
           ) : null}
         </View>
 
+        {/* 浏览全部时的水域快捷过滤胶囊 */}
+        {showingAll ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterBar}
+            contentContainerStyle={styles.filterBarContent}
+          >
+            {waterOptions.map((option) => {
+              const active = waterFilter === option;
+              return (
+                <PressableScale
+                  key={option}
+                  onPress={() => setWaterFilter(option)}
+                  scaleTo={0.94}
+                >
+                  <View
+                    style={[
+                      styles.filterPill,
+                      {
+                        backgroundColor: active ? '#1F4A56' : profile.surface.glassStrong,
+                        borderColor: active ? '#1F4A56' : 'rgba(255,255,255,0.5)',
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.filterPillText, { color: active ? '#FFFFFF' : textSecondary }]}>
+                      {option}
+                    </Text>
+                  </View>
+                </PressableScale>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
         {loading && all.length === 0 ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator color={profile.surface.accent} />
@@ -187,7 +255,7 @@ export const SpeciesPickerScreen: React.FC = () => {
           )
         ) : showingAll ? (
           <View style={styles.listGap}>
-            {all.map((item) => (
+            {filteredAll.map((item) => (
               <SpeciesRow
                 key={item.id}
                 item={item}
@@ -202,20 +270,28 @@ export const SpeciesPickerScreen: React.FC = () => {
             {recent.length > 0 ? (
               <>
                 <SectionLabel text="最近选择" color={textSecondary} />
-                <View style={styles.listGap}>
+                <View style={styles.recentRow}>
                   {recent.slice(0, 4).map((item) => (
                     <PressableScale
                       key={item.key}
                       onPress={() => complete(item.key, item.name)}
-                      scaleTo={0.99}
+                      scaleTo={0.94}
+                      style={styles.recentCardHit}
                     >
-                      <GlassCard style={styles.simpleRow}>
-                        <FishGlyph size={18} color={profile.surface.accent} />
-                        <Text style={[styles.simpleName, { color: textPrimary }]}>{item.name}</Text>
-                        <Icon name="chevron-forward" size={16} color={textSecondary} />
+                      <GlassCard noPadding style={styles.recentCard}>
+                        <SpeciesThumb url={coverByKey.get(item.key)} size={46} />
+                        <Text style={[styles.recentName, { color: textPrimary }]} numberOfLines={1}>
+                          {item.name}
+                        </Text>
                       </GlassCard>
                     </PressableScale>
                   ))}
+                  {/* 不足 4 张时用空位补齐，卡片固定 1/4 宽不拉伸 */}
+                  {Array.from({ length: Math.max(0, 4 - Math.min(recent.length, 4)) }).map(
+                    (_, index) => (
+                      <View key={`recent-filler-${index}`} style={styles.recentFiller} />
+                    ),
+                  )}
                 </View>
               </>
             ) : null}
@@ -251,6 +327,19 @@ const SectionLabel: React.FC<{ text: string; color: string }> = ({ text, color }
   <Text style={[styles.sectionLabel, { color }]}>{text}</Text>
 );
 
+/** 鱼种缩略图：鱼鉴封面透明展示（无底色盒子），没有封面时退回鱼形图标 */
+const SpeciesThumb: React.FC<{ url?: string; size: number }> = ({ url, size }) => {
+  const thumbStyle = { width: size, height: Math.round(size * 0.75) };
+  if (url) {
+    return <RemoteImage url={url} style={thumbStyle} resizeMode="contain" />;
+  }
+  return (
+    <View style={[thumbStyle, styles.speciesImageFallback]}>
+      <FishGlyph size={Math.round(size * 0.42)} color={palette.waterTeal} />
+    </View>
+  );
+};
+
 const SpeciesRow: React.FC<{
   item: FishGuideItem;
   textPrimary: string;
@@ -262,7 +351,7 @@ const SpeciesRow: React.FC<{
     <PressableScale onPress={onPress} scaleTo={0.99} style={styles.rowHit}>
       <GlassCard style={styles.speciesRow}>
         {imageUrl ? (
-          <RemoteImage url={imageUrl} style={styles.speciesImage} resizeMode="cover" />
+          <RemoteImage url={imageUrl} style={styles.speciesImage} resizeMode="contain" />
         ) : (
           <View style={[styles.speciesImage, styles.speciesImageFallback]}>
             <FishGlyph size={20} color={palette.waterTeal} />
@@ -305,8 +394,27 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   searchInput: {
     flex: 1,
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     paddingVertical: 0,
+  } as TextStyle,
+  filterBar: {
+    flexGrow: 0,
+    marginTop: spacing.md,
+  } as ViewStyle,
+  filterBarContent: {
+    gap: spacing.sm,
+    paddingRight: spacing.xs,
+  } as ViewStyle,
+  filterPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 7,
+  } as ViewStyle,
+  filterPillText: {
+    fontSize: fs(typeScale.meta),
+    fontWeight: '600',
+    letterSpacing: 1,
   } as TextStyle,
   loadingWrap: {
     paddingVertical: spacing.xxl,
@@ -316,7 +424,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   } as ViewStyle,
   sectionLabel: {
-    fontSize: typeScale.meta,
+    fontSize: fs(typeScale.meta),
     fontWeight: '600',
     letterSpacing: 1,
     marginTop: spacing.xl,
@@ -333,11 +441,11 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   } as ViewStyle,
   speciesImage: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.s,
+    width: 56,
+    height: 40,
   } as ViewStyle,
   speciesImageFallback: {
+    borderRadius: radius.s,
     backgroundColor: palette.softWater,
     alignItems: 'center',
     justifyContent: 'center',
@@ -346,35 +454,46 @@ const styles = StyleSheet.create({
     flex: 1,
   } as ViewStyle,
   speciesName: {
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     fontWeight: '600',
   } as TextStyle,
   speciesAliases: {
-    fontSize: typeScale.caption,
+    fontSize: fs(typeScale.caption),
     marginTop: 2,
   } as TextStyle,
-  simpleRow: {
+  recentRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: 13,
-    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
   } as ViewStyle,
-  simpleName: {
+  recentCardHit: {
     flex: 1,
-    fontSize: typeScale.body,
+  } as ViewStyle,
+  recentFiller: {
+    flex: 1,
+  } as ViewStyle,
+  recentCard: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: spacing.sm + 4,
+    paddingHorizontal: spacing.xs,
+  } as ViewStyle,
+  recentName: {
+    fontSize: fs(typeScale.caption),
     fontWeight: '600',
+    alignSelf: 'stretch',
+    textAlign: 'center',
   } as TextStyle,
   noResult: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
   } as ViewStyle,
   noResultTitle: {
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     fontWeight: '600',
   } as TextStyle,
   noResultText: {
-    fontSize: typeScale.meta,
+    fontSize: fs(typeScale.meta),
     textAlign: 'center',
     marginTop: spacing.sm,
     lineHeight: 20,
@@ -385,7 +504,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   } as ViewStyle,
   browseText: {
-    fontSize: typeScale.meta,
+    fontSize: fs(typeScale.meta),
     fontWeight: '600',
   } as TextStyle,
 });

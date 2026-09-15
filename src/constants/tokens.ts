@@ -1,9 +1,26 @@
-import { Platform } from 'react-native';
+import { PixelRatio, Platform } from 'react-native';
 
 /**
  * 渔见 Design Tokens（对应《渔见 UI/UX 开发指导》04 章）。
  * 开发初始值；最终视觉数值以 Figma Token 为准。
  */
+
+// ---------------------------------------------------------------------------
+// 全局字号缩放（唯一调节入口）
+// ---------------------------------------------------------------------------
+
+/** 系统字体放大（华为等机型“字体大小/显示大小”默认偏大时 > 1），封顶 1 不让系统再放大 */
+const systemFontScale = Math.max(1, PixelRatio.getFontScale());
+
+/** 全局字号收紧系数：整体偏大收紧一点；Android 默认字体视觉更粗更大，收得略多 */
+const FONT_SCALE = Platform.select({ ios: 0.92, android: 0.88, default: 0.9 });
+
+/**
+ * 统一字号出口：所有 `fontSize` 一律写成 `fs(N)`（设计稿原始值）。
+ * 要整体调大调小，只改 FONT_SCALE 一个值；typeScale 保持设计稿语义值不变。
+ */
+export const fs = (size: number): number =>
+  Math.round((size * FONT_SCALE) / systemFontScale);
 
 // ---------------------------------------------------------------------------
 // 字体（参考稿：品牌 / 标题 / 鱼名 / 数字使用衬线，正文使用系统无衬线）

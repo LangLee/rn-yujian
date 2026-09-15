@@ -3,7 +3,7 @@ import { StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
-import { spacing } from '../../constants/tokens';
+import { fs, spacing } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { ScreenHeader } from '../../components';
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   } as ViewStyle,
   segmentText: {
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '500',
   } as TextStyle,
   segmentTextActive: {

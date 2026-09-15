@@ -12,6 +12,7 @@ import {
   AuthTextButton,
 } from '../components/AuthLayout';
 import { RootStackParamList } from '../navigation/types';
+import { fs } from '../constants/tokens';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -100,12 +101,12 @@ const styles = StyleSheet.create({
   },
   forgotText: {
     color: '#6A7D86',
-    fontSize: 14,
+    fontSize: fs(14),
   },
   forgotNote: {
     textAlign: 'center',
     color: '#9AACB0',
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: -2,
   },
 });

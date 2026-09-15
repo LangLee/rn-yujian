@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { AlertButton } from '../utils/alert';
+import { fs } from '../constants/tokens';
 
 interface CustomAlertProps {
   visible: boolean;
@@ -133,7 +134,7 @@ const styles = StyleSheet.create({
     }),
   },
   title: {
-    fontSize: 24,
+    fontSize: fs(24),
     fontWeight: '600',
     lineHeight: 32,
     paddingHorizontal: 20,
@@ -142,7 +143,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   message: {
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
     lineHeight: 24,
     letterSpacing: 0.15,
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   buttonText: {
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '600',
     lineHeight: 24,
     letterSpacing: 0.5,

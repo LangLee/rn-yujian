@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Image,
+  ImageStyle,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,8 +19,7 @@ import {
   mergeGuideItems,
 } from '../services/fishKnowledgeService';
 import { RemoteImage } from '../components/RemoteImage';
-import { palette } from '../constants/colors';
-import { font, radius, spacing } from '../constants/tokens';
+import { font, fs, radius, spacing } from '../constants/tokens';
 import { FishGuideItem } from '../types/models';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { WaterBackdrop } from '../components/WaterBackdrop';
@@ -162,6 +163,7 @@ export const FishGuideHomeScreen: React.FC = () => {
         ) : searching ? (
           searchResults.length === 0 ? (
             <EmptyState
+              variant="search"
               title="没有找到这个鱼种"
               description="可以试试其他名称，或清空搜索浏览全部鱼种。"
               actionLabel="清空搜索"
@@ -225,13 +227,11 @@ const SpeciesCard: React.FC<{
   return (
     <PressableScale onPress={onOpen} scaleTo={0.98} style={styles.cardHit}>
       <View style={[styles.card, { borderColor: 'rgba(255,255,255,0.55)' }]}>
-        <View style={[styles.imageWrap, !fish.discovered && styles.imageDim]}>
+        <View style={styles.imageWrap}>
           {imageUrl ? (
-            <RemoteImage url={imageUrl} style={styles.image} resizeMode="cover" />
+            <RemoteImage url={imageUrl} style={styles.image} resizeMode="contain" />
           ) : (
-            <View style={[styles.image, styles.imageFallback]}>
-              <Text style={styles.fallbackText}>{fish.nameCn.slice(0, 1)}</Text>
-            </View>
+            <Image source={DEFAULT_FISH_COVER} style={styles.image} resizeMode="contain" />
           )}
         </View>
         <View style={styles.cardBody}>
@@ -255,6 +255,9 @@ function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
+/** 无封面鱼种的默认图：鱼鉴水墨鱼插画（479×200，与卡片图区比例一致） */
+const DEFAULT_FISH_COVER = require('../assets/fish.png');
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -276,12 +279,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   heroTitle: {
     fontFamily: font.serif,
-    fontSize: 30,
+    fontSize: fs(30),
     fontWeight: '700',
     letterSpacing: 10,
   } as TextStyle,
   heroSub: {
-    fontSize: 14,
+    fontSize: fs(14),
     marginTop: 10,
   } as TextStyle,
   heroRight: {
@@ -295,12 +298,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   litCount: {
     fontFamily: font.serif,
-    fontSize: 20,
+    fontSize: fs(20),
     fontWeight: '700',
     lineHeight: 24,
   } as TextStyle,
   litSuffix: {
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 20,
   } as TextStyle,
   progressTrack: {
@@ -325,11 +328,11 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   errorText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 17,
   } as TextStyle,
   retryText: {
-    fontSize: 13,
+    fontSize: fs(13),
     fontWeight: '600',
   } as TextStyle,
   searchWrap: {
@@ -345,11 +348,11 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: fs(15),
     paddingVertical: 0,
   } as TextStyle,
   stateText: {
-    fontSize: 13,
+    fontSize: fs(13),
     textAlign: 'center',
     paddingVertical: spacing.xl,
   } as TextStyle,
@@ -358,7 +361,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   sectionTitle: {
     fontFamily: font.serif,
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '600',
     letterSpacing: 2,
     marginBottom: spacing.sm,
@@ -385,39 +388,26 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   imageWrap: {
     width: '100%',
-    height: 62,
-    backgroundColor: 'rgba(220,238,235,0.4)',
-  } as ViewStyle,
-  imageDim: {
-    opacity: 0.55,
+    height: 68,
   } as ViewStyle,
   image: {
     width: '100%',
     height: '100%',
-  } as ViewStyle,
-  imageFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as ViewStyle,
-  fallbackText: {
-    fontFamily: font.serif,
-    fontSize: 20,
-    color: palette.waterTeal,
-  } as TextStyle,
+  } as ImageStyle,
   cardBody: {
     paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 7,
-    gap: 2,
+    paddingVertical: 4,
+    gap: 1,
   } as ViewStyle,
   cardName: {
     fontFamily: font.serif,
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '700',
     letterSpacing: 1,
     color: '#1F4A56',
   } as TextStyle,
   cardMeta: {
-    fontSize: 10,
+    fontSize: fs(10),
     letterSpacing: 0.5,
   } as TextStyle,
 });

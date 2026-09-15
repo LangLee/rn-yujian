@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Image, ImageStyle, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { Image, ImageStyle, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -7,10 +7,8 @@ import { useRecognition } from '../contexts/RecognitionContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { GlassCard } from '../components/ui/GlassCard';
-import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { EmptyState } from '../components/ui/EmptyState';
-import { palette } from '../constants/colors';
-import { spacing, typeScale } from '../constants/tokens';
+import { spacing } from '../constants/tokens';
 import { FishInputStatusWire } from '../types/models';
 import { RootStackParamList } from '../navigation/types';
 import { toFileUri } from '../utils/fileUri';
@@ -89,24 +87,16 @@ export const RecognitionIssueScreen: React.FC = () => {
           </GlassCard>
         ) : null}
         <EmptyState
+          variant="memory"
           title="这次没能认出来"
           description={copy.body}
+          actionLabel="重新识别"
+          onAction={() => navigation.replace('Recognizing')}
+          secondaryActionLabel="重新拍摄或从相册选择"
+          onSecondaryAction={() => navigation.navigate('Identify')}
+          footnote="这张照片还在，不会丢失"
           style={styles.empty}
         />
-        <PrimaryButton
-          label="重新识别"
-          onPress={() => navigation.replace('Recognizing')}
-          style={styles.primary}
-        />
-        <PrimaryButton
-          label="重新拍摄或从相册选择"
-          variant="ghost"
-          onPress={() => navigation.navigate('Identify')}
-          style={styles.secondary}
-        />
-        <Text style={[styles.keepNote, { color: profile.surface.textSecondary }]}>
-          这张照片还在，不会丢失
-        </Text>
       </View>
     </View>
   );
@@ -131,15 +121,4 @@ const styles = StyleSheet.create({
   empty: {
     paddingTop: spacing.md,
   } as ViewStyle,
-  primary: {
-    marginTop: spacing.md,
-  } as ViewStyle,
-  secondary: {
-    marginTop: spacing.sm,
-  } as ViewStyle,
-  keepNote: {
-    textAlign: 'center',
-    marginTop: spacing.lg,
-    fontSize: typeScale.caption,
-  } as TextStyle,
 });

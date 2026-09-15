@@ -26,7 +26,7 @@ import { useCatchArchive } from '../contexts/CatchContext';
 import { usePreferences } from '../contexts/PreferencesContext';
 import { RemoteCatch } from '../types/models';
 import { palette } from '../constants/colors';
-import { font, spacing } from '../constants/tokens';
+import { font, fs, spacing } from '../constants/tokens';
 import { countDistinctDays, formatCaptureWhen, formatLength, formatWeight } from '../utils/formatters';
 import { catchMemoryService, CatchMemoryData } from '../services/catchMemoryService';
 import { homeFeedback } from '../services/homeFeedback';
@@ -245,6 +245,7 @@ export const HomeScreen: React.FC = () => {
           </View>
         ) : visibleCatches.length === 0 ? (
           <EmptyState
+            variant="home"
             title="第一条鱼，会从这里开始"
             description="拍下你的渔获，渔见会安静地帮你认出它、收藏它"
             style={[styles.empty, styles.pageInset]}
@@ -534,13 +535,13 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   brand: {
     fontFamily: font.serif,
-    fontSize: 48,
+    fontSize: fs(48),
     fontWeight: '700',
     letterSpacing: 14,
     lineHeight: 56,
   } as TextStyle,
   brandSub: {
-    fontSize: 13,
+    fontSize: fs(13),
     letterSpacing: 3,
     marginTop: 6,
     opacity: 0.85,
@@ -568,13 +569,13 @@ const styles = StyleSheet.create({
   statCell: { flex: 1, alignItems: 'center' } as ViewStyle,
   statValue: {
     fontFamily: font.sans,
-    fontSize: 22,
+    fontSize: fs(22),
     fontWeight: '400',
     letterSpacing: 1,
     lineHeight: 24,
     textAlign: 'center',
   } as TextStyle,
-  statLabel: { fontSize: 13, letterSpacing: 1.5, marginTop: 3, textAlign: 'center' } as TextStyle,
+  statLabel: { fontSize: fs(13), letterSpacing: 1.5, marginTop: 3, textAlign: 'center' } as TextStyle,
 
   // 加载 / 空态
   loadingCard: {
@@ -584,7 +585,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxl,
     borderWidth: 1,
   } as ViewStyle,
-  loadingText: { fontSize: 13 } as TextStyle,
+  loadingText: { fontSize: fs(13) } as TextStyle,
   empty: { marginTop: spacing.xxl } as ViewStyle,
 
   // 轮播：通栏无页面留白，两侧留白仅用于首末卡居中
@@ -617,7 +618,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   cardFallbackText: {
     fontFamily: font.serif,
-    fontSize: 22,
+    fontSize: fs(22),
     color: palette.waterTeal,
     letterSpacing: 4,
   } as TextStyle,
@@ -631,7 +632,7 @@ const styles = StyleSheet.create({
     gap: 8,
   } as ViewStyle,
   cardKicker: {
-    fontSize: 13,
+    fontSize: fs(13),
     fontWeight: '400',
     letterSpacing: 4,
     color: '#F2EDE3',
@@ -642,7 +643,7 @@ const styles = StyleSheet.create({
   } as TextStyle,
   cardName: {
     fontFamily: font.sans,
-    fontSize: 32,
+    fontSize: fs(32),
     fontWeight: '600',
     letterSpacing: 2,
     color: '#FFFFFF',
@@ -658,7 +659,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   cardMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 } as ViewStyle,
   cardMetaText: {
-    fontSize: 13,
+    fontSize: fs(13),
     color: 'rgba(255,255,255,0.82)',
     letterSpacing: 0.5,
     textShadowColor: 'rgba(8,28,38,0.4)',

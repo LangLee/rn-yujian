@@ -26,18 +26,25 @@ import {
   CatchSaveDraft,
   FeedbackDraft,
   FeedbackTypeWire,
+  FishGuideItem,
   RecognitionCandidate,
 } from '../types/models';
 import { catchService } from '../services/catchService';
 import { recognitionService } from '../services/recognitionService';
+import {
+  fishKnowledgeService,
+  localGuideItems,
+  mergeGuideItems,
+} from '../services/fishKnowledgeService';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { PressableScale } from '../components/ui/PressableScale';
+import { RemoteImage } from '../components/RemoteImage';
 import { ScreenHeader } from '../components';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { RadioDot } from '../components/ui/RadioDot';
 import { FishGlyph } from '../components/ui/FishGlyph';
 import { palette } from '../constants/colors';
-import { font, radius, spacing } from '../constants/tokens';
+import { font, fs, radius, spacing } from '../constants/tokens';
 import { toFileUri } from '../utils/fileUri';
 import { haptics } from '../utils/haptics';
 import { speciesPickerHub } from '../utils/speciesPickerHub';
@@ -164,6 +171,34 @@ export const RecognitionResultScreen: React.FC = () => {
     () => prediction?.candidates.slice(0, 3) ?? [],
     [prediction],
   );
+
+  // 候选 / 手动选择行缩略图：按 speciesKey 从鱼鉴封面补齐（离线时退回本地鱼种）
+  const [guideCovers, setGuideCovers] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      let items: FishGuideItem[];
+      try {
+        items = mergeGuideItems(await fishKnowledgeService.listSpecies());
+      } catch {
+        items = localGuideItems();
+      }
+      if (!mounted) {
+        return;
+      }
+      const covers: Record<string, string> = {};
+      for (const item of items) {
+        const url = fishKnowledgeService.resolveAssetUrl(item.coverImage);
+        if (url) {
+          covers[item.id] = url;
+        }
+      }
+      setGuideCovers(covers);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const pickSpecies = useCallback(async () => {
     navigation.navigate('SpeciesPicker', { title: '选择鱼种' });
@@ -406,7 +441,15 @@ export const RecognitionResultScreen: React.FC = () => {
                           ]}
                         >
                           <View style={styles.candidateGlyph}>
-                            <FishGlyph size={24} color={active ? GOLD : palette.fishGreen} />
+                            {guideCovers[candidate.speciesKey] ? (
+                              <RemoteImage
+                                url={guideCovers[candidate.speciesKey]}
+                                style={styles.candidateThumb}
+                                resizeMode="contain"
+                              />
+                            ) : (
+                              <FishGlyph size={24} color={active ? GOLD : palette.fishGreen} />
+                            )}
                           </View>
                           <Text style={[styles.candidateName, { color: textPrimary }]} numberOfLines={1}>
                             {candidate.speciesName}
@@ -456,7 +499,15 @@ export const RecognitionResultScreen: React.FC = () => {
                 </Text>
                 <PressableScale onPress={pickSpecies} scaleTo={0.98} style={styles.manualHit}>
                   <View style={[styles.manualRow, { backgroundColor: rowIdleBg }]} pointerEvents="none">
-                    <FishGlyph size={22} color={palette.fishGreen} />
+                    {selectedKey && selectedKey !== UNKNOWN_KEY && guideCovers[selectedKey] ? (
+                      <RemoteImage
+                        url={guideCovers[selectedKey]}
+                        style={styles.candidateThumb}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <FishGlyph size={22} color={palette.fishGreen} />
+                    )}
                     <Text style={[styles.candidateName, { color: textPrimary, flex: 1 }]}>
                       手动选择鱼种
                     </Text>
@@ -642,7 +693,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   name: {
     fontFamily: font.serif,
-    fontSize: 22,
+    fontSize: fs(22),
     fontWeight: '700',
     letterSpacing: 2,
     flexShrink: 1,
@@ -660,13 +711,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   } as ViewStyle,
   editChipText: {
-    fontSize: 11,
+    fontSize: fs(11),
     fontWeight: '600',
     letterSpacing: 1,
   } as TextStyle,
   panelTitle: {
     fontFamily: font.serif,
-    fontSize: 19,
+    fontSize: fs(19),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
@@ -674,7 +725,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   } as TextStyle,
   panelSub: {
-    fontSize: 13,
+    fontSize: fs(13),
     marginTop: 4,
   } as TextStyle,
   panelSubCenter: {
@@ -696,7 +747,7 @@ const styles = StyleSheet.create({
   questionMark: {
     position: 'absolute',
     fontFamily: font.serif,
-    fontSize: 20,
+    fontSize: fs(20),
     fontWeight: '700',
     color: '#FFFFFF',
   } as TextStyle,
@@ -717,13 +768,18 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   } as ViewStyle,
   candidateGlyph: {
-    width: 30,
+    width: 34,
     alignItems: 'center',
     justifyContent: 'center',
   } as ViewStyle,
+  candidateThumb: {
+    width: 34,
+    height: 26,
+    borderRadius: 6,
+  } as ImageStyle,
   candidateName: {
     fontFamily: font.serif,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
     letterSpacing: 1,
     flexShrink: 1,
@@ -736,7 +792,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   recommendText: {
     color: '#A5854D',
-    fontSize: 10,
+    fontSize: fs(10),
     fontWeight: '600',
   } as TextStyle,
   searchLinkHit: {
@@ -749,7 +805,7 @@ const styles = StyleSheet.create({
     gap: 2,
   } as ViewStyle,
   searchLinkText: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
   manualHit: {
     marginTop: spacing.sm,
@@ -763,7 +819,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   } as ViewStyle,
   pickedName: {
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '600',
     maxWidth: 72,
   } as TextStyle,
@@ -799,32 +855,32 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   metaInput: {
     fontFamily: font.serif,
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '700',
     paddingVertical: 0,
     minWidth: 34,
     textAlign: 'center',
   } as TextStyle,
   metaInputLocation: {
-    fontSize: 13,
+    fontSize: fs(13),
     minWidth: 0,
     flexShrink: 1,
   } as TextStyle,
   metaUnit: {
-    fontSize: 11,
+    fontSize: fs(11),
   } as TextStyle,
   metaLabel: {
-    fontSize: 11,
+    fontSize: fs(11),
   } as TextStyle,
   errorText: {
     textAlign: 'center',
     marginTop: spacing.sm,
-    fontSize: 12,
+    fontSize: fs(12),
   } as TextStyle,
   slowHint: {
     textAlign: 'center',
     marginTop: spacing.sm,
-    fontSize: 12,
+    fontSize: fs(12),
   } as TextStyle,
   saveButton: {
     marginTop: spacing.md,
@@ -844,6 +900,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   } as ViewStyle,
   textLink: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
 });

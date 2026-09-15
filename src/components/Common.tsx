@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { palette } from '../constants/colors';
+import { fs } from '../constants/tokens';
 
 interface YujianTopBarProps {
   title: string;
@@ -87,12 +88,12 @@ const styles = StyleSheet.create({
   },
   title: {
     color: palette.deepInk,
-    fontSize: 22,
+    fontSize: fs(22),
     fontWeight: '700',
   } as TextStyle,
   subtitle: {
     color: palette.mutedInk,
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 2,
   } as TextStyle,
   chip: {
@@ -102,12 +103,12 @@ const styles = StyleSheet.create({
   },
   chipText: {
     color: palette.deepInk,
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '500',
   } as TextStyle,
   chipTextEmphasized: {
     color: palette.waterTeal,
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '600',
   } as TextStyle,
 });

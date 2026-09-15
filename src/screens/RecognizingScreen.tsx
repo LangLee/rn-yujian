@@ -9,7 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { FishScanFrame } from '../components/FishScanFrame';
 import { WaterBackdrop } from '../components/WaterBackdrop';
 import { palette } from '../constants/colors';
-import { font, spacing, typeScale } from '../constants/tokens';
+import { font, fs, spacing, typeScale } from '../constants/tokens';
 
 type RecognizingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Recognizing'>;
 
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#FDFEFD',
     fontFamily: font.serif,
-    fontSize: 24,
+    fontSize: fs(24),
     fontWeight: '600',
     letterSpacing: 3,
     ...shadowText,
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: spacing.sm,
     color: 'rgba(250,252,251,0.82)',
-    fontSize: typeScale.meta + 1,
+    fontSize: fs(typeScale.meta + 1),
     letterSpacing: 1.5,
     ...shadowText,
   } as TextStyle,
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
   phase: {
     marginLeft: spacing.sm,
     fontFamily: font.serif,
-    fontSize: typeScale.body + 1,
+    fontSize: fs(typeScale.body + 1),
     fontWeight: '600',
     letterSpacing: 2,
     ...shadowText,
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
   statusHint: {
     marginTop: spacing.sm,
     color: 'rgba(250,252,251,0.66)',
-    fontSize: typeScale.meta,
+    fontSize: fs(typeScale.meta),
     letterSpacing: 1,
     textAlign: 'center',
     ...shadowText,
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   tipText: {
     marginLeft: spacing.sm - 2,
     color: 'rgba(243,246,244,0.88)',
-    fontSize: typeScale.meta - 1,
+    fontSize: fs(typeScale.meta - 1),
     letterSpacing: 0.5,
   } as TextStyle,
 });

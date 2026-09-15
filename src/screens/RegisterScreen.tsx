@@ -12,6 +12,7 @@ import {
   AuthTextButton,
 } from '../components/AuthLayout';
 import { RootStackParamList } from '../navigation/types';
+import { fs } from '../constants/tokens';
 
 type RegisterScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Register'>;
 
@@ -115,11 +116,11 @@ const styles = {
   },
   agreementText: {
     color: '#8AA0A6',
-    fontSize: 12,
+    fontSize: fs(12),
   },
   agreementLink: {
     color: '#4D9EA1',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '500',
   },
 } as const;

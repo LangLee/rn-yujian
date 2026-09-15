@@ -11,7 +11,7 @@ import {
   ThemePreference,
 } from '../../constants/environments';
 import { palette } from '../../constants/colors';
-import { radius, spacing, typeScale } from '../../constants/tokens';
+import { fs, radius, spacing, typeScale } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { PressableScale } from '../../components/ui/PressableScale';
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     flex: 1,
   } as ViewStyle,
   optionLabel: {
-    fontSize: typeScale.body,
+    fontSize: fs(typeScale.body),
     fontWeight: '600',
     color: '#173B4B',
   } as TextStyle,
@@ -200,12 +200,12 @@ const styles = StyleSheet.create({
     color: palette.waterTeal,
   } as TextStyle,
   optionHint: {
-    fontSize: typeScale.caption,
+    fontSize: fs(typeScale.caption),
     color: '#6A7D86',
     marginTop: 2,
   } as TextStyle,
   note: {
-    fontSize: typeScale.caption,
+    fontSize: fs(typeScale.caption),
     color: '#6A7D86',
     lineHeight: 19,
     marginTop: spacing.xl,

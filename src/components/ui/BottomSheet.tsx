@@ -11,7 +11,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { motion, radius, spacing } from '../../constants/tokens';
+import { fs, motion, radius, spacing } from '../../constants/tokens';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface BottomSheetProps {
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   } as ViewStyle,
   title: {
-    fontSize: 17,
+    fontSize: fs(17),
     fontWeight: '700',
     marginTop: spacing.xs,
     marginBottom: spacing.md,

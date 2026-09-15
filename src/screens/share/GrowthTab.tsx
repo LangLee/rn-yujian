@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useCatchArchive } from '../../contexts/CatchContext';
-import { font, spacing } from '../../constants/tokens';
+import { font, fs, spacing } from '../../constants/tokens';
 import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryService';
 import {
   buildGrowthSummary,
@@ -87,6 +87,7 @@ export const GrowthTab: React.FC = () => {
         >
           <HeroHeader textPrimary={textPrimary} textSecondary={textSecondary} />
           <EmptyState
+            variant="memory"
             title="你的成长历程会收藏在这里"
             description="从第一条记录开始，新鱼种、新纪录和坚持都会被记住"
             actionLabel="拍照识鱼"
@@ -327,12 +328,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   heroTitle: {
     fontFamily: font.serif,
-    fontSize: 26,
+    fontSize: fs(26),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
   heroSubtitle: {
-    fontSize: 13.5,
+    fontSize: fs(13.5),
     marginTop: 6,
   } as TextStyle,
   statsCard: {
@@ -356,11 +357,11 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   statValue: {
     fontFamily: font.serif,
-    fontSize: 26,
+    fontSize: fs(26),
     fontWeight: '700',
   } as TextStyle,
   statLabel: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 3,
   } as TextStyle,
   statsDivider: {
@@ -374,15 +375,15 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   startValue: {
     fontFamily: font.serif,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
     marginTop: 2,
   } as TextStyle,
   startLabel: {
-    fontSize: 11.5,
+    fontSize: fs(11.5),
   } as TextStyle,
   statsNote: {
-    fontSize: 10.5,
+    fontSize: fs(10.5),
     lineHeight: 16,
     marginTop: spacing.md,
     paddingTop: spacing.md,
@@ -394,7 +395,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   monthLabel: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: spacing.md,
@@ -405,7 +406,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   eventDate: {
     width: 40,
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     fontWeight: '600',
     marginTop: 12,
   } as TextStyle,
@@ -452,17 +453,17 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   } as ViewStyle,
   eventBadgeText: {
-    fontSize: 11,
+    fontSize: fs(11),
     fontWeight: '700',
   } as TextStyle,
   eventTitle: {
     fontFamily: font.serif,
-    fontSize: 17,
+    fontSize: fs(17),
     fontWeight: '700',
     letterSpacing: 0.5,
   } as TextStyle,
   eventDetail: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     lineHeight: 18,
   } as TextStyle,
   eventLocationRow: {
@@ -472,7 +473,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   } as ViewStyle,
   eventLocation: {
-    fontSize: 12,
+    fontSize: fs(12),
     flexShrink: 1,
   } as TextStyle,
   eventThumb: {
@@ -507,11 +508,11 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   reviewTitle: {
     fontFamily: font.serif,
-    fontSize: 17,
+    fontSize: fs(17),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
   reviewDesc: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
   } as TextStyle,
 });

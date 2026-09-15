@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { font, motion, radius } from '../../constants/tokens';
+import { font, fs, motion, radius } from '../../constants/tokens';
 import { palette } from '../../constants/colors';
 import { useTheme } from '../../contexts/ThemeContext';
 import { PressableScale } from './PressableScale';
@@ -28,10 +28,13 @@ interface PrimaryButtonProps {
   savedLabel?: string;
   /** primary：水青实底；ghost：细描边胶囊；danger：危险 CTA；
    * glass：参考稿保存按钮 —— 白玻璃底 + 深青衬线字；
-   * gold：低置信度参考稿 —— 金色渐变胶囊 + 白衬线字 */
-  variant?: 'primary' | 'ghost' | 'danger' | 'glass' | 'gold';
+   * gold：低置信度参考稿 —— 金色渐变胶囊 + 白衬线字；
+   * soft：浅青绿实底胶囊 + 深字（空状态卡片内轻量 CTA） */
+  variant?: 'primary' | 'ghost' | 'danger' | 'glass' | 'gold' | 'soft';
   haptic?: HapticLevel | null;
   serif?: boolean;
+  /** 左侧图标（Ionicons 名称，如 camera-outline），与文字水平排列居中 */
+  icon?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -49,6 +52,7 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
   variant = 'primary',
   haptic = null,
   serif = false,
+  icon,
   style,
 }) => {
   const { profile } = useTheme();
@@ -87,7 +91,9 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
         ? profile.isDark
           ? 'rgba(255,255,255,0.14)'
           : 'rgba(255,255,255,0.62)'
-        : 'transparent';
+        : variant === 'soft'
+          ? profile.surface.accentSoft
+          : 'transparent';
   const textColor =
     variant === 'ghost'
       ? profile.surface.textSecondary
@@ -95,9 +101,11 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
         ? palette.qualityInvalid
         : variant === 'glass'
           ? profile.surface.textPrimary
-          : isDisabled
-            ? profile.surface.textSecondary
-            : '#FFFFFF';
+          : variant === 'soft'
+            ? profile.surface.textPrimary
+            : isDisabled
+              ? profile.surface.textSecondary
+              : '#FFFFFF';
 
   const goldBadge = variant === 'gold' ? (
     <View style={[StyleSheet.absoluteFillObject, styles.goldLayer]} pointerEvents="none">
@@ -133,29 +141,40 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
         style={[
           styles.button,
           (variant === 'glass' || variant === 'gold') && styles.glassShape,
+          variant === 'soft' && styles.softShape,
           { backgroundColor: background, borderColor },
-          variant !== 'ghost' && styles.shadow,
+          variant !== 'ghost' && variant !== 'soft' && styles.shadow,
         ]}
       >
         {goldBadge}
         {loading ? (
           <ActivityIndicator size="small" color={textColor} />
         ) : variant === 'ghost' ? (
-          <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+          <View style={styles.labelRow}>
+            {icon ? (
+              <Icon name={icon} size={17} color={textColor} style={styles.labelIcon} />
+            ) : null}
+            <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+          </View>
         ) : (
           <View style={styles.labelStack} pointerEvents="none">
             <Animated.View
               style={[styles.labelLayer, { opacity: labelOpacity }]}
             >
-              <Text
-                style={[
-                  styles.label,
-                  serif && styles.labelSerif,
-                  { color: textColor },
-                ]}
-              >
-                {label}
-              </Text>
+              <View style={styles.labelRow}>
+                {icon ? (
+                  <Icon name={icon} size={17} color={textColor} style={styles.labelIcon} />
+                ) : null}
+                <Text
+                  style={[
+                    styles.label,
+                    serif && styles.labelSerif,
+                    { color: textColor },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </View>
             </Animated.View>
             <Animated.View
               style={[styles.labelLayer, { opacity: savedOpacity }]}
@@ -190,6 +209,11 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
   } as ViewStyle,
+  /** 空状态轻量 CTA：矮一档的实底胶囊（浅青绿底 + 深字） */
+  softShape: {
+    height: 46,
+    borderRadius: 23,
+  } as ViewStyle,
   goldLayer: {
     overflow: 'hidden',
     borderRadius: 28,
@@ -202,12 +226,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   } as ViewStyle,
   label: {
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '600',
   } as TextStyle,
   labelSerif: {
     fontFamily: font.serif,
-    fontSize: 20,
+    fontSize: fs(20),
     fontWeight: '700',
     letterSpacing: 4,
   } as TextStyle,
@@ -225,6 +249,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  } as ViewStyle,
+  /** 图标 + 文字水平排列，在按钮内整体居中 */
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as ViewStyle,
+  labelIcon: {
+    marginRight: 6,
   } as ViewStyle,
 });
 

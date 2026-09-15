@@ -4,7 +4,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from './ui';
-import { font, spacing } from '../constants/tokens';
+import { font, fs, spacing } from '../constants/tokens';
 import { useTheme } from '../contexts/ThemeContext';
 
 export const HEADER_HIT = 40; // 统一的左右按钮命中区尺寸
@@ -109,12 +109,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: font.serif,
-    fontSize: 20,
+    fontSize: fs(20),
     fontWeight: '700',
     letterSpacing: 4,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 2,
   },
   right: {

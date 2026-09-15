@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  ViewStyle,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -23,7 +24,7 @@ import { TagChip } from '../components/Common';
 import { ScreenHeader } from '../components';
 import { CardCarousel, EmptyState, useCarouselCardTransform } from '../components/ui';
 import { palette } from '../constants/colors';
-import { font } from '../constants/tokens';
+import { font, fs } from '../constants/tokens';
 import { formatCaptureWhen, formatLength, formatWeight } from '../utils/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { useCatchArchive } from '../contexts/CatchContext';
@@ -451,13 +452,13 @@ const SpeciesCatchList: React.FC<{ speciesId: string; speciesName: string }> = (
 
   if (speciesCatches.length === 0) {
     return (
-      <View style={styles.placeholderCard}>
-        <EmptyState
-          title={`还没有${speciesName}的鱼获`}
-          description="拍下你的渔获，渔见会安静地帮你认出它、收藏它"
-          style={styles.placeholderInner}
-        />
-      </View>
+      <EmptyState
+        variant="fishbook"
+        cardWidth={280}
+        title={`还没有${speciesName}的鱼获`}
+        description="拍下你的渔获，渔见会安静地帮你认出它、收藏它"
+        style={styles.emptySection}
+      />
     );
   }
 
@@ -518,7 +519,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  centerText: { color: palette.mutedInk, fontSize: 14 },
+  centerText: { color: palette.mutedInk, fontSize: fs(14) },
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -540,14 +541,14 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
   },
-  errorBannerText: { flex: 1, color: '#9A5B16', fontSize: 11 },
+  errorBannerText: { flex: 1, color: '#9A5B16', fontSize: fs(11) },
   retryChip: {
     backgroundColor: palette.waterTeal,
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  retryChipText: { color: '#FFFFFF', fontSize: 12 },
+  retryChipText: { color: '#FFFFFF', fontSize: fs(12) },
 
   /* 轮播卡片 */
   carouselCardWrap: { flex: 1 },
@@ -571,7 +572,7 @@ const styles = StyleSheet.create({
   },
   cardIndexCurrent: {
     color: '#FFFFFF',
-    fontSize: 24,
+    fontSize: fs(24),
     fontWeight: '700',
     textShadowColor: 'rgba(8,28,38,0.5)',
     textShadowRadius: 8,
@@ -579,7 +580,7 @@ const styles = StyleSheet.create({
   },
   cardIndexTotal: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
+    fontSize: fs(13),
     marginBottom: 3,
     textShadowColor: 'rgba(8,28,38,0.5)',
     textShadowRadius: 8,
@@ -603,7 +604,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontFamily: font.serif,
     color: '#FFFFFF',
-    fontSize: 30,
+    fontSize: fs(30),
     fontWeight: '600',
     letterSpacing: 2,
     textShadowColor: 'rgba(8,28,38,0.55)',
@@ -618,10 +619,10 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     backgroundColor: 'rgba(8,28,38,0.25)',
   },
-  cardBadgeText: { color: cardGold, fontSize: 11, letterSpacing: 2 },
+  cardBadgeText: { color: cardGold, fontSize: fs(11), letterSpacing: 2 },
   cardSupport: {
     color: 'rgba(255,255,255,0.85)',
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 18,
     textShadowColor: 'rgba(8,28,38,0.5)',
     textShadowRadius: 8,
@@ -647,8 +648,8 @@ const styles = StyleSheet.create({
   speciesHeader: { marginTop: 14, marginHorizontal: 20 },
   speciesHeaderRow: { flexDirection: 'row', alignItems: 'center' },
   speciesHeaderText: { flex: 1 },
-  speciesTitle: { color: palette.deepInk, fontSize: 32, fontWeight: '700' },
-  speciesScientific: { color: palette.mutedInk, fontSize: 13, marginTop: 3 },
+  speciesTitle: { color: palette.deepInk, fontSize: fs(32), fontWeight: '700' },
+  speciesScientific: { color: palette.mutedInk, fontSize: fs(13), marginTop: 3 },
   bookmarkButton: {
     width: 44,
     height: 44,
@@ -671,7 +672,7 @@ const styles = StyleSheet.create({
   },
   tabItem: { flex: 1, borderRadius: 14, paddingVertical: 11, alignItems: 'center' },
   tabItemSelected: { backgroundColor: palette.deepInk },
-  tabItemText: { color: palette.mutedInk, fontSize: 12, fontWeight: '500' },
+  tabItemText: { color: palette.mutedInk, fontSize: fs(12), fontWeight: '500' },
   tabItemTextSelected: { color: '#FFFFFF', fontWeight: '700' },
 
   /* 占位 / 鱼获列表 */
@@ -683,6 +684,11 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   placeholderInner: { backgroundColor: 'transparent' },
+  /** 鱼获列表空状态：与 catchList 对齐的页面边距 */
+  emptySection: {
+    marginHorizontal: 20,
+    marginTop: 14,
+  } as ViewStyle,
   catchList: { marginHorizontal: 20, marginTop: 14, gap: 10 },
   catchRow: {
     flexDirection: 'row',
@@ -700,8 +706,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   catchBody: { flex: 1 },
-  catchName: { color: palette.deepInk, fontSize: 15, fontWeight: '600' },
-  catchDate: { color: palette.mutedInk, fontSize: 11, marginTop: 4 },
+  catchName: { color: palette.deepInk, fontSize: fs(15), fontWeight: '600' },
+  catchDate: { color: palette.mutedInk, fontSize: fs(11), marginTop: 4 },
   catchMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   catchMetaChip: {
     backgroundColor: palette.warmBackground,
@@ -709,5 +715,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  catchMetaText: { color: palette.mutedInk, fontSize: 10 },
+  catchMetaText: { color: palette.mutedInk, fontSize: fs(10) },
 });

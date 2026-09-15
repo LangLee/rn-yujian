@@ -1,6 +1,8 @@
 import React, { ReactNode, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
+  ImageStyle,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,23 +17,32 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { palette } from '../constants/colors';
-import { font } from '../constants/tokens';
-import { WaterBackdrop } from './WaterBackdrop';
+import { font, fs } from '../constants/tokens';
+import authBg from '../assets/bg/auth.jpg';
 
-const GOLD = '#C9A96A';
-const SOFT_TEAL = '#8FBDBB';
-const INK = '#2E5D68';
+const GOLD = '#D4B578';
+const BUTTON_TEAL = '#4E9490';
+const INK = '#2F5560';
 
 /**
- * 登录 / 注册公共布局（高保真参考稿）：
- * 全屏湖面环境背景，居中衬线品牌区（渔见 + 金点副标题），
- * 白玻璃输入框直接落在背景上（无大白卡）。
+ * 登录 / 注册公共布局（高保真设计稿）：
+ * 全屏晨雾湖面插画背景，居中衬线品牌区（渔见 + 金菱形副标题），
+ * 全圆角胶囊白玻璃输入框、青绿胶囊主按钮直接落在背景上（无大白卡）。
  */
 export const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, children }) => {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.flex}>
-      <WaterBackdrop />
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Image
+          source={authBg}
+          style={styles.backdropImage}
+          resizeMode="cover"
+          resizeMethod="scale"
+        />
+        {/* 轻雾白纱，保证玻璃输入框与文字在晨雾背景上可读 */}
+        <View style={[StyleSheet.absoluteFill, styles.backdropScrim]} />
+      </View>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -49,9 +60,9 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, childre
           <View style={styles.brandBlock}>
             <Text style={styles.brand}>{title}</Text>
             <View style={styles.brandSubRow}>
-              <View style={styles.goldDot} />
+              <View style={styles.goldDiamond} />
               <Text style={styles.subtitle}>{subtitle}</Text>
-              <View style={styles.goldDot} />
+              <View style={styles.goldDiamond} />
             </View>
           </View>
           <View style={styles.fields}>{children}</View>
@@ -199,6 +210,18 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   } as ViewStyle,
+  backdropImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    right: 0,
+    width: '100%',
+    height: '100%',
+  } as ImageStyle,
+  backdropScrim: {
+    backgroundColor: 'rgba(244,249,248,0.30)',
+  } as ViewStyle,
   content: {
     flexGrow: 1,
     paddingHorizontal: 28,
@@ -209,7 +232,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   brand: {
     fontFamily: font.serif,
-    fontSize: 44,
+    fontSize: fs(44),
     fontWeight: '700',
     letterSpacing: 14,
     color: INK,
@@ -221,14 +244,14 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 14,
   } as ViewStyle,
-  goldDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+  goldDiamond: {
+    width: 5,
+    height: 5,
     backgroundColor: GOLD,
+    transform: [{ rotate: '45deg' }],
   } as ViewStyle,
   subtitle: {
-    fontSize: 13,
+    fontSize: fs(13),
     letterSpacing: 4,
     color: '#5E7A82',
   } as TextStyle,
@@ -238,14 +261,14 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.78)',
-    borderColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderColor: 'rgba(255,255,255,0.95)',
     borderWidth: 1,
-    borderRadius: 15,
-    paddingHorizontal: 14,
-    height: 52,
+    borderRadius: 27,
+    paddingHorizontal: 18,
+    height: 54,
     shadowColor: '#173B4B',
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
@@ -255,13 +278,13 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: fs(15),
     color: INK,
     paddingVertical: 0,
   } as TextStyle,
   supporting: {
     color: '#8AA0A6',
-    fontSize: 11,
+    fontSize: fs(11),
     marginTop: 5,
     marginLeft: 4,
   } as TextStyle,
@@ -274,18 +297,18 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   errorText: {
     color: palette.qualityInvalid,
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 18,
   } as TextStyle,
   primaryButton: {
     height: 54,
-    borderRadius: 16,
-    backgroundColor: SOFT_TEAL,
+    borderRadius: 27,
+    backgroundColor: BUTTON_TEAL,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 10,
-    shadowColor: '#4D9EA1',
-    shadowOpacity: 0.25,
+    shadowColor: '#3F7D82',
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
@@ -295,7 +318,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: fs(17),
     fontWeight: '600',
     letterSpacing: 2,
   } as TextStyle,
@@ -307,12 +330,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   } as ViewStyle,
   linkMuted: {
-    color: '#6A7D86',
-    fontSize: 14,
+    color: '#4E646D',
+    fontSize: fs(14),
   } as TextStyle,
   linkAction: {
     color: palette.waterTeal,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
   } as TextStyle,
   footerRow: {
@@ -326,10 +349,10 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: '#9AACB0',
+    backgroundColor: '#7C8F94',
   } as ViewStyle,
   footerLink: {
-    color: '#9AACB0',
-    fontSize: 12,
+    color: '#5F747A',
+    fontSize: fs(12),
   } as TextStyle,
 });

@@ -16,7 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCatchArchive } from '../contexts/CatchContext';
 import { RemoteCatch } from '../types/models';
 import { palette } from '../constants/colors';
-import { font, radius, spacing } from '../constants/tokens';
+import { font, fs, radius, spacing } from '../constants/tokens';
 import { dayKeyOf, formatLength, formatWeight } from '../utils/formatters';
 import { catchMemoryService, CatchMemoryData } from '../services/catchMemoryService';
 import { usePreferences } from '../contexts/PreferencesContext';
@@ -196,6 +196,7 @@ export const RecordCalendarScreen: React.FC = () => {
       >
         {catches.length === 0 ? (
           <EmptyState
+            variant="today"
             title="今天还没有留下鱼获"
             description="每次去水边拍下的渔获，都会标记在这里的日子上"
             actionLabel="拍照识鱼"
@@ -678,7 +679,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   } as ViewStyle,
   todayText: {
-    fontSize: 15,
+    fontSize: fs(15),
   } as TextStyle,
   content: {
     paddingHorizontal: spacing.page,
@@ -696,7 +697,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   monthNavLabel: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '700',
     textAlign: 'center',
     minWidth: 110,
@@ -718,7 +719,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#5E8D91',
   } as ViewStyle,
   segmentText: {
-    fontSize: 13,
+    fontSize: fs(13),
     fontWeight: '600',
   } as TextStyle,
   summaryBar: {
@@ -739,11 +740,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   } as ViewStyle,
   summaryText: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
   summaryValue: {
     fontFamily: font.serif,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
   } as TextStyle,
   summaryDivider: {
@@ -764,7 +765,7 @@ const styles = StyleSheet.create({
   weekLabel: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 13,
+    fontSize: fs(13),
     paddingVertical: 8,
   } as TextStyle,
   dayCell: {
@@ -796,7 +797,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   } as ViewStyle,
   dayText: {
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '500',
   } as TextStyle,
   dayTextFaded: {
@@ -814,7 +815,7 @@ const styles = StyleSheet.create({
     gap: 1,
   } as ViewStyle,
   markerCount: {
-    fontSize: 9,
+    fontSize: fs(9),
     fontWeight: '700',
     color: '#4E838A',
   } as TextStyle,
@@ -826,16 +827,16 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   timelineTitle: {
     fontFamily: font.serif,
-    fontSize: 20,
+    fontSize: fs(20),
     fontWeight: '700',
   } as TextStyle,
   timelineSub: {
-    fontSize: 13,
+    fontSize: fs(13),
     marginTop: 4,
     paddingHorizontal: 2,
   } as TextStyle,
   timelineEmpty: {
-    fontSize: 13,
+    fontSize: fs(13),
     textAlign: 'center',
     paddingVertical: spacing.xl,
   } as TextStyle,
@@ -851,7 +852,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   } as ViewStyle,
   timelineTime: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginBottom: 6,
   } as TextStyle,
   timelineDash: {
@@ -895,12 +896,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   timelineName: {
     fontFamily: font.serif,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
   timelineMeta: {
-    fontSize: 13,
+    fontSize: fs(13),
     fontWeight: '500',
   } as TextStyle,
   timelineLocationRow: {
@@ -909,7 +910,7 @@ const styles = StyleSheet.create({
     gap: 3,
   } as ViewStyle,
   timelineLocation: {
-    fontSize: 12,
+    fontSize: fs(12),
   } as TextStyle,
   monthIndexGrid: {
     flexDirection: 'row',
@@ -944,7 +945,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   monthIndexLabel: {
     fontFamily: font.serif,
-    fontSize: 17,
+    fontSize: fs(17),
     fontWeight: '700',
   } as TextStyle,
   monthIndexTick: {
@@ -963,7 +964,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   } as ViewStyle,
   monthIndexBadgeText: {
-    fontSize: 9,
+    fontSize: fs(9),
     fontWeight: '600',
     color: GOLD,
     letterSpacing: 1,
@@ -974,7 +975,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   } as ViewStyle,
   monthIndexMeta: {
-    fontSize: 12,
+    fontSize: fs(12),
   } as TextStyle,
   monthIndexGlyphs: {
     flexDirection: 'row',
@@ -1008,18 +1009,18 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   dayAggDay: {
     fontFamily: font.serif,
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '700',
   } as TextStyle,
   dayAggMeta: {
-    fontSize: 11,
+    fontSize: fs(11),
     marginTop: 2,
   } as TextStyle,
   dayAggSpecies: {
     flex: 1,
   } as ViewStyle,
   dayAggSpeciesText: {
-    fontSize: 13,
+    fontSize: fs(13),
     lineHeight: 19,
   } as TextStyle,
   dayAggThumb: {

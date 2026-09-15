@@ -16,7 +16,7 @@ import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCatchArchive } from '../../contexts/CatchContext';
-import { font, spacing } from '../../constants/tokens';
+import { font, fs, spacing } from '../../constants/tokens';
 import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryService';
 import {
   ShareRangeKey,
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
   handNote: {
     fontFamily: font.serif,
     fontStyle: 'italic',
-    fontSize: 12,
+    fontSize: fs(12),
     textAlign: 'right',
     marginTop: spacing.xs,
     opacity: 0.8,
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   sectionTitle: {
     fontFamily: font.serif,
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
@@ -680,11 +680,11 @@ const styles = StyleSheet.create({
     gap: 3,
   } as ViewStyle,
   rangeTileLabel: {
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
   } as TextStyle,
   rangeTileCount: {
-    fontSize: 10.5,
+    fontSize: fs(10.5),
   } as TextStyle,
   templateHeader: {
     flexDirection: 'row',
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
     gap: 1,
   } as ViewStyle,
   sectionLinkText: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
   templateHit: {
     borderRadius: 18,
@@ -716,12 +716,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   templateName: {
     fontFamily: font.serif,
-    fontSize: 21,
+    fontSize: fs(21),
     fontWeight: '700',
     letterSpacing: 2,
   } as TextStyle,
   templateDesc: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     lineHeight: 18,
     marginTop: 6,
   } as TextStyle,
@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   } as ViewStyle,
   templateTagText: {
-    fontSize: 10.5,
+    fontSize: fs(10.5),
   } as TextStyle,
   templatePreviewWrap: {
     width: 128,
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     gap: 8,
   } as ViewStyle,
   optionLabel: {
-    fontSize: 14.5,
+    fontSize: fs(14.5),
     fontWeight: '600',
   } as TextStyle,
   optionRight: {
@@ -788,14 +788,14 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   } as ViewStyle,
   optionValue: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
   rowDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(23,59,75,0.1)',
   } as ViewStyle,
   emptyHint: {
-    fontSize: 12.5,
+    fontSize: fs(12.5),
     textAlign: 'center',
     marginTop: spacing.lg,
     paddingHorizontal: spacing.lg,
@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   ctaText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '700',
     letterSpacing: 3,
   } as TextStyle,
@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   } as ViewStyle,
   laterText: {
-    fontSize: 13.5,
+    fontSize: fs(13.5),
     textDecorationLine: 'underline',
     letterSpacing: 2,
   } as TextStyle,
@@ -850,7 +850,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   brandText: {
     fontFamily: font.serif,
-    fontSize: 12,
+    fontSize: fs(12),
     letterSpacing: 2,
   } as TextStyle,
   sheetRow: {
@@ -861,7 +861,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   } as ViewStyle,
   sheetRowText: {
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '600',
   } as TextStyle,
   sheetTemplateInfo: {
@@ -869,7 +869,7 @@ const styles = StyleSheet.create({
     paddingRight: spacing.md,
   } as ViewStyle,
   sheetTemplateDesc: {
-    fontSize: 12,
+    fontSize: fs(12),
     marginTop: 3,
   } as TextStyle,
 });

@@ -19,7 +19,7 @@ import {
   RecordPrecision,
   ShareLocationLevel,
 } from '../../contexts/PreferencesContext';
-import { font, radius, spacing } from '../../constants/tokens';
+import { font, fs, radius, spacing } from '../../constants/tokens';
 import { WaterBackdrop } from '../../components/WaterBackdrop';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { RadioDot } from '../../components/ui/RadioDot';
@@ -263,11 +263,11 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   permTitle: {
     fontFamily: font.serif,
-    fontSize: 17,
+    fontSize: fs(17),
     fontWeight: '700',
   } as TextStyle,
   permDesc: {
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 17,
     marginTop: 3,
   } as TextStyle,
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     gap: 2,
   } as ViewStyle,
   permActionText: {
-    fontSize: 13,
+    fontSize: fs(13),
   } as TextStyle,
   groupCard: {
     marginTop: spacing.lg,
@@ -298,12 +298,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   groupTitle: {
     fontFamily: font.serif,
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '700',
     letterSpacing: 1,
   } as TextStyle,
   groupDesc: {
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 18,
     marginTop: 6,
     marginBottom: 4,
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   radioRowBorder: {} as ViewStyle,
   radioLabel: {
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '500',
   } as TextStyle,
   switchCard: {
@@ -337,12 +337,12 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   switchTitle: {
     fontFamily: font.serif,
-    fontSize: 15,
+    fontSize: fs(15),
     fontWeight: '700',
     letterSpacing: 0.5,
   } as TextStyle,
   switchDesc: {
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 17,
     marginTop: 3,
   } as TextStyle,
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   tipText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: fs(12),
     lineHeight: 18,
   } as TextStyle,
 });
