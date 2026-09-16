@@ -67,6 +67,7 @@ jest.mock('../src/components/CaptureButton', () => {
 });
 
 import { RecognitionProvider } from '../src/contexts/RecognitionContext';
+import { PreferencesProvider } from '../src/contexts/PreferencesContext';
 import { ThemeProvider } from '../src/contexts/ThemeContext';
 import { IdentifyScreen } from '../src/screens/IdentifyScreen';
 import { RecognizingScreen } from '../src/screens/RecognizingScreen';
@@ -79,18 +80,20 @@ const HomeStub: React.FC = () => <View testID="home-stub" />;
 const TestApp: React.FC = () => (
   <SafeAreaProvider>
     <ThemeProvider>
-      <RecognitionProvider>
-        <NavigationContainer>
-          <Stack.Navigator
-            initialRouteName="Identify"
-            screenOptions={{ headerShown: false }}
-          >
-            <Stack.Screen name="Home" component={HomeStub} />
-            <Stack.Screen name="Identify" component={IdentifyScreen} />
-            <Stack.Screen name="Recognizing" component={RecognizingScreen} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </RecognitionProvider>
+      <PreferencesProvider>
+        <RecognitionProvider>
+          <NavigationContainer>
+            <Stack.Navigator
+              initialRouteName="Identify"
+              screenOptions={{ headerShown: false }}
+            >
+              <Stack.Screen name="Home" component={HomeStub} />
+              <Stack.Screen name="Identify" component={IdentifyScreen} />
+              <Stack.Screen name="Recognizing" component={RecognizingScreen} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </RecognitionProvider>
+      </PreferencesProvider>
     </ThemeProvider>
   </SafeAreaProvider>
 );

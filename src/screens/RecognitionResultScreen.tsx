@@ -21,8 +21,10 @@ import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { useAuth, isUnauthorizedError } from '../contexts/AuthContext';
 import { useCatchArchive } from '../contexts/CatchContext';
+import { usePreferences } from '../contexts/PreferencesContext';
 import { useTheme } from '../contexts/ThemeContext';
 import {
+  CatchLocation,
   CatchSaveDraft,
   FeedbackDraft,
   FeedbackTypeWire,
@@ -31,6 +33,7 @@ import {
 } from '../types/models';
 import { catchService } from '../services/catchService';
 import { recognitionService } from '../services/recognitionService';
+import { locationPickerHub } from '../utils/locationPickerHub';
 import {
   fishKnowledgeService,
   localGuideItems,
@@ -71,12 +74,14 @@ export const RecognitionResultScreen: React.FC = () => {
   const { image, result, selectImage, submitFeedback, reset } = useRecognition();
   const { session, logout } = useAuth();
   const { reload } = useCatchArchive();
+  const { privacy } = usePreferences();
   const { profile } = useTheme();
   const insets = useSafeAreaInsets();
 
   const [selectedKey, setSelectedKey] = useState('');
   const [selectedName, setSelectedName] = useState('');
   const [lengthText, setLengthText] = useState('');
+  const [lengthAuto, setLengthAuto] = useState(false);
   const [weightText, setWeightText] = useState('');
   const [locationText, setLocationText] = useState('');
   const [saving, setSaving] = useState(false);
@@ -85,6 +90,47 @@ export const RecognitionResultScreen: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const prediction = result?.prediction ?? null;
+
+  // 拍照页量尺测得的真实长度：自动填入长度输入框，用户手动修改后提示退场
+  const measuredCm = image?.measuredLengthCm ?? null;
+  useEffect(() => {
+    if (typeof measuredCm === 'number' && measuredCm > 0) {
+      setLengthText(String(Math.round(measuredCm * 10) / 10));
+      setLengthAuto(true);
+    } else {
+      setLengthAuto(false);
+    }
+  }, [measuredCm]);
+
+  // 拍照页带入的钓点（自动定位 / 手动选点）：自动填入钓点输入框，可再在地图上调整
+  const carriedLocation = image?.location ?? null;
+  const [activeLocation, setActiveLocation] = useState<CatchLocation | null>(carriedLocation);
+  useEffect(() => {
+    if (carriedLocation?.label) {
+      setLocationText(carriedLocation.label);
+      setActiveLocation(carriedLocation);
+    } else {
+      setActiveLocation(null);
+    }
+  }, [carriedLocation]);
+
+  /** 地图选点：回填钓点名与坐标（受「允许手动修改地点」设置约束） */
+  const openLocationPicker = useCallback(async () => {
+    if (!privacy.manualLocationEdit) {
+      return;
+    }
+    haptics.selection();
+    navigation.navigate('LocationPicker', {
+      initial: activeLocation
+        ? { latitude: activeLocation.latitude, longitude: activeLocation.longitude }
+        : undefined,
+    });
+    const picked = await locationPickerHub.requestPick();
+    if (picked) {
+      setActiveLocation(picked);
+      setLocationText(picked.label.slice(0, 60));
+    }
+  }, [privacy.manualLocationEdit, navigation, activeLocation]);
 
   const state: ResultState = useMemo(() => {
     if (!prediction) {
@@ -291,11 +337,13 @@ export const RecognitionResultScreen: React.FC = () => {
           navigation.replace('CatchDetail', {
             catchId: savedCatch.id,
             initialCatch: savedCatch,
-            initialMemory: {
-              lengthCm: Number(lengthText) > 0 ? Number(lengthText) : null,
-              weightKg: Number(weightText) > 0 ? Number(weightText) : null,
-              location: locationText.trim() || null,
-            },
+              initialMemory: {
+                lengthCm: Number(lengthText) > 0 ? Number(lengthText) : null,
+                weightKg: Number(weightText) > 0 ? Number(weightText) : null,
+                location: locationText.trim() || null,
+                latitude: activeLocation?.latitude ?? null,
+                longitude: activeLocation?.longitude ?? null,
+              },
           });
         }, 320);
       } catch (e) {
@@ -537,7 +585,10 @@ export const RecognitionResultScreen: React.FC = () => {
               <TextInput
                 style={[styles.metaInput, { color: textPrimary }]}
                 value={lengthText}
-                onChangeText={setLengthText}
+                onChangeText={(text) => {
+                  setLengthText(text);
+                  setLengthAuto(false);
+                }}
                 placeholder="长度"
                 placeholderTextColor={textSecondary}
                 keyboardType="decimal-pad"
@@ -572,12 +623,58 @@ export const RecognitionResultScreen: React.FC = () => {
                 onChangeText={setLocationText}
                 placeholder="钓点"
                 placeholderTextColor={textSecondary}
-                maxLength={20}
+                maxLength={60}
+                editable={privacy.manualLocationEdit}
               />
+              {privacy.manualLocationEdit ? (
+                <PressableScale
+                  onPress={() => void openLocationPicker()}
+                  scaleTo={0.9}
+                  style={styles.locMapHit}
+                  accessibilityLabel="地图选择钓点"
+                  accessibilityRole="button"
+                >
+                  <Icon name="map-outline" size={14} color={GOLD} />
+                </PressableScale>
+              ) : null}
             </View>
             <Text style={[styles.metaLabel, { color: textSecondary }]}>钓点</Text>
           </View>
         </View>
+
+        {lengthAuto && lengthText ? (
+          <View style={styles.autoLenRow}>
+            <Icon name="checkmark-circle" size={12} color={GOLD} />
+            <Text style={styles.autoLenText}>
+              已填入量尺测量结果 {lengthText} cm，可手动修改
+            </Text>
+          </View>
+        ) : null}
+
+        {/* 钓点提示行：已定位可回地图调整；未定位可打开地图选点（关闭手动修改时仅提示） */}
+        {privacy.manualLocationEdit ? (
+          <PressableScale
+            onPress={() => void openLocationPicker()}
+            style={styles.locLinkHit}
+            accessibilityLabel="地图选择钓点"
+            accessibilityRole="button"
+          >
+            <View style={styles.locLinkRow} pointerEvents="none">
+              <Icon name={activeLocation ? 'checkmark-circle' : 'map-outline'} size={12} color={GOLD} />
+              <Text style={styles.autoLenText}>
+                {activeLocation
+                  ? `已${activeLocation.manual ? '选择' : '自动定位'}钓点，点击在地图上调整`
+                  : '在地图上选择钓点'}
+              </Text>
+              <Icon name="chevron-forward" size={12} color="#A5854D" />
+            </View>
+          </PressableScale>
+        ) : activeLocation ? (
+          <View style={styles.locLinkRow}>
+            <Icon name="checkmark-circle" size={12} color={GOLD} />
+            <Text style={styles.autoLenText}>已自动定位钓点（设置中已关闭手动修改地点）</Text>
+          </View>
+        ) : null}
 
         {saveError ? (
           <Text style={[styles.errorText, { color: palette.qualityInvalid }]}>{saveError}</Text>
@@ -872,6 +969,37 @@ const styles = StyleSheet.create({
   metaLabel: {
     fontSize: fs(11),
   } as TextStyle,
+  /** 量尺自动填入提示：metaBar 下方一行小字，用户改动后消失 */
+  autoLenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+    gap: 4,
+  } as ViewStyle,
+  autoLenText: {
+    color: '#A5854D',
+    fontSize: fs(12),
+    letterSpacing: 0.5,
+  } as TextStyle,
+  /** 钓点地图选点入口 */
+  locMapHit: {
+    padding: 3,
+    borderRadius: 8,
+  } as ViewStyle,
+  locLinkHit: {
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  } as ViewStyle,
+  locLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  } as ViewStyle,
   errorText: {
     textAlign: 'center',
     marginTop: spacing.sm,

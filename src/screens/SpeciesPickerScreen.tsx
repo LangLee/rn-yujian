@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,7 +25,7 @@ import { RemoteImage } from '../components/RemoteImage';
 import { GlassCard } from '../components/ui/GlassCard';
 import { PressableScale } from '../components/ui/PressableScale';
 import { FishGlyph } from '../components/ui/FishGlyph';
-import { ScreenHeader } from '../components';
+import { ScreenHeader, HeaderIconButton } from '../components';
 import { haptics } from '../utils/haptics';
 import { speciesPickerHub } from '../utils/speciesPickerHub';
 
@@ -42,6 +43,7 @@ export const SpeciesPickerScreen: React.FC = () => {
   const { profile } = useTheme();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [browseAll, setBrowseAll] = useState(false);
   const [waterFilter, setWaterFilter] = useState('全部');
   const [remote, setRemote] = useState<FishGuideItem[] | null>(null);
@@ -113,7 +115,8 @@ export const SpeciesPickerScreen: React.FC = () => {
     [all],
   );
 
-  // 水域快捷过滤：取 category 首段（如「淡水鱼 · 鲤科」→「淡水鱼」），选项随数据生成
+  // 水域快捷过滤：取 category 首段（如「淡水鱼 · 鲤科」→「淡水鱼」），
+  // 已知水域随数据生成，末尾固定补「其他」收纳未分类鱼种
   const waterOptions = useMemo(() => {
     const set = new Set<string>();
     for (const item of all) {
@@ -122,16 +125,18 @@ export const SpeciesPickerScreen: React.FC = () => {
         set.add(water);
       }
     }
-    return ['全部', ...Array.from(set)];
+    return ['全部', ...Array.from(set), '其他'];
   }, [all]);
 
-  const filteredAll = useMemo(
-    () =>
-      waterFilter === '全部'
-        ? all
-        : all.filter((item) => item.category.split('·')[0].trim() === waterFilter),
-    [all, waterFilter],
-  );
+  const filteredAll = useMemo(() => {
+    if (waterFilter === '全部') {
+      return all;
+    }
+    if (waterFilter === '其他') {
+      return all.filter((item) => !item.category.split('·')[0].trim());
+    }
+    return all.filter((item) => item.category.split('·')[0].trim() === waterFilter);
+  }, [all, waterFilter]);
 
   const complete = (key: string, name: string) => {
     haptics.selection();
@@ -146,15 +151,49 @@ export const SpeciesPickerScreen: React.FC = () => {
   const searching = query.trim().length > 0;
   const showingAll = browseAll && !searching;
 
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery('');
+  };
+
+  /** 顶栏返回 / Android 返回键共用的逐级返回：先收搜索，再退回选择首页，最后退出选择器 */
+  const handleBack = useCallback(() => {
+    if (searchOpen) {
+      closeSearch();
+      return;
+    }
+    if (browseAll) {
+      setBrowseAll(false);
+      return;
+    }
+    speciesPickerHub.complete(null);
+    navigation.goBack();
+  }, [searchOpen, browseAll, navigation]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (searchOpen || browseAll) {
+        handleBack();
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [searchOpen, browseAll, handleBack]);
+
   return (
     <View style={styles.screen}>
       <WaterBackdrop />
       <ScreenHeader
-        title={title}
-        onBack={() => {
-          speciesPickerHub.complete(null);
-          navigation.goBack();
-        }}
+        title={browseAll ? '全部鱼种' : title}
+        onBack={handleBack}
+        right={
+          <HeaderIconButton
+            name={searchOpen ? 'close' : 'search-outline'}
+            color={textPrimary}
+            onPress={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+          />
+        }
       />
 
       <ScrollView
@@ -163,23 +202,26 @@ export const SpeciesPickerScreen: React.FC = () => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.searchWrap, { backgroundColor: profile.surface.glassStrong }]}>
-          <Icon name="search-outline" size={17} color={textSecondary} />
-          <TextInput
-            style={[styles.searchInput, { color: textPrimary }]}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="搜索鱼种名称或别名"
-            placeholderTextColor={textSecondary}
-            autoFocus
-            returnKeyType="search"
-          />
-          {searching ? (
-            <PressableScale onPress={() => setQuery('')} scaleTo={0.9}>
-              <Icon name="close-circle" size={17} color={textSecondary} />
-            </PressableScale>
-          ) : null}
-        </View>
+        {/* 搜索栏平时收起，点右上角图标后在标题栏下方展开 */}
+        {searchOpen ? (
+          <View style={[styles.searchWrap, { backgroundColor: profile.surface.glassStrong }]}>
+            <Icon name="search-outline" size={17} color={textSecondary} />
+            <TextInput
+              style={[styles.searchInput, { color: textPrimary }]}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="搜索鱼种名称或别名"
+              placeholderTextColor={textSecondary}
+              autoFocus
+              returnKeyType="search"
+            />
+            {searching ? (
+              <PressableScale onPress={() => setQuery('')} scaleTo={0.9}>
+                <Icon name="close-circle" size={17} color={textSecondary} />
+              </PressableScale>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* 浏览全部时的水域快捷过滤胶囊 */}
         {showingAll ? (
@@ -399,7 +441,7 @@ const styles = StyleSheet.create({
   } as TextStyle,
   filterBar: {
     flexGrow: 0,
-    marginTop: spacing.md,
+    marginVertical: spacing.md,
   } as ViewStyle,
   filterBarContent: {
     gap: spacing.sm,

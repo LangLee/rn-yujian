@@ -6,6 +6,7 @@ export { AuthLayout, AuthField, AuthError, AuthPrimaryButton, AuthTextButton } f
 export { WaterBackdrop } from './WaterBackdrop';
 export { CaptureButton } from './CaptureButton';
 export { FishScanFrame } from './FishScanFrame';
+export { ScanTechOverlay } from './ScanTechOverlay';
 export { MediaViewerModal } from './MediaViewerModal';
 export { ScreenHeader, HeaderIconButton } from './ScreenHeader';
 export { PressableScale, GlassCard, PrimaryButton, EmptyState, BottomSheet, FishGlyph, GlassIconButton } from './ui';

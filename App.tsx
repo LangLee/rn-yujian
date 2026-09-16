@@ -1,5 +1,6 @@
 import React from 'react';
-import { StatusBar } from 'react-native';
+import { StatusBar, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { ThemeProvider, useStatusBarStyle } from './src/contexts/ThemeContext';
@@ -38,25 +39,32 @@ const AppContent: React.FC = () => (
 function App(): React.JSX.Element {
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <PreferencesProvider>
-            <AlertProvider>
-              <LanguageProvider>
-                <AuthProvider>
-                  <RecognitionProvider>
-                    <CatchProvider>
-                      <AppContent />
-                    </CatchProvider>
-                  </RecognitionProvider>
-                </AuthProvider>
-              </LanguageProvider>
-            </AlertProvider>
-          </PreferencesProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
+      {/* 拍照页量尺等长按拖拽手势需要 GestureHandlerRootView 承载 */}
+      <GestureHandlerRootView style={styles.flex}>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <PreferencesProvider>
+              <AlertProvider>
+                <LanguageProvider>
+                  <AuthProvider>
+                    <RecognitionProvider>
+                      <CatchProvider>
+                        <AppContent />
+                      </CatchProvider>
+                    </RecognitionProvider>
+                  </AuthProvider>
+                </LanguageProvider>
+              </AlertProvider>
+            </PreferencesProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     </ErrorBoundary>
   );
 }
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+});
 
 export default App;

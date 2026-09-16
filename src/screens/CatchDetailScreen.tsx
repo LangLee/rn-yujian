@@ -127,11 +127,17 @@ export const CatchDetailScreen: React.FC = () => {
       }
       if (
         initialMemory &&
-        (initialMemory.lengthCm ?? initialMemory.weightKg ?? initialMemory.location)
+        (initialMemory.lengthCm ??
+          initialMemory.weightKg ??
+          initialMemory.location ??
+          initialMemory.latitude ??
+          initialMemory.longitude)
       ) {
         data.lengthCm = data.lengthCm ?? initialMemory.lengthCm ?? null;
         data.weightKg = data.weightKg ?? initialMemory.weightKg ?? null;
         data.location = data.location ?? initialMemory.location ?? null;
+        data.latitude = data.latitude ?? initialMemory.latitude ?? null;
+        data.longitude = data.longitude ?? initialMemory.longitude ?? null;
         await catchMemoryService.save(catchId, data);
       }
       setMemory(data);

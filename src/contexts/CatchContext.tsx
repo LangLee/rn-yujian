@@ -71,10 +71,16 @@ export const CatchProvider: React.FC<CatchProviderProps> = ({ children }) => {
           await logout();
           return;
         }
+        // 先在 catch 块内取出消息再进 setState 更新器：
+        // 更新器在渲染阶段才执行，Hermes 0.14(RN 0.83)的 lazy 编译
+        // 对跨 catch 块存活的闭包捕获 catch 参数存在 bug，会抛
+        // "Property 'error' doesn't exist" 导致整个 App 崩溃。
+        const message =
+          error instanceof Error ? error.message : '鱼获数据加载失败';
         setState((previous) => ({
           ...previous,
           loading: false,
-          error: error instanceof Error ? error.message : '鱼获数据加载失败',
+          error: message,
         }));
       }
     })();

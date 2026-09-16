@@ -60,8 +60,8 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
         val started = System.nanoTime()
         val inputTensor = interpreter.getInputTensor(0)
         val inputShape = inputTensor.shape()
-        require(inputTensor.dataType() == DataType.FLOAT32) { "MODEL_M1_v0.2 输入必须为 FLOAT32" }
-        require(inputShape.size == 4) { "MODEL_M1_v0.2 输入必须为 4D tensor" }
+        require(inputTensor.dataType() == DataType.FLOAT32) { "$MODEL_VERSION 输入必须为 FLOAT32" }
+        require(inputShape.size == 4) { "$MODEL_VERSION 输入必须为 4D tensor" }
 
         val nchw = inputShape[1] == 3
         val nhwc = inputShape[3] == 3
@@ -76,7 +76,7 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
         val input = makeInputBuffer(prepared.bitmap, nchw)
 
         val outputTensor = interpreter.getOutputTensor(0)
-        require(outputTensor.dataType() == DataType.FLOAT32) { "MODEL_M1_v0.2 输出必须为 FLOAT32" }
+        require(outputTensor.dataType() == DataType.FLOAT32) { "$MODEL_VERSION 输出必须为 FLOAT32" }
         val count = outputTensor.shape().last()
         require(count == MODEL_LABELS.size) { "模型输出类别数应为 ${MODEL_LABELS.size}，实际为 $count" }
 
@@ -133,7 +133,7 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
     }
 
     /**
-     * MODEL_M1_v0.2 classifier preprocessing.
+     * MODEL_CROP_M1_v0.1 classifier preprocessing.
      *
      * The caller owns source selection. The production FishRecognitionPipeline passes
      * a detector-expanded fish crop; classifier-only parity tests can pass a direct bitmap.
@@ -212,9 +212,9 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
 
     companion object {
         const val MODEL_FILE = "fish_classifier.tflite"
-        const val MODEL_VERSION = "MODEL_M1_v0.2"
-        const val MODEL_BYTES = 6_220_308
-        const val MODEL_SHA256 = "9575ede5c6c85b850647016d76e8e5175fa9ea6b609c47c83f54b4062e47d14e"
+        const val MODEL_VERSION = "MODEL_CROP_M1_v0.1"
+        const val MODEL_BYTES = 6_249_008
+        const val MODEL_SHA256 = "b77ea78e7f8554078ea3a79051039af1ace04f0ac4e2604da57d1dd8f0b010e7"
         private const val LOG_TAG = "FishRecognitionEngine"
 
         private const val PADDING_R = 124
@@ -223,16 +223,24 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
         private val IMAGENET_MEAN = floatArrayOf(0.485f, 0.456f, 0.406f)
         private val IMAGENET_STD = floatArrayOf(0.229f, 0.224f, 0.225f)
 
+        /** 与 mobile-model-v0.2 Release 的 class_map.json 严格同序（16 类）。 */
         val MODEL_LABELS = listOf(
-            "grass_carp" to "草鱼",
             "bighead_carp" to "鳙鱼",
-            "silver_carp" to "白鲢",
+            "black_carp" to "青鱼",
+            "blunt_snout_bream" to "鳊鱼 / 武昌鱼",
+            "chinese_catfish" to "鲶鱼",
             "common_carp" to "鲤鱼",
             "crucian_carp" to "鲫鱼",
+            "grass_carp" to "草鱼",
             "largemouth_bass" to "加州鲈",
+            "mandarin_fish" to "鳜鱼",
+            "other_freshwater_fish" to "其他淡水鱼",
+            "sharpbelly" to "白条",
+            "silver_carp" to "白鲢",
             "snakehead" to "黑鱼",
+            "tilapia" to "罗非鱼",
+            "topmouth_culter" to "翘嘴鲌",
             "yellow_catfish" to "黄骨鱼",
-            "black_carp" to "青鱼",
         )
     }
 }

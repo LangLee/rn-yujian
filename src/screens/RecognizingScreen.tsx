@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { Animated, Easing, ImageStyle, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { FishScanFrame } from '../components/FishScanFrame';
-import { WaterBackdrop } from '../components/WaterBackdrop';
+import { ScanTechOverlay } from '../components/ScanTechOverlay';
 import { palette } from '../constants/colors';
 import { font, fs, spacing, typeScale } from '../constants/tokens';
+import { toFileUri } from '../utils/fileUri';
 
 type RecognizingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Recognizing'>;
 
@@ -72,80 +72,56 @@ const PhaseText: React.FC<{ text: string; color: string }> = ({ text, color }) =
   return <Animated.Text style={[styles.phase, { color, opacity }]}>{shown}</Animated.Text>;
 };
 
-/**
- * 圆形向外扩散水波纹：
- * 多圈同心正圆由鱼身中心向外扩散并淡出，相位错开形成连续水纹。
- * Reduce Motion 时保留静态几圈，不做扩散。
- */
-const Ripple: React.FC<{ index: number; reduceMotion: boolean }> = ({ index, reduceMotion }) => {
-  const scale = useRef(new Animated.Value(0.42)).current;
-  const opacity = useRef(new Animated.Value(0.55)).current;
-  const DURATION = 3000;
+/** 底部不定态进度条：金色流光在轨道内循环滑过，替代具体百分比。 */
+const ShimmerBar: React.FC<{ reduceMotion: boolean }> = ({ reduceMotion }) => {
+  const TRACK_W = 172;
+  const FILL_W = 68;
+  const x = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (reduceMotion) {
-      scale.setValue(0.6 + index * 0.22);
-      opacity.setValue(0.3 - index * 0.08);
+      x.setValue(0.45);
       return;
     }
-    let active = true;
-    const loop = async () => {
-      // 相位错开：每圈延迟 1/4 周期
-      await new Promise<void>((resolve) => setTimeout(() => resolve(), (index * DURATION) / 4));
-      while (active) {
-        scale.setValue(0.42);
-        opacity.setValue(0.55);
-        await new Promise<void>((resolve) => {
-          Animated.parallel([
-            Animated.timing(scale, {
-              toValue: 1.45,
-              duration: DURATION,
-              easing: Easing.out(Easing.quad),
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: DURATION,
-              easing: Easing.out(Easing.quad),
-              useNativeDriver: true,
-            }),
-          ]).start(() => resolve());
-        });
-      }
-    };
-    void loop();
-    return () => {
-      active = false;
-    };
-  }, [scale, opacity, index, reduceMotion]);
+    const loop = Animated.loop(
+      Animated.timing(x, {
+        toValue: 1,
+        duration: 1250,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, x]);
+
+  const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-FILL_W, TRACK_W] });
 
   return (
-    <Animated.View
-      style={[
-        styles.ripple,
-        {
-          transform: [{ scale }],
-          opacity,
-        },
-      ]}
-    />
+    <View style={styles.barTrack}>
+      <Animated.View style={[styles.barFill, { width: FILL_W, transform: [{ translateX }] }]} />
+    </View>
   );
 };
 
 /**
- * P03 识别处理中（设计稿还原版）：
- * 主题环境照片背景 + 中央写实鱼形（与取景框同款）与圆形水波扩散；
- * 上方衬线标题，中部状态轮换文案，底部小贴士气泡。
+ * P03 识别处理中：
+ * 全屏展示刚拍下的照片 + 科技感扫描动态模版（ScanTechOverlay）。
+ * 上方「AI 识别中」衬线标题与呼吸圆点，下方状态轮换文案、流光进度条与小贴士。
  * 业务状态优先：识别 Ready 立即进入 P04，不为播完动画延迟结果。
  */
 export const RecognizingScreen: React.FC = () => {
   const navigation = useNavigation<RecognizingScreenNavigationProp>();
-  const { recognizeAndRecord } = useRecognition();
+  const { image, recognizeAndRecord } = useRecognition();
   const { reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [longWait, setLongWait] = useState(false);
   const [veryLong, setVeryLong] = useState(false);
+
+  // 退场转场期间 IdentifyScreen 重挂载会 reset 清空 image，
+  // 用挂载瞬间的照片冻结本屏展示，避免结果转场时照片先闪没。
+  const [photoUri] = useState(() => toFileUri(image?.filePath));
 
   const startedAt = useMemo(() => Date.now(), []);
 
@@ -217,24 +193,40 @@ export const RecognizingScreen: React.FC = () => {
   const statusTitle = waitingLong ? (veryLong ? VERY_LONG_COPY : LONG_WAIT_COPY) : PHASES[phaseIndex];
   const statusHint = waitingLong ? '网络或设备繁忙时，多等一下下' : PHASE_HINTS[phaseIndex];
 
-  // 鱼影呼吸：Alpha 0.75 → 1 → 0.75（3.2s，Reduce Motion 静止）
-  const silhouetteOpacity = useRef(new Animated.Value(0.78)).current;
+  // 照片入场：轻微放大回落 + 淡入，接上快门定格的动势（Reduce Motion 直接显示）
+  const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (reduceMotion) {
-      silhouetteOpacity.setValue(0.9);
+      enter.setValue(1);
+      return;
+    }
+    Animated.timing(enter, {
+      toValue: 1,
+      duration: 450,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [reduceMotion, enter]);
+  const photoScale = enter.interpolate({ inputRange: [0, 1], outputRange: [1.07, 1] });
+
+  // 「AI 识别中」圆点呼吸：0.35 ↔ 1
+  const dotPulse = useRef(new Animated.Value(0.35)).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      dotPulse.setValue(0.85);
       return;
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(silhouetteOpacity, {
+        Animated.timing(dotPulse, {
           toValue: 1,
-          duration: 1600,
+          duration: 620,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(silhouetteOpacity, {
-          toValue: 0.78,
-          duration: 1600,
+        Animated.timing(dotPulse, {
+          toValue: 0.35,
+          duration: 620,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -242,52 +234,50 @@ export const RecognizingScreen: React.FC = () => {
     );
     loop.start();
     return () => loop.stop();
-  }, [reduceMotion, silhouetteOpacity]);
+  }, [reduceMotion, dotPulse]);
 
   return (
     <View style={styles.screen}>
-      <WaterBackdrop />
-      <View style={[StyleSheet.absoluteFill, styles.scrim]} pointerEvents="none" />
+      {/* 全屏照片（挂载瞬间冻结）；无照片兜底为深色取景底色 */}
+      {photoUri ? (
+        <Animated.Image
+          source={{ uri: photoUri }}
+          resizeMode="cover"
+          style={[
+            StyleSheet.absoluteFill,
+            styles.photo,
+            { opacity: enter, transform: [{ scale: photoScale }] },
+          ]}
+        />
+      ) : null}
 
-      {/* 顶部：衬线标题（识别中不提供返回，避免中断流程） */}
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+      {/* 科技感扫描动态模版：护底 / 网格 / 扫描光带 / 流光 / HUD 边框 */}
+      <ScanTechOverlay reduceMotion={reduceMotion} />
+
+      {/* 顶部：呼吸圆点 + AI 识别中 + 衬线标题（识别中不提供返回，避免中断流程） */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]} pointerEvents="none">
+        <View style={styles.eyebrowRow}>
+          <Animated.View style={[styles.eyebrowDot, { opacity: dotPulse }]} />
+          <Text style={styles.eyebrow}>AI 识别中</Text>
+        </View>
         <Text style={styles.title}>
           正在认识这条
           <Text style={styles.titleAccent}>鱼</Text>
         </Text>
-        <Text style={styles.subtitle}>AI 正在安静地观察并理解它</Text>
       </View>
 
-      {/* 中央：写实鱼形（与取景框同款）+ 圆形水波向外扩散 */}
-      <View style={styles.center} pointerEvents="none">
-        <Ripple index={0} reduceMotion={reduceMotion} />
-        <Ripple index={1} reduceMotion={reduceMotion} />
-        <Ripple index={2} reduceMotion={reduceMotion} />
-        <Ripple index={3} reduceMotion={reduceMotion} />
-        <Animated.View style={styles.fishGlow}>
-          <Animated.View
-            style={{ opacity: silhouetteOpacity, transform: [{ rotate: '-8deg' }] }}
-          >
-            <FishScanFrame width={200} />
-          </Animated.View>
-        </Animated.View>
-      </View>
-
-      {/* 中部：状态轮换文案（金色眼睛图标 + 主文案 + 灰色提示） */}
-      <View style={styles.statusWrap} pointerEvents="none">
+      {/* 底部：状态轮换文案 + 流光进度条 + 小贴士气泡 */}
+      <View style={[styles.footer, { bottom: insets.bottom + spacing.lg }]} pointerEvents="none">
         <View style={styles.statusRow}>
-          <Icon name="eye" size={16} color={palette.accentGold} />
+          <Icon name="eye" size={15} color={palette.accentGold} />
           <PhaseText text={statusTitle} color={palette.accentGold} />
         </View>
         <Text style={styles.statusHint} numberOfLines={2}>
           {statusHint}
         </Text>
-      </View>
-
-      {/* 底部：小贴士深色磨砂气泡 */}
-      <View style={[styles.tipWrap, { bottom: insets.bottom + spacing.xl }]} pointerEvents="none">
+        <ShimmerBar reduceMotion={reduceMotion} />
         <View style={styles.tipBubble}>
-          <Icon name="leaf" size={14} color="#D9C9A3" />
+          <Icon name="leaf" size={13} color="#D9C9A3" />
           <Text style={styles.tipText}>小贴士：清晰的鱼体、自然光线有助于更准确识别</Text>
         </View>
       </View>
@@ -304,16 +294,40 @@ const shadowText: TextStyle = {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    backgroundColor: palette.viewfinderDark,
   } as ViewStyle,
-  scrim: {
-    backgroundColor: 'rgba(8,24,30,0.30)',
-  } as ViewStyle,
+  photo: {
+    width: '100%',
+    height: '100%',
+  } as ImageStyle,
   header: {
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    marginTop: spacing.xl,
   } as ViewStyle,
+  eyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  } as ViewStyle,
+  eyebrowDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: palette.accentGold,
+    shadowColor: palette.accentGold,
+    shadowRadius: 5,
+    shadowOpacity: 0.8,
+    shadowOffset: { width: 0, height: 0 },
+    marginRight: spacing.sm - 2,
+  } as ViewStyle,
+  eyebrow: {
+    color: '#9FF2E8',
+    fontSize: fs(typeScale.meta - 1),
+    fontWeight: '600',
+    letterSpacing: 4,
+    ...shadowText,
+  } as TextStyle,
   title: {
+    marginTop: spacing.sm,
     color: '#FDFEFD',
     fontFamily: font.serif,
     fontSize: fs(24),
@@ -324,39 +338,12 @@ const styles = StyleSheet.create({
   titleAccent: {
     color: palette.accentGold,
   } as TextStyle,
-  subtitle: {
-    marginTop: spacing.sm,
-    color: 'rgba(250,252,251,0.82)',
-    fontSize: fs(typeScale.meta + 1),
-    letterSpacing: 1.5,
-    ...shadowText,
-  } as TextStyle,
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as ViewStyle,
-  /** 圆形水波：正圆细描边，自鱼身中心向外扩散 */
-  ripple: {
+  footer: {
     position: 'absolute',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    borderWidth: 1.5,
-    borderColor: 'rgba(246,250,248,0.78)',
-  } as ViewStyle,
-  fishGlow: {
-    shadowColor: '#F6FAF8',
-    shadowOpacity: 0.35,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-  } as ViewStyle,
-  statusWrap: {
+    left: 0,
+    right: 0,
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    marginBottom: spacing.xl,
-    minHeight: 64,
   } as ViewStyle,
   statusRow: {
     flexDirection: 'row',
@@ -378,11 +365,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     ...shadowText,
   } as TextStyle,
-  tipWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
+  barTrack: {
+    width: 172,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(246,250,248,0.16)',
+    overflow: 'hidden',
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg + 2,
+  } as ViewStyle,
+  barFill: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#EAD9AE',
   } as ViewStyle,
   tipBubble: {
     flexDirection: 'row',

@@ -19,10 +19,13 @@ export interface CatchMemoryMedia {
 export interface CatchMemoryData {
   /** 关于这次鱼获（私人，默认不公开） */
   story: string;
-  /** 长度 cm / 重量 kg / 地点（可空，详情态无值则隐藏） */
+  /** 长度 cm / 重量 kg / 地点地址（可空，详情态无值则隐藏） */
   lengthCm?: number | null;
   weightKg?: number | null;
   location?: string | null;
+  /** 钓点坐标（WGS-84；展示用 location 地址，坐标供回地图 / 分享定位用） */
+  latitude?: number | null;
+  longitude?: number | null;
   /** 媒体（照片 / 视频平级；视频 V1 暂缺在线播放，详情页展示封面 + 时长） */
   media: CatchMemoryMedia[];
 }
@@ -32,6 +35,8 @@ export const EMPTY_MEMORY: CatchMemoryData = {
   lengthCm: null,
   weightKg: null,
   location: null,
+  latitude: null,
+  longitude: null,
   media: [],
 };
 
@@ -51,6 +56,8 @@ export const catchMemoryService = {
         lengthCm: typeof parsed.lengthCm === 'number' ? parsed.lengthCm : null,
         weightKg: typeof parsed.weightKg === 'number' ? parsed.weightKg : null,
         location: typeof parsed.location === 'string' ? parsed.location : null,
+        latitude: typeof parsed.latitude === 'number' ? parsed.latitude : null,
+        longitude: typeof parsed.longitude === 'number' ? parsed.longitude : null,
         media: Array.isArray(parsed.media) ? parsed.media : [],
       };
     } catch {

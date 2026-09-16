@@ -17,6 +17,7 @@ export { SharePreviewScreen } from './share/SharePreviewScreen';
 export { AnnualReviewScreen } from './share/AnnualReviewScreen';
 export { RecordCalendarScreen } from './RecordCalendarScreen';
 export { SpeciesPickerScreen } from './SpeciesPickerScreen';
+export { LocationPickerScreen } from './LocationPickerScreen';
 export { ProfileScreen } from './ProfileScreen';
 export { ThemeSettingsScreen } from './settings/ThemeSettingsScreen';
 export { PrivacySettingsScreen } from './settings/PrivacySettingsScreen';

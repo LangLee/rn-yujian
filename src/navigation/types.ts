@@ -33,11 +33,13 @@ export type RootStackParamList = {
     catchId?: string;
     /** 保存后直传的新鱼获（列表尚未同步时使用） */
     initialCatch?: RemoteCatch;
-    /** 保存流程附带的可选补充信息（长度/重量/地点） */
+    /** 保存流程附带的可选补充信息（长度/重量/地点地址 + 钓点坐标） */
     initialMemory?: {
       lengthCm?: number | null;
       weightKg?: number | null;
       location?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
     };
   } | undefined;
   /** 我的鱼获 Hub（P20：我的鱼获 / 鱼获分享 / 成长历程 三分段） */
@@ -48,6 +50,8 @@ export type RootStackParamList = {
   Calendar: undefined;
   /** 鱼种搜索 / 选择器 */
   SpeciesPicker: { title?: string } | undefined;
+  /** 地图选点（钓点）：中心初始坐标，选中结果经 locationPickerHub 回传 */
+  LocationPicker: { initial?: { latitude: number; longitude: number } } | undefined;
   /** 生成鱼获分享（范围 / 模板 / 生成内容 / 隐私） */
   ShareCreate: {
     presetRange?: ShareRangeKey;

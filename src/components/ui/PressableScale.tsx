@@ -83,7 +83,9 @@ export const PressableScale: React.FC<PressableScaleProps> = ({
       style={style}
       {...rest}
     >
-      <Animated.View style={{ transform: [{ scale }], width: '100%' }}>{children}</Animated.View>
+      {/* 不锁 width:'100%'：固定尺寸图标按钮靠父级 alignItems:center 居中图标，
+          卡片类内容走 Yoga 默认 cross-axis stretch 撑满（锁 100% 会让图标贴左）。 */}
+      <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
     </Pressable>
   );
 };

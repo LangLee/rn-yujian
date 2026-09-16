@@ -41,6 +41,24 @@ export interface FishSpecies {
   catches: number;
 }
 
+// ---------------------------------------------------------------------------
+// 位置（隐私与定位 13.2：钓点记录 / 地图选点）
+// ---------------------------------------------------------------------------
+
+/** 鱼获钓点：坐标（WGS-84，随鱼获记忆存储）+ 具体地址展示名 */
+export interface CatchLocation {
+  latitude: number;
+  longitude: number;
+  /** 具体地址（如「浙江省杭州市西湖区杨公堤」）；编码失败时为坐标退化文案 */
+  label: string;
+  /** 生成该位置的记录精度 */
+  precision: 'precise' | 'waterbody_county';
+  /** 地图手动选点标记（区别于自动定位） */
+  manual?: boolean;
+  /** 定位精度（米），仅系统自动定位携带 */
+  accuracy?: number;
+}
+
 /** JS 侧只持有图片元信息；Bitmap 留在原生层。 */
 export interface SelectedImageMeta {
   imageId: string;
@@ -48,6 +66,10 @@ export interface SelectedImageMeta {
   source: 'camera' | 'gallery' | string;
   width: number;
   height: number;
+  /** 拍照页量尺测得的真实长度（cm）；仅相机拍摄时由 JS 附加，非原生字段。 */
+  measuredLengthCm?: number | null;
+  /** 拍照时自动定位 / 手动选点的钓点；仅相机拍摄时由 JS 附加，非原生字段。 */
+  location?: CatchLocation | null;
 }
 
 export interface RecognitionCandidate {

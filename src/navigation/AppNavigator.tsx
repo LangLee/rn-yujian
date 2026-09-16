@@ -21,6 +21,7 @@ import { AnnualReviewScreen } from '../screens/share/AnnualReviewScreen';
 import { FishGuideHomeScreen } from '../screens/FishGuideHomeScreen';
 import { RecordCalendarScreen } from '../screens/RecordCalendarScreen';
 import { SpeciesPickerScreen } from '../screens/SpeciesPickerScreen';
+import { LocationPickerScreen } from '../screens/LocationPickerScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ThemeSettingsScreen } from '../screens/settings/ThemeSettingsScreen';
 import { PrivacySettingsScreen } from '../screens/settings/PrivacySettingsScreen';
@@ -101,6 +102,7 @@ export const AppNavigator: React.FC = () => {
       <Stack.Screen name="Guide" component={FishGuideHomeScreen} />
       <Stack.Screen name="Calendar" component={RecordCalendarScreen} />
       <Stack.Screen name="SpeciesPicker" component={SpeciesPickerScreen} />
+      <Stack.Screen name="LocationPicker" component={LocationPickerScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="ThemeSettings" component={ThemeSettingsScreen} />
       <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
