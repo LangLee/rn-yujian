@@ -31,12 +31,21 @@ export interface PrivacySettings {
   manualLocationEdit: boolean;
 }
 
+/** 性别（个人资料）：male 男 / female 女 / secret 保密（默认） */
+export type Gender = 'male' | 'female' | 'secret';
+
 export interface PreferencesState {
   lengthUnit: LengthUnit;
   weightUnit: WeightUnit;
   privacy: PrivacySettings;
   /** 本地昵称覆盖（个人资料） */
   nickname: string;
+  /** 头像（data URL，本地保存；空串为未设置，回退首字母） */
+  avatar: string;
+  /** 性别（个人资料） */
+  gender: Gender;
+  /** 个性签名（个人资料） */
+  signature: string;
 }
 
 export const DEFAULT_PREFERENCES: PreferencesState = {
@@ -49,6 +58,9 @@ export const DEFAULT_PREFERENCES: PreferencesState = {
     manualLocationEdit: true,
   },
   nickname: '',
+  avatar: '',
+  gender: 'secret',
+  signature: '',
 };
 
 interface PreferencesContextType extends PreferencesState {
@@ -56,6 +68,9 @@ interface PreferencesContextType extends PreferencesState {
   setWeightUnit: (unit: WeightUnit) => void;
   setPrivacy: (patch: Partial<PrivacySettings>) => void;
   setNickname: (nickname: string) => void;
+  setAvatar: (avatar: string) => void;
+  setGender: (gender: Gender) => void;
+  setSignature: (signature: string) => void;
 }
 
 const PreferencesContext = createContext<PreferencesContextType | undefined>(undefined);
@@ -109,6 +124,9 @@ export const PreferencesProvider: React.FC<{ children: ReactNode }> = ({ childre
           return next;
         }),
       setNickname: (nickname) => update({ nickname }),
+      setAvatar: (avatar) => update({ avatar }),
+      setGender: (gender) => update({ gender }),
+      setSignature: (signature) => update({ signature }),
     }),
     [state, update],
   );

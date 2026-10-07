@@ -27,9 +27,9 @@ import { FishGlyph } from '../../components/ui/FishGlyph';
 
 type ShareTabNavigationProp = StackNavigationProp;
 
-const GOLD = '#C9A25E';
+const GOLD = '#D6A541';
 const GOLD_LIGHT = '#E7D2A2';
-const INK = '#173B4B';
+const INK = '#0B2D4B';
 
 /**
  * 鱼获分享 Tab（入口高保真稿）：

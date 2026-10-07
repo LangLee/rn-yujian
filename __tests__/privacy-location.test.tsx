@@ -46,7 +46,7 @@ const TestApp: React.FC = () => (
 
 describe('隐私与定位：定位权限卡', () => {
   const checkSpy = jest.spyOn(PermissionsAndroid, 'check');
-  const requestMultipleSpy = jest.spyOn(PermissionsAndroid, 'requestMultiple');
+  const requestSpy = jest.spyOn(PermissionsAndroid, 'request');
   const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 
   beforeEach(() => {
@@ -74,13 +74,10 @@ describe('隐私与定位：定位权限卡', () => {
 
   test('说明 Sheet「继续」→ 系统弹窗授权成功 → 卡片翻转为「已允许」', async () => {
     checkSpy.mockResolvedValue(false);
-    requestMultipleSpy.mockImplementation(async () => {
+    requestSpy.mockImplementation(async () => {
       // 系统弹窗授权成功后，静默 check 也应返回 true
       checkSpy.mockResolvedValue(true);
-      return {
-        'android.permission.ACCESS_FINE_LOCATION': 'granted',
-        'android.permission.ACCESS_COARSE_LOCATION': 'granted',
-      } as never;
+      return 'granted' as never;
     });
 
     render(<TestApp />);
@@ -89,21 +86,15 @@ describe('隐私与定位：定位权限卡', () => {
     fireEvent.press(await screen.findByText('继续'));
 
     await waitFor(() => {
-      expect(requestMultipleSpy).toHaveBeenCalledTimes(1);
-      expect(requestMultipleSpy).toHaveBeenCalledWith([
-        'android.permission.ACCESS_FINE_LOCATION',
-        'android.permission.ACCESS_COARSE_LOCATION',
-      ]);
+      expect(requestSpy).toHaveBeenCalledTimes(1);
+      expect(requestSpy).toHaveBeenCalledWith('android.permission.ACCESS_FINE_LOCATION');
     });
     expect(await screen.findByText('已允许')).toBeTruthy();
   });
 
   test('永久拒绝（never_ask_again）→ 引导去系统设置，不再弹系统权限框', async () => {
     checkSpy.mockResolvedValue(false);
-    requestMultipleSpy.mockResolvedValue({
-      'android.permission.ACCESS_FINE_LOCATION': 'never_ask_again',
-      'android.permission.ACCESS_COARSE_LOCATION': 'never_ask_again',
-    } as never);
+    requestSpy.mockResolvedValue('never_ask_again' as never);
 
     render(<TestApp />);
     await screen.findByText('未允许');

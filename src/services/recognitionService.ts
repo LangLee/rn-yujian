@@ -16,6 +16,8 @@ interface YujianRecognitionNative {
   releaseImage(imageId: string): Promise<string>;
   warmup(): Promise<boolean>;
   close(): Promise<boolean>;
+  /** 登录后注入访问令牌，供原生反馈/推理上传携带 Bearer 头；null 表示登出。 */
+  setAuthToken(token: string | null): Promise<void>;
 }
 
 const nativeModule = NativeModules.YujianRecognition as YujianRecognitionNative | undefined;
@@ -86,6 +88,17 @@ export const recognitionService = {
       return 0;
     }
     return nativeModule.flushQueued();
+  },
+
+  async setAuthToken(token: string | null): Promise<void> {
+    if (!nativeModule) {
+      return;
+    }
+    try {
+      await nativeModule.setAuthToken(token ?? null);
+    } catch {
+      // 原生方法缺失（旧构建）时静默忽略，反馈走离线队列
+    }
   },
 
   async releaseImage(imageId: string): Promise<void> {

@@ -19,17 +19,17 @@ import {
 import { RemoteImage } from '../../components/RemoteImage';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { environmentBackgrounds } from '../../constants/environmentAssets';
+import sceneBase from '../../assets/coreui/scene_base.jpg';
 import { useAuth } from '../../contexts/AuthContext';
 import { Alert } from '../../utils/alert';
 
 type GrowthTabNavigationProp = StackNavigationProp;
 
-const GOLD = '#C9A25E';
+const GOLD = '#D6A541';
 
 const KIND_STYLE: Record<GrowthEventKind, { color: string; soft: string; badgeBg: string; badgeText: string }> = {
   record: { color: GOLD, soft: 'rgba(201,162,94,0.18)', badgeBg: 'rgba(201,162,94,0.16)', badgeText: '#9A7B3F' },
-  species: { color: '#4D9EA1', soft: 'rgba(77,158,161,0.16)', badgeBg: 'rgba(77,158,161,0.14)', badgeText: '#3B7E81' },
+  species: { color: '#0F7A78', soft: 'rgba(15,122,120,0.16)', badgeBg: 'rgba(15,122,120,0.14)', badgeText: '#0C6D6B' },
   milestone: { color: '#3D6B8E', soft: 'rgba(61,107,142,0.14)', badgeBg: 'rgba(61,107,142,0.12)', badgeText: '#3D6B8E' },
   streak: { color: '#6C8FC7', soft: 'rgba(108,143,199,0.14)', badgeBg: 'rgba(108,143,199,0.12)', badgeText: '#5A7BB0' },
 };
@@ -305,7 +305,7 @@ const EventRow: React.FC<{
 /** 年度回顾入口缩略图（环境照片资产，随包内置无失败路径）。 */
 const RemoteImageLocal: React.FC = () => (
   <Image
-    source={environmentBackgrounds.sunset}
+    source={sceneBase}
     style={StyleSheet.absoluteFill}
     resizeMode="cover"
   />

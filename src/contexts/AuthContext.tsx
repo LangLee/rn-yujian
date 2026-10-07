@@ -4,10 +4,17 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   ReactNode,
 } from 'react';
-import { authService, ApiError } from '../services/authService';
+import { authService } from '../services/authService';
+import {
+  ApiError,
+  onApiSessionExpired,
+  onApiSessionRefreshed,
+  setApiSession,
+} from '../services/apiClient';
 import { sessionService } from '../services/sessionService';
 import { recognitionService } from '../services/recognitionService';
 import { UserSession } from '../types/models';
@@ -15,7 +22,7 @@ import { UserSession } from '../types/models';
 interface AuthContextType {
   session: UserSession | null;
   initializing: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, nickname?: string) => Promise<void>;
   register: (username: string, password: string, nickname: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -29,6 +36,9 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [session, setSession] = useState<UserSession | null>(null);
   const [initializing, setInitializing] = useState(true);
+  // 令牌续期回调需要读取最新会话，避免闭包捕获旧状态
+  const sessionRef = useRef<UserSession | null>(null);
+  sessionRef.current = session;
 
   useEffect(() => {
     let mounted = true;
@@ -38,7 +48,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setSession(current);
         setInitializing(false);
       }
-      // 启动时冲刷离线反馈/推理队列（与原 App LaunchedEffect(flushQueued) 一致）。
+      // 统一 API 客户端与原生反馈上传共用同一令牌；令牌就绪后再冲刷离线队列
+      setApiSession(
+        current ? { accessToken: current.accessToken, refreshToken: current.refreshToken } : null,
+      );
+      recognitionService.setAuthToken(current?.accessToken ?? null);
       recognitionService.flushQueued().catch(() => undefined);
     })();
     return () => {
@@ -46,22 +60,68 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const loggedIn = await authService.login(username, password);
+  // 访问令牌刷新失败（refreshToken 也失效）时全局登出
+  useEffect(() => {
+    onApiSessionExpired(() => {
+      void logout();
+    });
+    return () => {
+      onApiSessionExpired(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // apiClient 自动续期成功后：同步 React 会话与本地持久化，图片等鉴权消费方拿到新令牌
+  useEffect(() => {
+    onApiSessionRefreshed((refreshed) => {
+      const previous = sessionRef.current;
+      if (!previous || previous.accessToken === refreshed.accessToken) {
+        return;
+      }
+      const next: UserSession = {
+        ...previous,
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken ?? previous.refreshToken,
+      };
+      sessionRef.current = next;
+      void sessionService.save(next);
+      recognitionService.setAuthToken(next.accessToken);
+      setSession(next);
+    });
+    return () => {
+      onApiSessionRefreshed(null);
+    };
+  }, []);
+
+  const login = useCallback(async (username: string, password: string, nickname?: string) => {
+    const loggedIn = await authService.login(username, password, nickname);
     await sessionService.save(loggedIn);
+    setApiSession({
+      accessToken: loggedIn.accessToken,
+      refreshToken: loggedIn.refreshToken,
+    });
+    recognitionService.setAuthToken(loggedIn.accessToken);
+    recognitionService.flushQueued().catch(() => undefined);
     setSession(loggedIn);
   }, []);
 
   const register = useCallback(
     async (username: string, password: string, nickname: string) => {
       await authService.register(username, password, nickname);
-      // 注册成功后自动登录（与原 App 行为一致）。
-      await login(username, password);
+      // 注册成功后自动登录（与原 App 行为一致）；昵称随登录带入会话
+      await login(username, password, nickname);
     },
     [login],
   );
 
   const logout = useCallback(async () => {
+    const current = await sessionService.current();
+    if (current) {
+      // 服务端吊销令牌；失败不阻断本地清理
+      await authService.logout(current.accessToken);
+    }
+    setApiSession(null);
+    recognitionService.setAuthToken(null);
     await sessionService.clear();
     setSession(null);
   }, []);

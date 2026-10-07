@@ -47,13 +47,15 @@ export const RegisterScreen: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      // 注册成功后自动登录，session 更新即进入主界面；昵称默认取用户名。
+      // 注册成功后自动登录（session 更新）；Register 从 Login 推入，
+      // 直接回到栈底 Home（Login/Guest 不决定 Empty/Normal，见手册 4.1）。
       await register(username.trim(), password, username.trim());
+      navigation.popTo('Home');
     } catch (e) {
       setError(e instanceof Error ? e.message : '注册失败，请稍后重试');
       setLoading(false);
     }
-  }, [canSubmit, register, username, password]);
+  }, [canSubmit, register, username, password, navigation]);
 
   return (
     <AuthLayout title="渔见" subtitle="拍照收藏每次渔获">
@@ -119,7 +121,7 @@ const styles = {
     fontSize: fs(12),
   },
   agreementLink: {
-    color: '#4D9EA1',
+    color: '#168B88',
     fontSize: fs(12),
     fontWeight: '500',
   },

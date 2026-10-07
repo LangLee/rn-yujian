@@ -4,6 +4,7 @@ export { PrimaryButton } from './PrimaryButton';
 export { EmptyState } from './EmptyState';
 export { EmptyIllustration } from './EmptyIllustration';
 export type { EmptyStateVariant } from './EmptyIllustration';
+export { MemoryFrameGlyph } from './MemoryFrameGlyph';
 export { BottomSheet } from './BottomSheet';
 export { FishGlyph } from './FishGlyph';
 export { IconButton } from './IconButton';

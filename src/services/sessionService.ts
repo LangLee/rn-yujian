@@ -17,6 +17,8 @@ export const sessionService = {
       }
       return {
         accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        expiresAt: typeof session.expiresAt === 'number' ? session.expiresAt : undefined,
         userId: session.userId,
         username: session.username ?? '',
         nickname: session.nickname ?? '',

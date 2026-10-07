@@ -28,6 +28,14 @@ export interface CatchMemoryData {
   longitude?: number | null;
   /** 媒体（照片 / 视频平级；视频 V1 暂缺在线播放，详情页展示封面 + 时长） */
   media: CatchMemoryMedia[];
+  /** 编辑覆写的鱼种（未覆写时为空；展示优先于服务端识别结果） */
+  speciesKey?: string | null;
+  speciesName?: string | null;
+  /**
+   * B 面（鱼获记忆）首次自动揭示是否已完成（Overview Authority V1 §4）：
+   * 仅当生成的 B 面真正呈现给用户后才置 true，每条记录至多一次。
+   */
+  bsideFirstRevealDone?: boolean;
 }
 
 export const EMPTY_MEMORY: CatchMemoryData = {
@@ -59,6 +67,9 @@ export const catchMemoryService = {
         latitude: typeof parsed.latitude === 'number' ? parsed.latitude : null,
         longitude: typeof parsed.longitude === 'number' ? parsed.longitude : null,
         media: Array.isArray(parsed.media) ? parsed.media : [],
+        speciesKey: typeof parsed.speciesKey === 'string' ? parsed.speciesKey : null,
+        speciesName: typeof parsed.speciesName === 'string' ? parsed.speciesName : null,
+        bsideFirstRevealDone: parsed.bsideFirstRevealDone === true,
       };
     } catch {
       return { ...EMPTY_MEMORY, media: [] };
@@ -71,6 +82,25 @@ export const catchMemoryService = {
 
   async remove(catchId: string): Promise<void> {
     await AsyncStorage.removeItem(keyFor(catchId));
+  },
+
+  /** B 面首次自动揭示是否已完成（未落过盘视为未完成）。 */
+  async loadBsideRevealDone(catchId: string): Promise<boolean> {
+    const data = await catchMemoryService.load(catchId);
+    return data.bsideFirstRevealDone === true;
+  },
+
+  /** 仅当 B 面真正呈现给用户后调用（Overview Authority V1 §4：生成成功本身不消耗首次揭示）。 */
+  async markBsideRevealed(catchId: string): Promise<void> {
+    try {
+      const data = await catchMemoryService.load(catchId);
+      if (data.bsideFirstRevealDone) {
+        return;
+      }
+      await catchMemoryService.save(catchId, { ...data, bsideFirstRevealDone: true });
+    } catch {
+      // 标记失败不阻断展示；下次进入仍可再揭示一次
+    }
   },
 
   /** 最近选择的鱼种（鱼种选择器「最近选择」）。 */

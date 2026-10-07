@@ -150,6 +150,10 @@ export interface InferenceAssetMeta {
 
 export interface UserSession {
   accessToken: string;
+  /** 刷新令牌（新后端 AuthenticationToken.refreshToken），用于访问令牌过期续期。 */
+  refreshToken?: string;
+  /** 访问令牌过期时间戳（毫秒），由 expiresIn 换算；缺省按无过期处理。 */
+  expiresAt?: number;
   userId: string;
   username: string;
   nickname: string;
@@ -158,6 +162,13 @@ export interface UserSession {
 // ---------------------------------------------------------------------------
 // 鱼获
 // ---------------------------------------------------------------------------
+
+/**
+ * B 面（鱼获记忆）生成生命周期（FishRecordDetail Overview Authority V1）：
+ * NOT_GENERATED → GENERATING → READY / FAILED；仅 READY 时展示 Flip 入口。
+ * 后端 wire 值：NONE / GENERATING / READY / FAILED。
+ */
+export type BsideStatusWire = 'NONE' | 'GENERATING' | 'READY' | 'FAILED';
 
 export interface RemoteCatch {
   id: string;
@@ -168,6 +179,20 @@ export interface RemoteCatch {
   modelVersion: string;
   capturedAt: string;
   createdAt: string;
+  /** 服务端随记录返回的测量/地点（本地 memory 优先） */
+  lengthCm?: number | null;
+  weightKg?: number | null;
+  location?: string | null;
+  /** B 面（鱼获记忆）生命周期与资产地址 */
+  bsideStatus?: BsideStatusWire;
+  bsideUri?: string | null;
+}
+
+/** B 面生成任务/状态查询返回（POST /catches/{id}/bside、GET /catches/{id}/bside-status）。 */
+export interface BsideGeneration {
+  jobId?: string | null;
+  status: BsideStatusWire;
+  resultUri?: string | null;
 }
 
 export interface SpeciesCatchCount {
@@ -201,7 +226,12 @@ export interface CatchSaveDraft {
 // 反馈
 // ---------------------------------------------------------------------------
 
-export type FeedbackTypeWire = 'confirmed' | 'corrected' | 'new_species_candidate';
+// 后端 feedback_type 可选值：confirmed / corrected / unknown / new_species_candidate
+export type FeedbackTypeWire =
+  | 'confirmed'
+  | 'corrected'
+  | 'unknown'
+  | 'new_species_candidate';
 
 export interface FeedbackDraft {
   sourceEventId: string;

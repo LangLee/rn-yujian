@@ -243,8 +243,8 @@ export const SpeciesPickerScreen: React.FC = () => {
                     style={[
                       styles.filterPill,
                       {
-                        backgroundColor: active ? '#1F4A56' : profile.surface.glassStrong,
-                        borderColor: active ? '#1F4A56' : 'rgba(255,255,255,0.5)',
+                        backgroundColor: active ? '#0B2D4B' : profile.surface.glassStrong,
+                        borderColor: active ? '#0B2D4B' : 'rgba(255,255,255,0.5)',
                       },
                     ]}
                   >

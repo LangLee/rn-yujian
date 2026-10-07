@@ -9,6 +9,7 @@ import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import com.yujian.ai.network.YujianNetworkFactory
 
 class MainApplication : Application(), ReactApplication {
 
@@ -36,6 +37,8 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // 自签后端 81.71.1.11 的 SAN 缺失绕过，需在 RN 创建网络客户端前安装
+    YujianNetworkFactory.install()
     loadReactNative(this)
   }
 }

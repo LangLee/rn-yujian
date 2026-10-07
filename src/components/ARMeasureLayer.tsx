@@ -1,14 +1,14 @@
 /**
  * ARMeasureLayer —— AR 自动量尺全屏浮层。
  *
- * 原生 YujianARMeasureView（ARCore）接管相机背景与水平面检测；
+ * 原生 YujianARMeasureView（ARCore / 华为 AR Engine）接管相机背景与水平面检测；
  * 本层只做交互与展示：检测到平面后「点击鱼头 → 拖动实时预览 → 点击鱼尾」，
  * 两个屏幕点经原生 hitTest 得到 AR 世界坐标（米），自动算出真实长度，
  * 测线与长度标签用 react-native-svg / RN 绘制（与手动量尺同款视觉）。
  *
  * 与 VisionCamera 分时复用相机：本浮层挂载期间父级应停用 VisionCamera；
  * 关闭（完成测量 / 右上角 × / 会话失败回落）后由父级恢复取景。
- * 会话失败（无 ARCore、相机被占等）通过 onFallbackManual 回落手动量尺。
+ * 会话失败（无引擎、相机被占等）通过 onFallbackManual 回落手动量尺。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -35,6 +35,8 @@ import { haptics } from '../utils/haptics';
 interface ARNativeViewProps {
   style?: ViewStyle;
   testID?: string;
+  /** 'arcore'（GMS）| 'huawei'（华为/荣耀 AR Engine），决定原生挂载的引擎 */
+  engine?: string;
   onPlaneDetected?: (event: { nativeEvent: Record<string, never> }) => void;
   onSessionError?: (event: { nativeEvent: { reason: string } }) => void;
 }
@@ -63,6 +65,8 @@ const worldDistanceCm = (a: WorldPoint, b: WorldPoint): number =>
   Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) * 100;
 
 interface ARMeasureLayerProps {
+  /** 使用哪个引擎：arcore（GMS）| huawei（华为/荣耀 AR Engine） */
+  engine: 'arcore' | 'huawei';
   /** 用户确认测量结果 */
   onMeasured: (cm: number) => void;
   /** AR 不可用 / 会话失败 / 用户主动改用：回落手动量尺 */
@@ -72,6 +76,7 @@ interface ARMeasureLayerProps {
 }
 
 export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
+  engine,
   onMeasured,
   onFallbackManual,
   onClose,
@@ -203,10 +208,11 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
 
   return (
     <View style={styles.screen}>
-      {/* 原生 AR 相机背景（ARCore 会话随挂载/卸载起停） */}
+      {/* 原生 AR 相机背景（ARCore / 华为 AR Engine 会话随挂载/卸载起停） */}
       <ARMeasureViewNative
         style={StyleSheet.absoluteFill}
         testID="ar-measure-view"
+        engine={engine}
         onPlaneDetected={handlePlaneDetected}
         onSessionError={handleSessionError}
       />
@@ -220,7 +226,7 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
         onResponderMove={handleMove}
       />
 
-      {/* 视觉层：测线 + 引导（不拦截触摸） */}
+      {/* 视觉层：测线 + 扫描提示（不拦截触摸） */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {line && liveCm != null ? (
           <MeasureLineOverlay
@@ -243,26 +249,36 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
         ) : null}
       </View>
 
-      {/* 顶部：引导胶囊 + 关闭 */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.md }]}>
-        <View style={styles.banner}>
+      {/* 顶栏：引导胶囊居中 + 关闭按钮（整行吃安全区 padding，避免压到状态栏） */}
+      <View
+        style={[styles.topBar, { paddingTop: insets.top + spacing.md }]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.topSide} pointerEvents="none" />
+        <View style={styles.banner} pointerEvents="none">
           <RulerGlyph size={15} color="#EAD9AE" />
           <Text style={styles.bannerText} numberOfLines={1}>
             {bannerCopy}
           </Text>
-          <View style={[styles.calibDot, { backgroundColor: phase !== 'scanning' ? palette.accentGold : 'rgba(255,255,255,0.45)' }]} />
+          <View
+            style={[
+              styles.calibDot,
+              { backgroundColor: phase !== 'scanning' ? palette.accentGold : 'rgba(255,255,255,0.45)' },
+            ]}
+          />
         </View>
-        <PressableScale
-          onPress={onClose}
-          scaleTo={0.9}
-          style={styles.closeHit}
-          accessibilityLabel="关闭 AR 量尺"
-          accessibilityRole="button"
-        >
-          <View style={styles.closeBtn}>
-            <Icon name="close" size={19} color="#F6FAF8" />
-          </View>
-        </PressableScale>
+        <View style={styles.topSideRight}>
+          <PressableScale
+            onPress={onClose}
+            scaleTo={0.9}
+            accessibilityLabel="关闭 AR 量尺"
+            accessibilityRole="button"
+          >
+            <View style={styles.closeBtn}>
+              <Icon name="close" size={19} color="#F6FAF8" />
+            </View>
+          </PressableScale>
+        </View>
       </View>
 
       {notice ? (
@@ -281,8 +297,7 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
             <Text style={styles.resultHint}>AR 实测长度，拍照后自动填入鱼获</Text>
             <PrimaryButton
               label={`用 ${measuredCm.toFixed(1)} cm`}
-              variant="gold"
-              serif
+              variant="primary"
               onPress={() => onMeasured(measuredCm)}
               style={styles.primaryBtn}
             />
@@ -330,6 +345,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: palette.viewfinderDark,
   } as ViewStyle,
+  /** 顶栏：胶囊居中 + 右侧关闭；paddingTop 吃安全区，关闭按钮随行下移避开状态栏 */
   topBar: {
     position: 'absolute',
     top: 0,
@@ -337,7 +353,14 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+  } as ViewStyle,
+  topSide: {
+    flex: 1,
+  } as ViewStyle,
+  topSideRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+    paddingRight: spacing.md,
   } as ViewStyle,
   banner: {
     flexDirection: 'row',
@@ -360,11 +383,6 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-  } as ViewStyle,
-  closeHit: {
-    position: 'absolute',
-    right: spacing.md,
-    top: 0,
   } as ViewStyle,
   closeBtn: {
     width: 38,

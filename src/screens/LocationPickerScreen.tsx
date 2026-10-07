@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Image,
   ImageStyle,
   Keyboard,
@@ -12,6 +14,7 @@ import {
   TextStyle,
   View,
   ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
@@ -43,7 +46,7 @@ import { haptics } from '../utils/haptics';
 type PickerNavigationProp = StackNavigationProp<RootStackParamList, 'LocationPicker'>;
 type PickerRouteProp = RouteProp<RootStackParamList, 'LocationPicker'>;
 
-const GOLD = '#C9A96A';
+const GOLD = '#D6A541';
 /** 中心四周各补 2 张瓦片（5x5），覆盖一次拖动不重排的行程 */
 const TILE_RADIUS = 2;
 const MIN_ZOOM = 3;
@@ -57,7 +60,7 @@ const ROUND_BTN = 44;
 /**
  * 地图选点页（全屏地图）：
  * - 高德瓦片全屏铺满（国内可达 + 中文标注，免 Key），无背景装饰与顶栏；
- * - 左上角圆形关闭、右上角搜索图标（点击展开搜索条）；
+ * - 左上角圆形关闭、右上角搜索按钮（点击在原位向左平滑延展成搜索条）；
  * - 右侧图标化操作列：放大 / 缩小 / 回到当前位置；
  * - 中心金色十字即所选钓点，底部浮卡展示具体地址 + 坐标并确认回传。
  * 高德瓦片为 GCJ-02：内部 center 统一 WGS-84（与存储一致），显示转换、拖动结算逆转换。
@@ -95,6 +98,37 @@ export const LocationPickerScreen: React.FC = () => {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<PlaceSearchItem[]>([]);
+
+  /**
+   * 搜索条平滑展开：收起态即圆形搜索按钮（宽 ROUND_BTN），展开时在原位向左
+   * 延展成整条胶囊（内容与 close 按钮同行的剩余宽度）。searchMounted 让输入区
+   * 在收起动画播完后再卸载，收起过程内容随宽度收拢而不是瞬间消失。
+   */
+  const [searchMounted, setSearchMounted] = useState(false);
+  const searchWidth = useRef(new Animated.Value(0)).current;
+  const searchOpenRef = useRef(searchOpen);
+  searchOpenRef.current = searchOpen;
+  const { width: windowWidth } = useWindowDimensions();
+  const searchExpandedWidth = Math.max(
+    ROUND_BTN,
+    windowWidth - spacing.md * 2 - ROUND_BTN - spacing.md,
+  );
+
+  const animateSearch = useCallback(
+    (open: boolean) => {
+      Animated.timing(searchWidth, {
+        toValue: open ? 1 : 0,
+        duration: open ? 300 : 220,
+        easing: open ? Easing.out(Easing.cubic) : Easing.in(Easing.quad),
+        useNativeDriver: false,
+      }).start(({ finished }) => {
+        if (finished && !searchOpenRef.current) {
+          setSearchMounted(false);
+        }
+      });
+    },
+    [searchWidth],
+  );
 
   const centerRef = useRef(center);
   centerRef.current = center;
@@ -251,16 +285,20 @@ export const LocationPickerScreen: React.FC = () => {
     }
   }, [flashHint]);
 
-  const toggleSearch = useCallback(() => {
+  const openSearch = useCallback(() => {
     haptics.selection();
-    setSearchOpen((open) => {
-      if (open) {
-        Keyboard.dismiss();
-        setResults([]);
-      }
-      return !open;
-    });
-  }, []);
+    setSearchMounted(true);
+    setSearchOpen(true);
+    animateSearch(true);
+  }, [animateSearch]);
+
+  const closeSearch = useCallback(() => {
+    haptics.selection();
+    setSearchOpen(false);
+    Keyboard.dismiss();
+    setResults([]);
+    animateSearch(false);
+  }, [animateSearch]);
 
   const runSearch = useCallback(async () => {
     const text = query.trim();
@@ -277,15 +315,19 @@ export const LocationPickerScreen: React.FC = () => {
     }
   }, [query, center, flashHint]);
 
-  const applyResult = useCallback((item: PlaceSearchItem) => {
-    setCenter({ latitude: item.latitude, longitude: item.longitude });
-    setZoom(15);
-    setQuery(item.name);
-    setResults([]);
-    Keyboard.dismiss();
-    setSearchOpen(false);
-    haptics.selection();
-  }, []);
+  const applyResult = useCallback(
+    (item: PlaceSearchItem) => {
+      setCenter({ latitude: item.latitude, longitude: item.longitude });
+      setZoom(15);
+      setQuery(item.name);
+      setSearchOpen(false);
+      setResults([]);
+      Keyboard.dismiss();
+      animateSearch(false);
+      haptics.selection();
+    },
+    [animateSearch],
+  );
 
   const confirmPick = useCallback(async () => {
     if (confirming) {
@@ -358,7 +400,7 @@ export const LocationPickerScreen: React.FC = () => {
         <View style={styles.crosshairDot} />
       </View>
 
-      {/* 顶部操作：左上角圆形关闭 / 右上角搜索 */}
+      {/* 顶部操作：左上角圆形关闭 / 右上角搜索按钮原地向左延展成搜索条 */}
       <View
         style={[styles.topRow, { paddingTop: insets.top + spacing.md }]}
         pointerEvents="box-none"
@@ -372,74 +414,108 @@ export const LocationPickerScreen: React.FC = () => {
         >
           <Icon name="close" size={21} color={iconColor} />
         </PressableScale>
-        <PressableScale
-          onPress={toggleSearch}
-          scaleTo={0.9}
-          style={[styles.roundBtn, searchOpen && styles.roundBtnActive]}
-          accessibilityLabel={searchOpen ? '收起搜索' : '搜索地点'}
-          accessibilityRole="button"
+        <Animated.View
+          style={[
+            styles.searchField,
+            {
+              width: searchWidth.interpolate({
+                inputRange: [0, 1],
+                outputRange: [ROUND_BTN, searchExpandedWidth],
+              }),
+              backgroundColor: searchWidth.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['rgba(253,254,253,0.94)', cardBg],
+              }),
+              borderColor: searchWidth.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['rgba(23,59,75,0.12)', profile.surface.glassBorder],
+              }),
+            },
+          ]}
         >
-          <Icon name={searchOpen ? 'chevron-up' : 'search'} size={20} color={iconColor} />
-        </PressableScale>
+          {searchMounted ? (
+            <>
+              <Icon name="search" size={18} color={iconColor} />
+              <TextInput
+                style={[styles.searchInput, { color: textPrimary }]}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="搜索湖泊、水库、钓场…"
+                placeholderTextColor={textSecondary}
+                returnKeyType="search"
+                autoFocus
+                onSubmitEditing={() => void runSearch()}
+              />
+              {searching ? (
+                <ActivityIndicator size="small" color={GOLD} />
+              ) : query ? (
+                <PressableScale
+                  onPress={() => {
+                    setQuery('');
+                    setResults([]);
+                  }}
+                  scaleTo={0.9}
+                  style={styles.searchClear}
+                  accessibilityLabel="清空搜索"
+                  accessibilityRole="button"
+                >
+                  <Icon name="close-circle" size={15} color={textSecondary} />
+                </PressableScale>
+              ) : (
+                <PressableScale
+                  onPress={closeSearch}
+                  scaleTo={0.9}
+                  style={styles.searchClear}
+                  accessibilityLabel="收起搜索"
+                  accessibilityRole="button"
+                >
+                  <Icon name="chevron-down" size={17} color={textSecondary} />
+                </PressableScale>
+              )}
+            </>
+          ) : (
+            <PressableScale
+              onPress={openSearch}
+              scaleTo={0.9}
+              style={styles.searchTrigger}
+              accessibilityLabel="搜索地点"
+              accessibilityRole="button"
+            >
+              <Icon name="search" size={20} color={iconColor} />
+            </PressableScale>
+          )}
+        </Animated.View>
       </View>
 
-      {/* 搜索条：点击搜索图标展开，输入关键字搜索 */}
-      {searchOpen ? (
-        <View style={[styles.searchWrap, { top: insets.top + ROUND_BTN + spacing.md + spacing.xs }]}>
-          <View
-            style={[styles.searchBar, { backgroundColor: cardBg, borderColor: profile.surface.glassBorder }]}
-          >
-            <Icon name="search" size={15} color={textSecondary} />
-            <TextInput
-              style={[styles.searchInput, { color: textPrimary }]}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="搜索湖泊、水库、钓场…"
-              placeholderTextColor={textSecondary}
-              returnKeyType="search"
-              autoFocus
-              onSubmitEditing={() => void runSearch()}
-            />
-            {searching ? (
-              <ActivityIndicator size="small" color={GOLD} />
-            ) : query ? (
-              <PressableScale
-                onPress={() => {
-                  setQuery('');
-                  setResults([]);
-                }}
-                scaleTo={0.9}
-                style={styles.searchClear}
-                accessibilityLabel="清空搜索"
-                accessibilityRole="button"
-              >
-                <Icon name="close-circle" size={15} color={textSecondary} />
-              </PressableScale>
-            ) : null}
-          </View>
-          {results.length > 0 ? (
-            <ScrollView
-              style={[styles.resultList, { backgroundColor: cardBg, borderColor: profile.surface.glassBorder }]}
-              keyboardShouldPersistTaps="handled"
-            >
-              {results.map((item) => (
-                <PressableScale key={item.id} onPress={() => applyResult(item)} scaleTo={0.99}>
-                  <View style={styles.resultRow}>
-                    <Icon name="location-outline" size={14} color={GOLD} />
-                    <View style={styles.resultText}>
-                      <Text style={[styles.resultName, { color: textPrimary }]} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      <Text style={[styles.resultDetail, { color: textSecondary }]} numberOfLines={1}>
-                        {item.detail}
-                      </Text>
-                    </View>
-                  </View>
-                </PressableScale>
-              ))}
-            </ScrollView>
-          ) : null}
-        </View>
+      {/* 搜索结果列表：搜索条正下方 */}
+      {results.length > 0 ? (
+        <ScrollView
+          style={[
+            styles.resultList,
+            {
+              top: insets.top + spacing.md + ROUND_BTN + spacing.xs,
+              backgroundColor: cardBg,
+              borderColor: profile.surface.glassBorder,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          {results.map((item) => (
+            <PressableScale key={item.id} onPress={() => applyResult(item)} scaleTo={0.99}>
+              <View style={styles.resultRow}>
+                <Icon name="location-outline" size={14} color={GOLD} />
+                <View style={styles.resultText}>
+                  <Text style={[styles.resultName, { color: textPrimary }]} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={[styles.resultDetail, { color: textSecondary }]} numberOfLines={1}>
+                    {item.detail}
+                  </Text>
+                </View>
+              </View>
+            </PressableScale>
+          ))}
+        </ScrollView>
       ) : null}
 
       {/* 右侧操作列：放大 / 缩小 / 回到当前位置 */}
@@ -510,8 +586,7 @@ export const LocationPickerScreen: React.FC = () => {
           label="使用这个位置"
           onPress={() => void confirmPick()}
           loading={confirming}
-          variant="gold"
-          serif
+          variant="primary"
         />
       </View>
     </View>
@@ -570,7 +645,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   } as ViewStyle,
-  /** 圆形图标操作按钮（关闭 / 搜索 / 缩放 / 聚焦共用） */
+  /** 圆形图标操作按钮（关闭 / 缩放 / 聚焦共用） */
   roundBtn: {
     width: ROUND_BTN,
     height: ROUND_BTN,
@@ -580,14 +655,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(253,254,253,0.94)',
     borderWidth: 1,
     borderColor: 'rgba(23,59,75,0.12)',
-    shadowColor: '#173B4B',
+    shadowColor: '#0B2D4B',
     shadowOpacity: 0.18,
     shadowRadius: 7,
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   } as ViewStyle,
-  roundBtnActive: {
-    borderColor: 'rgba(201,169,106,0.6)',
+  /**
+   * 顶栏搜索条：收起态宽 ROUND_BTN 即圆形按钮，展开时向左延展成胶囊；
+   * paddingLeft = (ROUND_BTN - 图标) / 2，图标在两个形态间位置不跳变。
+   */
+  searchField: {
+    height: ROUND_BTN,
+    borderRadius: ROUND_BTN / 2,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    overflow: 'hidden',
+    shadowColor: '#0B2D4B',
+    shadowOpacity: 0.18,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  } as ViewStyle,
+  /** 收起态：覆盖整个圆形区域的点击触发层 */
+  searchTrigger: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   } as ViewStyle,
   sideControls: {
     position: 'absolute',
@@ -597,25 +694,6 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   locateBtn: {
     borderColor: 'rgba(201,169,106,0.55)',
-  } as ViewStyle,
-  searchWrap: {
-    position: 'absolute',
-    left: spacing.md,
-    right: spacing.md,
-  } as ViewStyle,
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radius.s + 4,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    height: 44,
-    shadowColor: '#173B4B',
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   } as ViewStyle,
   searchInput: {
     flex: 1,
@@ -627,7 +705,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   } as ViewStyle,
   resultList: {
-    marginTop: spacing.xs,
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
     borderRadius: radius.m,
     borderWidth: 1,
     maxHeight: 216,
@@ -678,7 +758,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
     gap: spacing.md,
-    shadowColor: '#173B4B',
+    shadowColor: '#0B2D4B',
     shadowOpacity: 0.2,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 4 },

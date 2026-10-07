@@ -32,7 +32,7 @@ type CalendarScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Cal
 type ViewMode = 'month' | 'year';
 
 const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
-const GOLD = '#C9A96A';
+const GOLD = '#D6A541';
 
 const pad2 = (value: number): string => (value < 10 ? `0${value}` : `${value}`);
 const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];

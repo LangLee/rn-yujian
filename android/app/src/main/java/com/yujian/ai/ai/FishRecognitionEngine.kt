@@ -133,7 +133,7 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
     }
 
     /**
-     * MODEL_CROP_M1_v0.1 classifier preprocessing.
+     * MODEL_CROP_M1_v0.2 classifier preprocessing.
      *
      * The caller owns source selection. The production FishRecognitionPipeline passes
      * a detector-expanded fish crop; classifier-only parity tests can pass a direct bitmap.
@@ -212,9 +212,9 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
 
     companion object {
         const val MODEL_FILE = "fish_classifier.tflite"
-        const val MODEL_VERSION = "MODEL_CROP_M1_v0.1"
-        const val MODEL_BYTES = 6_249_008
-        const val MODEL_SHA256 = "b77ea78e7f8554078ea3a79051039af1ace04f0ac4e2604da57d1dd8f0b010e7"
+        const val MODEL_VERSION = "MODEL_CROP_M1_v0.2"
+        const val MODEL_BYTES = 6_244_908
+        const val MODEL_SHA256 = "29c2f2fd1608178f023b8e35edf632c0dd685df4a7ae1c3562220a7352ccce18"
         private const val LOG_TAG = "FishRecognitionEngine"
 
         private const val PADDING_R = 124
@@ -223,7 +223,7 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
         private val IMAGENET_MEAN = floatArrayOf(0.485f, 0.456f, 0.406f)
         private val IMAGENET_STD = floatArrayOf(0.229f, 0.224f, 0.225f)
 
-        /** 与 mobile-model-v0.2 Release 的 class_map.json 严格同序（16 类）。 */
+        /** 与 mobile-model-v0.2 Release 的 class_map.json 严格同序（15 类，v0.2 起 DS_M1_v1.1 移除 other_freshwater_fish）。 */
         val MODEL_LABELS = listOf(
             "bighead_carp" to "鳙鱼",
             "black_carp" to "青鱼",
@@ -234,7 +234,6 @@ class FishRecognitionEngine(private val context: Context) : AutoCloseable {
             "grass_carp" to "草鱼",
             "largemouth_bass" to "加州鲈",
             "mandarin_fish" to "鳜鱼",
-            "other_freshwater_fish" to "其他淡水鱼",
             "sharpbelly" to "白条",
             "silver_carp" to "白鲢",
             "snakehead" to "黑鱼",

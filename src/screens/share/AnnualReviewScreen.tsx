@@ -41,10 +41,10 @@ import { Alert } from '../../utils/alert';
 type ReviewNavigationProp = StackNavigationProp;
 type ReviewRoute = RouteProp<{ AnnualReview: { year?: number } | undefined }, 'AnnualReview'>;
 
-const INK = '#173B4B';
+const INK = '#0B2D4B';
 const BLUE = '#3D6B8E';
 const BLUE_SOFT = '#DCE9F5';
-const GOLD = '#C9A25E';
+const GOLD = '#D6A541';
 const SCREEN_W = Dimensions.get('window').width;
 
 /**

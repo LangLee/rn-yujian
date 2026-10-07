@@ -9,7 +9,7 @@ export type { CatchLocation };
 
 /**
  * 定位服务（设计文档 13.2 隐私与定位 / 18.5 Privacy Contract）：
- * - 权限：PermissionsAndroid 统一申请 fine + coarse；
+ * - 权限：PermissionsAndroid 申请 fine（与 coarse 同组，单次系统弹窗，并发去重）；
  * - 定位：原生 LocationManager 一次性定位；
  * - 地名：高德 Web 服务（国内可达，需在 .env 配 YUJIAN_AMAP_WEB_KEY，免Key额度充足）
  *   → OSM Nominatim 兜底（海外可达，免 Key）→ 均失败退化为坐标文案；
@@ -17,6 +17,74 @@ export type { CatchLocation };
  * 所有失败路径静默降级，绝不阻塞拍照识鱼主流程。
  * 高德系坐标为 GCJ-02，出入均做 WGS-84 转换，存储统一 WGS-84。
  */
+
+/**
+ * 进行中的权限申请：并发调用共享同一次申请，
+ * 避免连点「开启定位」时连发两个系统权限弹窗。
+ */
+let permissionRequestInFlight: Promise<LocationPermissionStatus> | null = null;
+
+/**
+ * 单次申请实现：只申请 fine（fine / coarse 同属 LOCATION 权限组，系统只弹一个弹窗；
+ * 部分 ROM 对 requestMultiple 会逐个权限各弹一次）。
+ */
+async function doRequestLocationPermission(): Promise<LocationPermissionStatus> {
+  try {
+    const result = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    );
+    if (result === 'granted') {
+      return 'granted';
+    }
+    // 个别 ROM 允许只给模糊定位（fine 被拒但 coarse 通过），以实际授予状态为准
+    const [fine, coarse] = await Promise.all([
+      PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION),
+      PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION),
+    ]);
+    if (fine || coarse) {
+      return 'granted';
+    }
+    return result === 'never_ask_again' ? 'blocked' : 'denied';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/* ─── 最近使用地点（Recognition Result Metadata Edit Flow V1 §11）─────────────
+ * 设备本地 V1 历史：最多 3 条、新者在前、按归一化展示名去重；
+ * 选择即置顶；清除历史不影响当前结果地点；无登录、无同步。               */
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const RECENT_KEY = 'yj_recent_places_v1';
+const normalizePlaceName = (name: string): string => name.trim().replace(/\s+/g, '');
+
+async function readRecent(): Promise<PlaceSearchItem[]> {
+  try {
+    const raw = await AsyncStorage.getItem(RECENT_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as PlaceSearchItem[]).slice(0, 3) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeRecent(items: PlaceSearchItem[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(items.slice(0, 3)));
+  } catch {
+    // 历史写入失败静默
+  }
+}
+
+async function pushRecentPlaceImpl(item: PlaceSearchItem): Promise<void> {
+  const list = await readRecent();
+  const key = normalizePlaceName(item.name);
+  const next = [item, ...list.filter((p) => normalizePlaceName(p.name) !== key)];
+  await writeRecent(next);
+}
 
 export type LocationPermissionStatus =
   /** 已授权（fine 或 coarse 任一） */
@@ -135,29 +203,19 @@ export const locationService = {
   },
 
   /**
-   * 申请定位权限（fine + coarse 一起弹）。
+   * 申请定位权限（单次系统弹窗；并发调用共享同一次申请）。
    * 返回值仅区分能否继续定位与是否只能去系统设置。
    */
   async requestPermission(): Promise<LocationPermissionStatus> {
     if (Platform.OS !== 'android') {
       return 'unavailable';
     }
-    try {
-      const result = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
-      ]);
-      const values = Object.values(result);
-      if (values.some((value) => value === 'granted')) {
-        return 'granted';
-      }
-      if (values.length > 0 && values.every((value) => value === 'never_ask_again')) {
-        return 'blocked';
-      }
-      return 'denied';
-    } catch {
-      return 'unavailable';
+    if (!permissionRequestInFlight) {
+      permissionRequestInFlight = doRequestLocationPermission().finally(() => {
+        permissionRequestInFlight = null;
+      });
     }
+    return permissionRequestInFlight;
   },
 
   /** 系统定位服务（GPS/网络）是否开启 */
@@ -358,6 +416,21 @@ export const locationService = {
   },
 
   /** 地点搜索（地图选点页顶部搜索框）：高德（有 Key）优先 → Nominatim 兜底；失败返回空列表 */
+  /** 最近使用地点（设备本地，最多 3 条，新者在前） */
+  async getRecentPlaces(): Promise<PlaceSearchItem[]> {
+    return readRecent();
+  },
+
+  /** 记录一次选择（去重置顶） */
+  async pushRecentPlace(item: PlaceSearchItem): Promise<void> {
+    await pushRecentPlaceImpl(item);
+  },
+
+  /** 清除历史（不影响当前结果地点） */
+  async clearRecentPlaces(): Promise<void> {
+    await writeRecent([]);
+  },
+
   async searchPlaces(
     query: string,
     near?: { latitude: number; longitude: number },

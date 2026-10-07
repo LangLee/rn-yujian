@@ -167,6 +167,16 @@ class YujianRecognitionModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    /**
+     * 登录后注入/清除访问令牌：反馈与推理上传改用 JWT Bearer 鉴权，
+     * 令牌就绪前提交的内容会进入离线队列等待冲刷。
+     */
+    @ReactMethod
+    fun setAuthToken(token: String?, promise: Promise) {
+        feedbackLazy.value.accessToken = token?.takeIf { it.isNotBlank() }
+        promise.resolve(true)
+    }
+
     /** Drop in-memory bitmaps for one image; persisted contracts are untouched. */
     @ReactMethod
     fun releaseImage(imageId: String, promise: Promise) {

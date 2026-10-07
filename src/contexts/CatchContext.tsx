@@ -57,8 +57,8 @@ export const CatchProvider: React.FC<CatchProviderProps> = ({ children }) => {
       }
       try {
         const [catches, statistics] = await Promise.all([
-          catchService.listCatches(session.accessToken),
-          catchService.statistics(session.accessToken),
+          catchService.listCatches(),
+          catchService.statistics(),
         ]);
         if (mounted) {
           setState({ catches, statistics, loading: false, error: null });

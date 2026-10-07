@@ -51,7 +51,7 @@ type CreateRoute = RouteProp<
   'ShareCreate'
 >;
 
-const GOLD = '#C9A25E';
+const GOLD = '#D6A541';
 const GOLD_LIGHT = '#E7D2A2';
 const GOLD_TEXT = '#9A7B3F';
 
@@ -231,9 +231,9 @@ export const ShareCreateScreen: React.FC = () => {
       <WaterBackdrop />
       <ScreenHeader
         title="生成鱼获分享"
-        subtitle="把这次收获整理成一张记忆"
         onBack={() => navigation.goBack()}
       />
+      <Text style={styles.headerSubline}>把这次收获整理成一张记忆</Text>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[
@@ -628,6 +628,15 @@ const RowDivider: React.FC = () => (
 );
 
 const styles = StyleSheet.create({
+  /* 页面说明行（Top Navigation V1 不承载副标题） */
+  headerSubline: {
+    fontSize: fs(13),
+    lineHeight: fs(18),
+    color: '#748897',
+    paddingHorizontal: 16,
+    marginTop: 2,
+    marginBottom: 6,
+  } as TextStyle,
   screen: {
     flex: 1,
   } as ViewStyle,

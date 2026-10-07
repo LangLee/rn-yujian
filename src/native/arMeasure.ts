@@ -1,19 +1,28 @@
 import { NativeModules, Platform } from 'react-native';
 
 /**
- * AR 自动量尺原生模块封装（Android: ARCore；iOS 契约预留，识别链路目前仅 Android）。
+ * AR 自动量尺原生模块封装（双引擎：Android GMS 走 ARCore，华为/荣耀 HMS 走 AR Engine；
+ * iOS 契约预留，识别链路目前仅 Android）。
  *
  * 原生侧文件：
- *   android/.../com/yujian/ai/ar/ARMeasureView.kt     —— ARCore 会话 + GL 相机背景 + hitTest
- *   android/.../com/yujian/ai/rn/ARMeasureModule.kt   —— 支持度探测 / 安装引导 / hitTest 转发
+ *   android/.../com/yujian/ai/ar/ARMeasureView.kt        —— 容器：按 engine prop 挂控制器
+ *   android/.../com/yujian/ai/ar/ArCoreController.kt     —— ARCore 会话 + GL 背景 + hitTest
+ *   android/.../com/yujian/ai/ar/HuaweiARController.kt   —— 华为 AR Engine 同契约实现
+ *   android/.../com/yujian/ai/rn/ARMeasureModule.kt      —— 双引擎探测 / 安装引导 / hitTest 转发
  */
-export type ARSupportLevel = 'supported' | 'installable' | 'unsupported';
+export type AREngine = 'arcore' | 'huawei';
+
+export type ARSupportLevel = {
+  level: 'supported' | 'installable' | 'unsupported';
+  /** level 非 unsupported 时给出应使用的引擎 */
+  engine: AREngine | null;
+};
 
 interface ARMeasureNative {
-  /** 'supported' | 'installable' | 'unsupported' | 'unknown'（unknown = 检测中） */
+  /** 'level:engine' 组合码 | 'unsupported' | 'unknown'（检测中） */
   isARSupported(): Promise<string>;
-  /** 引导安装 Google Play Services for AR；true = 已就绪 */
-  requestARCoreInstall(): Promise<boolean>;
+  /** 引导安装/更新对应引擎；true = 已就绪 */
+  requestARCoreInstall(engine?: string): Promise<boolean>;
   /** dp 屏幕坐标 → 世界坐标（米）；null = 未命中平面 */
   hitTest(x: number, y: number): Promise<{ x: number; y: number; z: number; plane: boolean } | null>;
 }
@@ -27,6 +36,15 @@ const PROBE_TOTAL_MS = 1800;
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/** 'supported:huawei' → { level: 'supported', engine: 'huawei' } */
+const parseSupport = (code: string): ARSupportLevel => {
+  const [level, engine] = code.split(':');
+  if ((level === 'supported' || level === 'installable') && (engine === 'arcore' || engine === 'huawei')) {
+    return { level, engine };
+  }
+  return { level: 'unsupported', engine: null };
+};
+
 export const arMeasure = {
   /** 原生模块是否存在（iOS / 未编译新原生层时为 false） */
   get available(): boolean {
@@ -34,39 +52,37 @@ export const arMeasure = {
   },
 
   /**
-   * 探测本机 AR 支持度（带轮询：部分 GMS 机型首查返回 unknown）。
+   * 探测本机 AR 支持度（带轮询：部分机型首查返回 unknown）。
+   * 引擎优先级由原生决定：ARCore（GMS）→ 华为 AR Engine（HMS）。
    * 无原生模块 / 非 Android 一律 unsupported，由调用方回落手动量尺。
    */
   async probeSupport(): Promise<ARSupportLevel> {
     if (!native) {
-      return 'unsupported';
+      return { level: 'unsupported', engine: null };
     }
     const deadline = Date.now() + PROBE_TOTAL_MS;
-    let level = 'unknown';
+    let code = 'unknown';
     while (true) {
       try {
-        level = await native.isARSupported();
+        code = await native.isARSupported();
       } catch {
-        return 'unsupported';
+        return { level: 'unsupported', engine: null };
       }
-      if (level !== 'unknown' || Date.now() >= deadline) {
+      if (code !== 'unknown' || Date.now() >= deadline) {
         break;
       }
       await sleep(PROBE_INTERVAL_MS);
     }
-    if (level === 'supported' || level === 'installable') {
-      return level;
-    }
-    return 'unsupported';
+    return parseSupport(code);
   },
 
-  /** 引导安装/更新 ARCore；resolve false = 未就绪（等待安装或用户取消） */
-  async requestInstall(): Promise<boolean> {
+  /** 引导安装/更新引擎（ARCore → Play；AR Engine → 华为应用市场/系统组件）；false = 未就绪 */
+  async requestInstall(engine: AREngine | null = null): Promise<boolean> {
     if (!native) {
       return false;
     }
     try {
-      return await native.requestARCoreInstall();
+      return await native.requestARCoreInstall(engine ?? undefined);
     } catch {
       return false;
     }

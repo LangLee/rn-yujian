@@ -5,14 +5,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
+  
   TextStyle,
   View,
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import {
   fishKnowledgeService,
   localGuideItems,
@@ -20,33 +19,33 @@ import {
 } from '../services/fishKnowledgeService';
 import { RemoteImage } from '../components/RemoteImage';
 import { font, fs, radius, spacing } from '../constants/tokens';
+import { coreColors } from '../constants/coreUi';
 import { FishGuideItem } from '../types/models';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
-import { WaterBackdrop } from '../components/WaterBackdrop';
+import { MorningLakeScene } from '../components/coreui';
 import { PressableScale } from '../components/ui/PressableScale';
-import { EmptyState } from '../components/ui/EmptyState';
-import { ScreenHeader, HeaderIconButton } from '../components';
+import { ScreenHeader } from '../components';
 
 type FishGuideHomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Guide'>;
 
-const GOLD = '#C9A96A';
+/** Gold 规则：点亮进度属于 Meaningful Record，允许金色 */
+const GOLD = coreColors.morningGold;
 
 /**
- * 鱼鉴首页（设计文档 9.2 + 高保真参考稿）：
- * 顶栏（返回 / 渔见 / 搜索）→ hero（鱼鉴 + 认识你遇见的每一种鱼 + N 种鱼已点亮金进度）→
+ * 鱼鉴首页（设计文档 9.2 + Fish Guide V2 冻结稿）：
+ * 顶栏 TITLE_ONLY（仅页标题「鱼鉴」，无 Search —— 鱼鉴 Home V1 冻结行为）→
+ * hero（认识你遇见的每一种鱼 + N 种鱼已点亮金进度）→
  * 已点亮 / 未点亮 分组两列卡片。未点亮灰度显示但知识始终可点击，不做「锁住知识」。
+ * BG_DATA：同一清晨湖畔世界，背景存在感降至 ~55% 保证图鉴阅读性。
  */
 export const FishGuideHomeScreen: React.FC = () => {
   const navigation = useNavigation<FishGuideHomeScreenNavigationProp>();
-  const { profile } = useThemeSafe();
   const insets = useSafeAreaInsets();
 
   const [species, setSpecies] = useState<FishGuideItem[]>(localGuideItems());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -76,39 +75,21 @@ export const FishGuideHomeScreen: React.FC = () => {
   const lit = useMemo(() => species.filter((fish) => fish.discovered), [species]);
   const unlit = useMemo(() => species.filter((fish) => !fish.discovered), [species]);
 
-  const searching = query.trim().length > 0;
-  const searchResults = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    return species.filter(
-      (fish) =>
-        fish.nameCn.toLowerCase().includes(keyword) ||
-        (fish.aliases ?? []).some((alias) => alias.toLowerCase().includes(keyword)),
-    );
-  }, [species, query]);
-
-  const textPrimary = profile.surface.textPrimary;
-  const textSecondary = profile.surface.textSecondary;
+  /* Core UI V1 固定清晨湖畔世界：文字/表面不再随环境主题漂移 */
+  const textPrimary = coreColors.deepLakeBlue;
+  const textSecondary = coreColors.lakeBlue;
   const progress = species.length === 0 ? 0 : Math.min(1, lit.length / species.length);
 
   return (
     <View style={styles.screen}>
-      <WaterBackdrop />
-      {/* 顶栏：返回 / 渔见 / 搜索 */}
+      <MorningLakeScene level="data" />
+      {/* 顶栏 TITLE_ONLY（鱼鉴 Home V1 冻结：仅页标题，无 Search；28sp·Medium·左对齐） */}
       <ScreenHeader
-        title="渔见"
+        title="鱼鉴"
+        titleOnly
         onBack={() => navigation.goBack()}
-        right={
-          <HeaderIconButton
-            name={searchOpen ? 'close' : 'search-outline'}
-            color={textPrimary}
-            onPress={() => {
-              setSearchOpen((value) => !value);
-              if (searchOpen) {
-                setQuery('');
-              }
-            }}
-          />
-        }
+        titleColor={textPrimary}
+        backColor={textPrimary}
       />
 
       <ScrollView
@@ -116,10 +97,9 @@ export const FishGuideHomeScreen: React.FC = () => {
         contentContainerStyle={[styles.content, { paddingBottom: 48 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero：鱼鉴 + 点亮进度 */}
+        {/* Hero：点亮进度（已点亮 N 种） */}
         <View style={styles.heroRow}>
           <View style={styles.heroLeft}>
-            <Text style={[styles.heroTitle, { color: textPrimary }]}>鱼鉴</Text>
             <Text style={[styles.heroSub, { color: textSecondary }]}>认识你遇见的每一种鱼</Text>
           </View>
           <View style={styles.heroRight}>
@@ -127,7 +107,7 @@ export const FishGuideHomeScreen: React.FC = () => {
               <Text style={[styles.litCount, { color: GOLD }]}>{lit.length}</Text>
               <Text style={[styles.litSuffix, { color: textSecondary }]}>种鱼已点亮</Text>
             </View>
-            <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.5)' }]}>
+            <View style={[styles.progressTrack, { backgroundColor: 'rgba(11,45,75,0.12)' }]}>
               <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: GOLD }]} />
             </View>
           </View>
@@ -135,43 +115,17 @@ export const FishGuideHomeScreen: React.FC = () => {
 
         {error !== null ? (
           <PressableScale onPress={() => setRetryToken((value) => value + 1)} scaleTo={0.98}>
-            <View style={[styles.errorBanner, { backgroundColor: profile.surface.glassStrong }]}>
+            <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,255,255,0.76)' }]}>
               <Text style={[styles.errorText, { color: textSecondary }]} numberOfLines={2}>
                 鱼鉴暂时没有加载出来，你的记录没有受影响
               </Text>
-              <Text style={[styles.retryText, { color: profile.surface.accent }]}>重新尝试</Text>
+              <Text style={[styles.retryText, { color: coreColors.deepLakeBlue }]}>重新尝试</Text>
             </View>
           </PressableScale>
         ) : null}
 
-        {searchOpen ? (
-          <View style={[styles.searchWrap, { backgroundColor: profile.surface.glassStrong }]}>
-            <Icon name="search-outline" size={17} color={textSecondary} />
-            <TextInput
-              style={[styles.searchInput, { color: textPrimary }]}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="搜索鱼名或别名"
-              placeholderTextColor={textSecondary}
-              autoFocus
-            />
-          </View>
-        ) : null}
-
         {loading && species.length === 0 ? (
           <Text style={[styles.stateText, { color: textSecondary }]}>正在打开鱼鉴…</Text>
-        ) : searching ? (
-          searchResults.length === 0 ? (
-            <EmptyState
-              variant="search"
-              title="没有找到这个鱼种"
-              description="可以试试其他名称，或清空搜索浏览全部鱼种。"
-              actionLabel="清空搜索"
-              onAction={() => setQuery('')}
-            />
-          ) : (
-            <SpeciesSection title="搜索结果" items={searchResults} textPrimary={textPrimary} textSecondary={textSecondary} onOpen={(key) => navigation.navigate('Species', { key })} />
-          )
         ) : (
           <>
             <SpeciesSection title="已点亮" items={lit} textPrimary={textPrimary} textSecondary={textSecondary} onOpen={(key) => navigation.navigate('Species', { key })} />
@@ -182,9 +136,6 @@ export const FishGuideHomeScreen: React.FC = () => {
     </View>
   );
 };
-
-import { useTheme } from '../contexts/ThemeContext';
-const useThemeSafe = useTheme;
 
 const SpeciesSection: React.FC<{
   title: string;
@@ -277,12 +228,6 @@ const styles = StyleSheet.create({
   heroLeft: {
     flexShrink: 1,
   } as ViewStyle,
-  heroTitle: {
-    fontFamily: font.serif,
-    fontSize: fs(30),
-    fontWeight: '700',
-    letterSpacing: 10,
-  } as TextStyle,
   heroSub: {
     fontSize: fs(14),
     marginTop: 10,
@@ -334,22 +279,6 @@ const styles = StyleSheet.create({
   retryText: {
     fontSize: fs(13),
     fontWeight: '600',
-  } as TextStyle,
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radius.s,
-    paddingHorizontal: spacing.md,
-    height: 42,
-    marginTop: spacing.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-  } as ViewStyle,
-  searchInput: {
-    flex: 1,
-    fontSize: fs(15),
-    paddingVertical: 0,
   } as TextStyle,
   stateText: {
     fontSize: fs(13),
@@ -404,7 +333,7 @@ const styles = StyleSheet.create({
     fontSize: fs(14),
     fontWeight: '700',
     letterSpacing: 1,
-    color: '#1F4A56',
+    color: coreColors.deepLakeBlue,
   } as TextStyle,
   cardMeta: {
     fontSize: fs(10),

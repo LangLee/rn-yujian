@@ -1,60 +1,105 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dimensions,
-  ScrollView,
+  SectionList,
   StyleSheet,
   Text,
-  TextInput,
   TextStyle,
   View,
   ViewStyle,
 } from 'react-native';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { StackNavigationProp, RootStackParamList } from '../../navigation/types';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { useCatchArchive } from '../../contexts/CatchContext';
-import { RemoteCatch } from '../../types/models';
-import { palette } from '../../constants/colors';
-import { font, fs, radius, spacing } from '../../constants/tokens';
 import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryService';
-import { groupCatchesByMonth } from '../../utils/formatters';
-import { RemoteImage } from '../../components/RemoteImage';
+import { coreColors, PAGE_MARGIN } from '../../constants/coreUi';
+import { font, fs, spacing } from '../../constants/tokens';
 import { PressableScale } from '../../components/ui/PressableScale';
-import { EmptyState } from '../../components/ui/EmptyState';
-import { BottomSheet } from '../../components/ui/BottomSheet';
-import { RadioDot } from '../../components/ui/RadioDot';
+import { YuJianPrimaryCaptureButton } from '../../components/coreui';
+import {
+  CatchEntry,
+  DayGroup,
+  EMPTY_FILTER,
+  MyCatchesFilterState,
+  buildEntries,
+  groupByMonthAndDay,
+  isFilterActive,
+  activeConditionCount,
+  matchFilter,
+  matchSearch,
+  resolveEmptyKind,
+  resolveGrowthMarks,
+  sortNewestFirst,
+} from '../../utils/myCatchesTimeline';
+import { FishRecordRowCard } from './myCatches/FishRecordRowCard';
+import { F1FilterPanel } from './myCatches/F1FilterPanel';
 
 type MyCatchesTabNavigationProp = StackNavigationProp<RootStackParamList, 'MyCatches'>;
 
-const COLUMNS = 2;
-const GOLD = '#C9A96A';
+/** 初始加载最近 3 个月，滚动到历史边界再加载更早（Timeline Scroll Spec §6） */
+const INITIAL_MONTH_WINDOW = 3;
+const MONTH_PAGE_SIZE = 3;
+/** 最近搜索最多保存 6 个（Search Spec §6） */
+const RECENT_SEARCH_KEY = '@yujian/recent_catch_search';
+const RECENT_SEARCH_MAX = 6;
+
+export interface MyCatchesTabControllerProps {
+  /** Search Mode（由 Hub 头部驱动） */
+  searchMode: boolean;
+  query: string;
+  onQueryChange: (query: string) => void;
+  /** 搜索模式内点击 Filter Summary：返回原页面并展开 F1，query 保留（Search Spec §12） */
+  onEditFilterFromSearch: () => void;
+  /** F1 展开状态（Hub Filter Action 驱动） */
+  filterOpen: boolean;
+  /** 通知 Hub：当前是否有生效筛选（Filter Action 状态提示点） */
+  onFilterActiveChange: (active: boolean) => void;
+}
+
+type Row =
+  | { kind: 'day'; day: DayGroup; firstOfMonth: boolean }
+  | { kind: 'card'; entry: CatchEntry; rail: 'through' | 'end' }
+  | { kind: 'expand'; dayKey: string; hidden: number; total: number }
+  | { kind: 'collapse'; dayKey: string };
+
+/** 时间线轨道几何：竖线中心 x（相对内容左缘）与日期栏后的内容缩进 */
+const RAIL_CENTER_X = 6;
+/** 日期栏（rail + 间距 + 23 SEP）之后的内容统一缩进 */
+const CONTENT_INSET = 72;
 
 /**
- * 我的鱼获 Tab（P20-1）：筛选 chips（全部 / 鱼种 / 时间 / 地点）；
- * 按月份分组、两列 3:4 照片卡；右下角相机 FAB。
- * 由 CatchHub 容器承载页面标题与分段切换，这里只负责列表本体。
+ * 我的鱼获 Tab · My Catches V2（Chronological Archive，FROZEN）。
+ *
+ * 结构（Design Audit §2）：搜索/筛选（Hub 头部）→ 档案摘要 → 月份分组（Sticky）
+ * → 日期节点/当日摘要 → FishRecordRowCard → Growth Mark → 共享拍摄入口。
  */
-export const MyCatchesTab: React.FC = () => {
+export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
+  searchMode,
+  query,
+  onQueryChange,
+  onEditFilterFromSearch,
+  filterOpen,
+  onFilterActiveChange,
+}) => {
   const navigation = useNavigation<MyCatchesTabNavigationProp>();
-  const { profile } = useTheme();
-  const { session } = useAuth();
   const { catches, loading, error, reload } = useCatchArchive();
   const insets = useSafeAreaInsets();
 
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [speciesFilter, setSpeciesFilter] = useState<string | null>(null);
-  const [locationFilter, setLocationFilter] = useState<string | null>(null);
-  const [sortAsc, setSortAsc] = useState(false);
-  const [speciesSheet, setSpeciesSheet] = useState(false);
-  const [locationSheet, setLocationSheet] = useState(false);
+  const [filter, setFilter] = useState<MyCatchesFilterState>(EMPTY_FILTER);
   const [memories, setMemories] = useState<Record<string, CatchMemoryData>>({});
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [monthWindow, setMonthWindow] = useState(INITIAL_MONTH_WINDOW);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const listRef = useRef<SectionList<Row, { key: string; data: Row[] }>>(null);
+  /** query 有效结果标记（Search Spec §7：仅在点击结果 / 有效退出时写最近搜索） */
+  const queryHadResultsRef = useRef(false);
+  /** 最后一次非空 query：取消会与清空 query 同批提交，退出时用 ref 收口最近搜索 */
+  const lastQueryRef = useRef('');
 
-  // 地点筛选来源：本地 Catch Memory
+  /* ---------- 数据装配 ---------- */
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -70,573 +115,789 @@ export const MyCatchesTab: React.FC = () => {
     };
   }, [catches]);
 
-  const speciesOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    catches.forEach((item) => {
-      if (item.speciesId && !seen.has(item.speciesId)) {
-        seen.set(item.speciesId, item.speciesName || item.speciesId);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(RECENT_SEARCH_KEY);
+        if (mounted) {
+          const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+          setRecentSearches(Array.isArray(parsed) ? parsed.slice(0, RECENT_SEARCH_MAX) : []);
+        }
+      } catch {
+        // 本地存储失败不阻塞页面
       }
-    });
-    return Array.from(seen, ([key, name]) => ({ key, name }));
-  }, [catches]);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const locationOptions = useMemo(() => {
-    const set = new Set<string>();
-    Object.values(memories).forEach((memory) => {
-      const value = memory.location?.trim();
-      if (value) {
-        set.add(value);
-      }
-    });
-    return Array.from(set);
-  }, [memories]);
+  const entries = useMemo(() => buildEntries(catches, memories), [catches, memories]);
+  const marks = useMemo(() => resolveGrowthMarks(entries), [entries]);
 
   const filtered = useMemo(() => {
-    const keyword = query.trim();
-    let list = catches;
-    if (keyword) {
-      list = list.filter((item) => item.speciesName.includes(keyword));
-    }
-    if (speciesFilter) {
-      list = list.filter((item) => item.speciesId === speciesFilter);
-    }
-    if (locationFilter) {
-      list = list.filter((item) => memories[item.id]?.location?.trim() === locationFilter);
-    }
-    const sorted = [...list].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
-    return sortAsc ? sorted : sorted.reverse();
-  }, [catches, query, speciesFilter, locationFilter, memories, sortAsc]);
+    const now = new Date();
+    return sortNewestFirst(
+      entries.filter(
+        (entry) =>
+          matchSearch(entry, query, marks) && matchFilter(entry, filter, marks, now),
+      ),
+    );
+  }, [entries, query, filter, marks]);
 
-  const groups = useMemo(() => groupCatchesByMonth(filtered), [filtered]);
+  const allMonths = useMemo(() => groupByMonthAndDay(filtered), [filtered]);
+  const months = useMemo(() => allMonths.slice(0, monthWindow), [allMonths, monthWindow]);
 
-  const textPrimary = profile.surface.textPrimary;
-  const textSecondary = profile.surface.textSecondary;
-  const speciesFilterName = speciesOptions.find((option) => option.key === speciesFilter)?.name;
+  const filterActive = useMemo(() => isFilterActive(filter), [filter]);
+  useEffect(() => {
+    onFilterActiveChange(filterActive);
+  }, [filterActive, onFilterActiveChange]);
+
+  const emptyKind = resolveEmptyKind({
+    loading,
+    hasError: !!error,
+    rawCount: catches.length,
+    query,
+    filterActive,
+    resultCount: filtered.length,
+  });
+
+  /* 搜索/筛选条件变化：折叠态复位、回到结果顶部（Timeline Scroll Spec §7） */
+  const conditionKey = `${query}|${JSON.stringify(filter)}`;
+  const lastConditionRef = useRef(conditionKey);
+  useEffect(() => {
+    if (query.trim()) {
+      lastQueryRef.current = query;
+    }
+    if (lastConditionRef.current === conditionKey) return;
+    lastConditionRef.current = conditionKey;
+    setExpandedDays(new Set());
+    setMonthWindow(INITIAL_MONTH_WINDOW);
+    queryHadResultsRef.current = filtered.length > 0 && query.trim().length > 0;
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToLocation({
+        sectionIndex: 0,
+        itemIndex: 0,
+        viewPosition: 0,
+        viewOffset: 0,
+        animated: false,
+      });
+    });
+    // filtered 依赖 conditionKey 派生，避免重复触发
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conditionKey]);
+
+  /* ---------- 最近搜索（仅在有效结果时写入） ---------- */
+
+  const persistRecentSearch = useCallback((value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setRecentSearches((prev) => {
+      const next = [trimmed, ...prev.filter((item) => item !== trimmed)].slice(
+        0,
+        RECENT_SEARCH_MAX,
+      );
+      AsyncStorage.setItem(RECENT_SEARCH_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  /** 退出搜索模式（取消）时按规则收口最近搜索 */
+  useEffect(() => {
+    if (searchMode) return;
+    if (queryHadResultsRef.current) {
+      persistRecentSearch(lastQueryRef.current);
+      queryHadResultsRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchMode]);
+
+  const openCatch = (entry: CatchEntry) => {
+    // Search Mode 内点击结果 → 记为有效搜索（B5：返回后保持 Search Mode 与结果集合）
+    if (searchMode && query.trim()) {
+      persistRecentSearch(query);
+      queryHadResultsRef.current = false;
+    }
+    navigation.navigate('CatchDetail', {
+      catchId: entry.catch.id,
+      initialCatch: entry.catch,
+    });
+  };
+
+  /* ---------- 鱼种选项（F1 快捷 / F2 全量） ---------- */
+
+  const speciesStats = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; count: number }>();
+    for (const entry of entries) {
+      const key = entry.catch.speciesId || entry.catch.speciesName || 'unknown';
+      const name = entry.catch.speciesName || key;
+      const current = map.get(key);
+      if (current) {
+        current.count += 1;
+      } else {
+        map.set(key, { key, name, count: 1 });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [entries]);
+
+  const speciesOptions = useMemo(
+    () => speciesStats.map(({ key, name }) => ({ key, name })),
+    [speciesStats],
+  );
+  const quickSpecies = useMemo(() => speciesOptions.slice(0, 3), [speciesOptions]);
+
+  /* ---------- SectionList 组装 ---------- */
+
+  const sections = useMemo(() => {
+    return months.map((month) => {
+      const data: Row[] = [];
+      for (const day of month.days) {
+        data.push({ kind: 'day', day, firstOfMonth: data.length === 0 });
+        const total = day.entries.length;
+        const expanded = expandedDays.has(day.key);
+        /** 组内卡片列表（默认前 5 / 展开全部） */
+        const pushCards = (list: CatchEntry[], hasFurnitureAfter: boolean) => {
+          list.forEach((entry, index) => {
+            const last = index === list.length - 1;
+            data.push({
+              kind: 'card',
+              entry,
+              // 时间线竖线：非尾卡贯通，尾卡视后续展开行决定收笔
+              rail: !last ? 'through' : hasFurnitureAfter ? 'through' : 'end',
+            });
+          });
+        };
+        if (total <= 5) {
+          pushCards(day.entries, false);
+        } else if (total <= 10 && expanded) {
+          pushCards(day.entries, true);
+          data.push({ kind: 'collapse', dayKey: day.key });
+        } else {
+          // 6-10 条默认前 5 + 原位展开；>10 条前 5 + 「查看全部」进当天详情（§4）
+          pushCards(day.entries.slice(0, 5), true);
+          data.push({ kind: 'expand', dayKey: day.key, hidden: total - 5, total });
+        }
+      }
+      return { key: month.key, data };
+    });
+  }, [months, expandedDays]);
+
+  const renderRow = useCallback(
+    ({ item }: { item: Row }) => {
+      switch (item.kind) {
+        case 'day':
+          return <DayNode day={item.day} firstOfMonth={item.firstOfMonth} />;
+        case 'card':
+          return (
+            <View style={styles.cardWrap}>
+              <View
+                style={[
+                  styles.cardRailLine,
+                  item.rail === 'through' ? styles.cardRailThrough : styles.cardRailEnd,
+                ]}
+              />
+              <FishRecordRowCard
+                entry={item.entry}
+                mark={marks.get(item.entry.catch.id)}
+                onPress={() => openCatch(item.entry)}
+              />
+            </View>
+          );
+        case 'expand':
+          return (
+            <ExpandRow
+              label={
+                item.total <= 10
+                  ? `查看另外 ${item.hidden} 条`
+                  : `查看全部 ${item.total} 条鱼获`
+              }
+              chevron={item.total <= 10 ? 'down' : 'forward'}
+              onPress={() =>
+                item.total <= 10
+                  ? setExpandedDays((prev) => new Set(prev).add(item.dayKey))
+                  : navigation.navigate('CatchDay', { dayKey: item.dayKey })
+              }
+            />
+          );
+        case 'collapse':
+          return (
+            <ExpandRow
+              label="收起"
+              chevron="up"
+              onPress={() =>
+                setExpandedDays((prev) => {
+                  const next = new Set(prev);
+                  next.delete(item.dayKey);
+                  return next;
+                })
+              }
+            />
+          );
+        default:
+          return null;
+      }
+    },
+    // openCatch 依赖运行时状态，刷新频率低；marks 变化需重建
+    [marks, navigation, searchMode, query],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  );
+
+  /* ---------- 头部内容（F1 / 摘要 / 最近搜索 / 结果摘要） ---------- */
+
+  const visibleSpecies = useMemo(
+    () =>
+      new Set(filtered.map((entry) => entry.catch.speciesId || entry.catch.speciesName))
+        .size,
+    [filtered],
+  );
+
+  const listHeader = (
+    <View>
+      {/* 档案摘要（Search Focused 阶段隐藏 / 降权） */}
+      {!searchMode ? (
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryText}>
+            {catches.length === 0
+              ? '时间档案'
+              : `${filtered.length} 次鱼获 · ${visibleSpecies} 种鱼`}
+          </Text>
+          {query.trim() ? (
+            <PressableScale
+              onPress={() => onQueryChange('')}
+              scaleTo={0.94}
+              style={styles.queryChip}
+            >
+              <Text style={styles.queryChipText} numberOfLines={1}>
+                搜索「{query.trim()}」 ×
+              </Text>
+            </PressableScale>
+          ) : null}
+        </View>
+      ) : query.trim() ? (
+        <View style={styles.searchMetaWrap}>
+          <Text style={styles.searchMetaText}>
+            {filtered.length > 0 ? `${filtered.length} 次鱼获` : ''}
+          </Text>
+          {filterActive ? (
+            <PressableScale onPress={onEditFilterFromSearch} scaleTo={0.97}>
+              <Text style={styles.filterSummaryText}>
+                筛选中 · {activeConditionCount(filter)}个条件 ›
+              </Text>
+            </PressableScale>
+          ) : null}
+        </View>
+      ) : (
+        <RecentSearchBlock
+          items={recentSearches}
+          onPick={(value) => onQueryChange(value)}
+          onClear={() => {
+            setRecentSearches([]);
+            AsyncStorage.removeItem(RECENT_SEARCH_KEY).catch(() => {});
+          }}
+        />
+      )}
+
+      {/* F1 · 顶部内联筛选面板：Header/Summary 之下、Timeline 之上，展开时推动 Timeline（F1 Spec §2/§6） */}
+      {filterOpen && !searchMode ? (
+        <View style={styles.filterPanelWrap}>
+          <F1FilterPanel
+            filter={filter}
+            speciesOptions={speciesOptions}
+            quickSpecies={quickSpecies}
+            onChange={setFilter}
+            onReset={() => setFilter(EMPTY_FILTER)}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+
+  /* ---------- 渲染 ---------- */
+
+  const showTimeline = !loading && !error && emptyKind === null && sections.length > 0;
 
   return (
     <View style={styles.flex}>
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: 120 + insets.bottom },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* 摘要 + 搜索 */}
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryText, { color: textSecondary }]}>
-            {catches.length} 次渔获 ·{' '}
-            {new Set(catches.map((item) => item.speciesId).filter(Boolean)).size} 种鱼
-          </Text>
-          <PressableScale
-            onPress={() => {
-              setSearchOpen((value) => !value);
-              if (searchOpen) {
-                setQuery('');
-              }
-            }}
-            scaleTo={0.92}
-            style={styles.searchHit}
-          >
-            <Icon name={searchOpen ? 'close' : 'search'} size={20} color={textPrimary} />
-          </PressableScale>
-        </View>
-
-        {searchOpen ? (
-          <View style={[styles.searchWrap, { backgroundColor: profile.surface.glassStrong }]}>
-            <Icon name="search-outline" size={17} color={textSecondary} />
-            <TextInput
-              style={[styles.searchInput, { color: textPrimary }]}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="搜索鱼种名称"
-              placeholderTextColor={textSecondary}
-              autoFocus
+      {showTimeline ? (
+        <SectionList
+          ref={listRef}
+          sections={sections}
+          keyExtractor={(item, index) =>
+            item.kind === 'day'
+              ? `day-${item.day.key}`
+              : item.kind === 'card'
+                ? `card-${item.entry.catch.id}`
+                : item.kind === 'expand'
+                  ? `expand-${item.dayKey}`
+                  : `collapse-${item.dayKey}-${index}`
+          }
+          contentContainerStyle={[styles.content, { paddingBottom: 140 + insets.bottom }]}
+          stickySectionHeadersEnabled
+          renderSectionHeader={({ section }) => <MonthHeader label={monthLabelOf(section.key)} />}
+          renderItem={renderRow}
+          ListHeaderComponent={listHeader}
+          onEndReached={() => {
+            if (monthWindow < allMonths.length) {
+              setMonthWindow((value) => value + MONTH_PAGE_SIZE);
+            }
+          }}
+          onEndReachedThreshold={0.6}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        />
+      ) : (
+        <View style={[styles.content, styles.stateContainer]}>
+          {listHeader}
+          {loading ? (
+            <View style={styles.stateCard}>
+              <Text style={styles.stateTitle}>正在整理你的时间档案…</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.stateCard}>
+              <Text style={styles.stateTitle}>鱼获档案暂时无法加载</Text>
+              <Text style={styles.stateText}>恢复网络后，你的鱼获会回到这里</Text>
+              <PressableScale onPress={reload} scaleTo={0.97} style={styles.stateActionHit}>
+                <Text style={styles.stateAction}>重新加载</Text>
+              </PressableScale>
+            </View>
+          ) : emptyKind === 'archive' ? (
+            <ArchiveEmptyState />
+          ) : emptyKind === 'search' ? (
+            <SearchEmptyState
+              onClear={() => {
+                queryHadResultsRef.current = false;
+                onQueryChange('');
+              }}
             />
-          </View>
-        ) : null}
-
-        {/* 筛选 chips：全部 / 鱼种 / 时间 / 地点 */}
-        <View style={styles.chipRow}>
-          <PressableScale
-            onPress={() => {
-              setSpeciesFilter(null);
-              setLocationFilter(null);
-            }}
-            scaleTo={0.96}
-          >
-            <View
-              style={[
-                styles.chip,
-                !speciesFilter && !locationFilter
-                  ? { backgroundColor: profile.surface.glassStrong }
-                  : { backgroundColor: 'transparent' },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  { color: textPrimary },
-                  (speciesFilter || locationFilter) && { color: textSecondary },
-                ]}
-              >
-                全部
-              </Text>
-              {!speciesFilter && !locationFilter ? <View style={styles.chipUnderline} /> : null}
+          ) : emptyKind === 'filter' ? (
+            <FilterEmptyState
+              onClear={() => setFilter(EMPTY_FILTER)}
+              onEdit={() => setFilter(EMPTY_FILTER)}
+            />
+          ) : (
+            <View style={styles.stateCard}>
+              <Text style={styles.stateTitle}>这里还很安静</Text>
             </View>
-          </PressableScale>
-          <PressableScale onPress={() => setSpeciesSheet(true)} scaleTo={0.96}>
-            <View style={styles.chipPlain}>
-              <Text style={[styles.chipText, { color: speciesFilter ? GOLD : textSecondary }]}>
-                {speciesFilter ? speciesFilterName ?? '鱼种' : '鱼种'}
-              </Text>
-              <Icon name="chevron-down" size={13} color={speciesFilter ? GOLD : textSecondary} />
-            </View>
-          </PressableScale>
-          <PressableScale onPress={() => setSortAsc((value) => !value)} scaleTo={0.96}>
-            <View style={styles.chipPlain}>
-              <Text style={[styles.chipText, { color: textSecondary }]}>
-                {sortAsc ? '最早' : '最新'}
-              </Text>
-              <Icon name="chevron-down" size={13} color={textSecondary} />
-            </View>
-          </PressableScale>
-          <PressableScale onPress={() => setLocationSheet(true)} scaleTo={0.96}>
-            <View style={styles.chipPlain}>
-              <Text style={[styles.chipText, { color: locationFilter ? GOLD : textSecondary }]}>
-                {locationFilter ?? '地点'}
-              </Text>
-              <Icon name="chevron-down" size={13} color={locationFilter ? GOLD : textSecondary} />
-            </View>
-          </PressableScale>
+          )}
         </View>
+      )}
 
-        {/* LOADING ≠ EMPTY（14.1） */}
-        {loading && catches.length === 0 ? (
-          <Text style={[styles.stateText, { color: textSecondary }]}>正在打开你的收藏…</Text>
-        ) : error && catches.length === 0 ? (
-          <View style={styles.stateWrap}>
-            <Text style={[styles.stateTitle, { color: textPrimary }]}>网络好像断开了</Text>
-            <Text style={[styles.stateText, { color: textSecondary }]}>
-              你的鱼获还在，恢复网络后就能看到
-            </Text>
-            <PressableScale onPress={reload} scaleTo={0.97} style={styles.retryHit}>
-              <Text style={[styles.retryText, { color: profile.surface.accent }]}>重新尝试</Text>
-            </PressableScale>
-          </View>
-        ) : catches.length === 0 ? (
-          <EmptyState
-            variant="myCatch"
-            title="你的鱼获会收藏在这里"
-            description="每次拍照识别后的渔获，都会按时间收进这本收藏册"
-            actionLabel="拍照识鱼"
-            onAction={() => navigation.navigate('Identify')}
-          />
-        ) : groups.length === 0 ? (
-          <EmptyState
-            variant="search"
-            title="没有找到这个鱼种"
-            description="可以试试其他名称，或清除筛选浏览全部鱼获"
-            actionLabel="清除筛选"
-            onAction={() => {
-              setQuery('');
-              setSpeciesFilter(null);
-              setLocationFilter(null);
-            }}
-          />
-        ) : (
-          groups.map((group) => (
-            <View key={group.key} style={styles.monthGroup}>
-              <Text style={[styles.monthLabel, { color: textPrimary }]}>{group.label}</Text>
-              {chunk(group.items, COLUMNS).map((row, rowIndex) => (
-                <View key={rowIndex} style={styles.gridRow}>
-                  {row.map((item) => (
-                    <CatchCard
-                      key={item.id}
-                      item={item}
-                      accessToken={session?.accessToken ?? null}
-                      location={memories[item.id]?.location?.trim() ?? null}
-                      onPress={() =>
-                        navigation.navigate('CatchDetail', { catchId: item.id, initialCatch: item })
-                      }
-                    />
-                  ))}
-                  {row.length < COLUMNS ? <View style={styles.gridFiller} /> : null}
-                </View>
-              ))}
-            </View>
-          ))
-        )}
-      </ScrollView>
-
-      {/* 右下角相机 FAB */}
-      <PressableScale
-        onPress={() => navigation.navigate('Identify')}
-        scaleTo={0.94}
-        style={[styles.fab, { bottom: insets.bottom + spacing.xl }]}
-      >
-        <View
-          style={[
-            styles.fabCircle,
-            {
-              backgroundColor: profile.surface.glassStrong,
-              borderColor: 'rgba(255,255,255,0.7)',
-            },
-          ]}
-        >
-          <Icon name="camera-outline" size={22} color={GOLD} />
-        </View>
-      </PressableScale>
-
-      {/* 鱼种筛选 */}
-      <BottomSheet visible={speciesSheet} onClose={() => setSpeciesSheet(false)} title="按鱼种筛选">
-        <OptionRow
-          label="全部鱼种"
-          selected={!speciesFilter}
-          color={profile.surface.accent}
-          textPrimary={textPrimary}
-          idleColor={textSecondary}
-          onPress={() => {
-            setSpeciesFilter(null);
-            setSpeciesSheet(false);
-          }}
+      {/* 底部中央共享拍摄入口（Archive/Search/Filter Empty 与时间线常驻，不参与滚动） */}
+      <View style={[styles.fab, { bottom: insets.bottom + spacing.md }]}>
+        <YuJianPrimaryCaptureButton
+          onPress={() => navigation.navigate('Identify')}
+          size={52}
+          accessibilityLabel="拍照识别"
         />
-        {speciesOptions.map((option) => (
-          <OptionRow
-            key={option.key}
-            label={option.name}
-            selected={speciesFilter === option.key}
-            color={profile.surface.accent}
-            textPrimary={textPrimary}
-            idleColor={textSecondary}
-            onPress={() => {
-              setSpeciesFilter(option.key);
-              setSpeciesSheet(false);
-            }}
-          />
-        ))}
-      </BottomSheet>
-
-      {/* 地点筛选 */}
-      <BottomSheet visible={locationSheet} onClose={() => setLocationSheet(false)} title="按地点筛选">
-        <OptionRow
-          label="全部地点"
-          selected={!locationFilter}
-          color={profile.surface.accent}
-          textPrimary={textPrimary}
-          idleColor={textSecondary}
-          onPress={() => {
-            setLocationFilter(null);
-            setLocationSheet(false);
-          }}
-        />
-        {locationOptions.map((option) => (
-          <OptionRow
-            key={option}
-            label={option}
-            selected={locationFilter === option}
-            color={profile.surface.accent}
-            textPrimary={textPrimary}
-            idleColor={textSecondary}
-            onPress={() => {
-              setLocationFilter(option);
-              setLocationSheet(false);
-            }}
-          />
-        ))}
-      </BottomSheet>
+      </View>
     </View>
   );
 };
 
-const OptionRow: React.FC<{
-  label: string;
-  selected: boolean;
-  color: string;
-  textPrimary: string;
-  idleColor: string;
-  onPress: () => void;
-}> = ({ label, selected, color, textPrimary, idleColor, onPress }) => (
-  <PressableScale onPress={onPress} scaleTo={0.99} style={styles.optionHit}>
-    <View style={styles.optionRow} pointerEvents="none">
-      <Text style={[styles.optionLabel, { color: selected ? color : textPrimary }]}>{label}</Text>
-      <RadioDot selected={selected} color={GOLD} idleColor={idleColor} />
-    </View>
-  </PressableScale>
+/** monthKey（YYYY-MM / unknown）→ 章节标题 */
+function monthLabelOf(key: string): string {
+  if (key === 'unknown') return '时间未知';
+  const [year, month] = key.split('-');
+  return `${Number(year)}年${Number(month)}月`;
+}
+
+// ---------------------------------------------------------------------------
+// 子组件
+// ---------------------------------------------------------------------------
+
+/** 月份章节头（Sticky）：衬线加粗 + 近实底玻璃 */
+const MonthHeader: React.FC<{ label: string }> = ({ label }) => (
+  <View style={monthStyles.wrap}>
+    <Text style={monthStyles.label}>{label}</Text>
+  </View>
 );
 
-const { width: SCREEN_W } = Dimensions.get('window');
-const CARD_W = (SCREEN_W - spacing.page * 2 - spacing.md) / COLUMNS;
+const monthStyles = StyleSheet.create({
+  wrap: {
+    /* 透明：直接透出 MorningLakeScene 的雾面玻璃层，不叠加白色块 */
+    backgroundColor: 'transparent',
+    paddingVertical: 10,
+  } as ViewStyle,
+  label: {
+    fontFamily: font.serif,
+    fontSize: fs(22),
+    fontWeight: '700',
+    color: coreColors.deepLakeBlue,
+    letterSpacing: 1,
+  } as TextStyle,
+});
 
-const CatchCard: React.FC<{
-  item: RemoteCatch;
-  accessToken: string | null;
-  location: string | null;
-  onPress: () => void;
-}> = ({ item, accessToken, location, onPress }) => {
-  const when = formatCardDate(item.capturedAt);
-  return (
-    <PressableScale onPress={onPress} scaleTo={0.98} style={styles.cardHit}>
-      <View style={[styles.card, { borderColor: 'rgba(255,255,255,0.6)' }]}>
-        {item.imageUrl ? (
-          <RemoteImage
-            url={item.imageUrl}
-            authToken={accessToken}
-            style={styles.cardImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.cardImage, styles.cardImageFallback]}>
-            <Text style={styles.fallbackText}>渔见</Text>
-          </View>
-        )}
-        {/* 底部渐变 + 鱼名/地点 */}
-        <View style={styles.cardOverlay}>
-          <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
-            <Defs>
-              <LinearGradient id="myCatchScrim" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor="#0A2029" stopOpacity="0" />
-                <Stop offset="0.55" stopColor="#0A2029" stopOpacity="0.22" />
-                <Stop offset="1" stopColor="#0A2029" stopOpacity="0.68" />
-              </LinearGradient>
-            </Defs>
-            <Rect x="0" y="0" width="100%" height="100%" fill="url(#myCatchScrim)" />
-          </Svg>
-          <View style={styles.cardInfo}>
-            <Text style={styles.cardName} numberOfLines={1}>
-              {item.speciesName || '确认中的鱼'}
-            </Text>
-            <View style={styles.cardMetaRow}>
-              <Icon name="location-outline" size={12} color="rgba(255,255,255,0.85)" />
-              <Text style={styles.cardMetaText} numberOfLines={1}>
-                {location ?? '待确认'}
-              </Text>
-              <Text style={styles.cardMetaText}>·</Text>
-              <Text style={styles.cardMetaText}>{when}</Text>
-            </View>
-          </View>
-        </View>
+/** 日期节点：轨道行（竖线+圆点+大日期）+ 摘要行（与卡片列对齐） */
+const DayNode: React.FC<{ day: DayGroup; firstOfMonth: boolean }> = ({ day, firstOfMonth }) => (
+  <View style={dayStyles.wrap}>
+    <View style={[dayStyles.railLine, firstOfMonth && dayStyles.railLineFirst]} />
+    <View style={dayStyles.dateRow}>
+      <View style={dayStyles.rail}>
+        <View style={dayStyles.dot} />
       </View>
+      <View style={dayStyles.dateBlock}>
+        <Text style={dayStyles.dayNumber}>{day.dayLabel}</Text>
+        <Text style={dayStyles.monthAbbr}>{day.monthLabel}</Text>
+      </View>
+    </View>
+    <Text style={dayStyles.summary} numberOfLines={1}>
+      {day.summary}
+    </Text>
+  </View>
+);
+
+const dayStyles = StyleSheet.create({
+  wrap: {
+    paddingVertical: 8,
+  } as ViewStyle,
+  /* 竖线贯穿日期节点并连接上一组尾卡与下一组首卡 */
+  railLine: {
+    position: 'absolute',
+    left: RAIL_CENTER_X - 0.5,
+    top: -18,
+    bottom: -10,
+    width: 1,
+    backgroundColor: 'rgba(184,198,206,0.85)',
+  } as ViewStyle,
+  /* 每月首个日期节点：竖线不越过月份标题 */
+  railLineFirst: {
+    top: 8,
+  } as ViewStyle,
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  } as ViewStyle,
+  rail: {
+    width: RAIL_CENTER_X * 2,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as ViewStyle,
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: coreColors.deepLakeBlue,
+  } as ViewStyle,
+  dateBlock: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginLeft: 8,
+    minWidth: 46,
+    gap: 4,
+  } as ViewStyle,
+  dayNumber: {
+    fontFamily: font.serif,
+    fontSize: fs(21),
+    fontWeight: '700',
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+  monthAbbr: {
+    fontSize: fs(11),
+    fontWeight: '600',
+    letterSpacing: 1,
+    color: coreColors.mistBlueGray,
+  } as TextStyle,
+  summary: {
+    marginLeft: CONTENT_INSET,
+    marginTop: 3,
+    marginBottom: 4,
+    fontSize: fs(12),
+    color: coreColors.mistBlueGray,
+  } as TextStyle,
+});
+
+/** 展开 / 收起行：Timeline furniture，弱于卡片（文字 + 极轻 chevron，不用实心按钮） */
+const ExpandRow: React.FC<{
+  label: string;
+  chevron: 'down' | 'up' | 'forward';
+  onPress: () => void;
+}> = ({ label, chevron, onPress }) => (
+  <View style={expandStyles.wrap}>
+    <PressableScale onPress={onPress} scaleTo={0.97} style={expandStyles.hit}>
+      <Text style={expandStyles.text}>{label}</Text>
+      <Icon
+        name={chevron === 'down' ? 'chevron-down' : chevron === 'up' ? 'chevron-up' : 'chevron-forward'}
+        size={13}
+        color={coreColors.mistBlueGray}
+      />
     </PressableScale>
+  </View>
+);
+
+const expandStyles = StyleSheet.create({
+  wrap: {
+    marginLeft: CONTENT_INSET,
+    paddingVertical: 4,
+  } as ViewStyle,
+  hit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    alignSelf: 'flex-start',
+  } as ViewStyle,
+  text: {
+    fontSize: fs(13),
+    color: coreColors.lakeBlue,
+  } as TextStyle,
+});
+
+/** B1 · 最近搜索（轻量辅助，不盖住时间线） */
+const RecentSearchBlock: React.FC<{
+  items: string[];
+  onPick: (value: string) => void;
+  onClear: () => void;
+}> = ({ items, onPick, onClear }) => {
+  if (items.length === 0) return null;
+  return (
+    <View style={recentStyles.wrap}>
+      <View style={recentStyles.headerRow}>
+        <Text style={recentStyles.title}>最近搜索</Text>
+        <PressableScale onPress={onClear} scaleTo={0.95} style={recentStyles.clearHit}>
+          <Text style={recentStyles.clear}>清空</Text>
+        </PressableScale>
+      </View>
+      <View style={recentStyles.chipWrap}>
+        {items.map((item) => (
+          <PressableScale key={item} onPress={() => onPick(item)} scaleTo={0.95}>
+            <View style={recentStyles.chip}>
+              <Text style={recentStyles.chipText}>{item}</Text>
+            </View>
+          </PressableScale>
+        ))}
+      </View>
+    </View>
   );
 };
 
-const formatCardDate = (iso: string): string => {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-  const pad = (value: number) => (value < 10 ? `0${value}` : `${value}`);
-  return `${pad(date.getMonth() + 1)}.${pad(date.getDate())}`;
-};
+const recentStyles = StyleSheet.create({
+  wrap: {
+    marginTop: spacing.sm,
+  } as ViewStyle,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  } as ViewStyle,
+  title: {
+    fontSize: fs(13),
+    fontWeight: '600',
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+  clearHit: {
+    paddingVertical: 4,
+    paddingLeft: 8,
+  } as ViewStyle,
+  clear: {
+    fontSize: fs(12),
+    color: coreColors.mistBlueGray,
+  } as TextStyle,
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  } as ViewStyle,
+  chip: {
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+    borderRadius: 15,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+  } as ViewStyle,
+  chipText: {
+    fontSize: fs(13),
+    color: coreColors.lakeBlue,
+  } as TextStyle,
+});
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const rows: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    rows.push(items.slice(i, i + size));
-  }
-  return rows;
-}
+/** Archive Empty（Empty States Spec §1：底部共享相机按钮是唯一主行动，不再叠加同级按钮） */
+const ArchiveEmptyState: React.FC = () => (
+  <View style={stateStyles.wrap}>
+    <Text style={stateStyles.title}>还没有鱼获记录</Text>
+    <Text style={stateStyles.subtitle}>拍下第一条鱼，开始你的鱼获时间线</Text>
+    <Text style={stateStyles.hint}>记录第一条鱼</Text>
+  </View>
+);
+
+/** Search Empty（§3：保留 query / × / 取消 / Filter 条件 / 相机按钮） */
+const SearchEmptyState: React.FC<{ onClear: () => void }> = ({ onClear }) => (
+  <View style={stateStyles.wrap}>
+    <Text style={stateStyles.title}>没有找到相关鱼获</Text>
+    <Text style={stateStyles.subtitle}>你可以搜索：鱼种、地点、日期</Text>
+    <PressableScale onPress={onClear} scaleTo={0.97} style={stateStyles.actionHit}>
+      <Text style={stateStyles.action}>清除搜索</Text>
+    </PressableScale>
+  </View>
+);
+
+/** Filter Empty（§2：清除筛选 主恢复 / 修改筛选 次恢复；相机按钮是记录入口不是恢复 CTA） */
+const FilterEmptyState: React.FC<{ onClear: () => void; onEdit: () => void }> = ({
+  onClear,
+  onEdit,
+}) => (
+  <View style={stateStyles.wrap}>
+    <Text style={stateStyles.title}>没有找到符合条件的鱼获</Text>
+    <Text style={stateStyles.subtitle}>试试调整筛选条件</Text>
+    <PressableScale onPress={onClear} scaleTo={0.97} style={stateStyles.actionHit}>
+      <Text style={stateStyles.action}>清除筛选</Text>
+    </PressableScale>
+    <PressableScale onPress={onEdit} scaleTo={0.97} style={stateStyles.actionHit}>
+      <Text style={stateStyles.actionSecondary}>修改筛选</Text>
+    </PressableScale>
+  </View>
+);
+
+const stateStyles = StyleSheet.create({
+  wrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxl + 8,
+    paddingHorizontal: spacing.lg,
+    gap: 6,
+  } as ViewStyle,
+  title: {
+    fontSize: fs(17),
+    fontWeight: '600',
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+  subtitle: {
+    fontSize: fs(13),
+    color: coreColors.mistBlueGray,
+    textAlign: 'center',
+  } as TextStyle,
+  hint: {
+    fontSize: fs(12),
+    color: coreColors.mistBlueGray,
+    marginTop: 4,
+  } as TextStyle,
+  actionHit: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    marginTop: 6,
+  } as ViewStyle,
+  action: {
+    fontSize: fs(15),
+    fontWeight: '600',
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+  actionSecondary: {
+    fontSize: fs(13),
+    color: coreColors.lakeBlue,
+    marginTop: -4,
+  } as TextStyle,
+});
 
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
   } as ViewStyle,
   content: {
-    paddingHorizontal: spacing.page,
-    paddingTop: spacing.md,
+    /* Core UI V1 页面安全边距（冻结稿 ~5.8% 屏宽；F1 面板 20-24dp 同源） */
+    paddingHorizontal: PAGE_MARGIN,
+    paddingTop: spacing.sm,
+  } as ViewStyle,
+  stateContainer: {
+    flexGrow: 1,
+  } as ViewStyle,
+  filterPanelWrap: {
+    marginBottom: spacing.md,
   } as ViewStyle,
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 32,
   } as ViewStyle,
   summaryText: {
-    fontSize: fs(14),
+    fontSize: fs(12),
+    color: coreColors.mistBlueGray,
   } as TextStyle,
-  searchHit: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 19,
-  } as ViewStyle,
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radius.s,
-    paddingHorizontal: spacing.md,
-    height: 42,
-    marginTop: spacing.md,
+  queryChip: {
+    backgroundColor: 'rgba(255,255,255,0.78)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: 'rgba(255,255,255,0.65)',
+    borderRadius: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    maxWidth: 200,
   } as ViewStyle,
-  searchInput: {
-    flex: 1,
-    fontSize: fs(15),
-    paddingVertical: 0,
+  queryChipText: {
+    fontSize: fs(12),
+    color: coreColors.lakeBlue,
   } as TextStyle,
-  chipRow: {
+  searchMetaWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.lg,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
+    gap: spacing.md,
+    paddingVertical: 2,
+    minHeight: 24,
   } as ViewStyle,
-  chip: {
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
-    alignItems: 'center',
-  } as ViewStyle,
-  chipUnderline: {
-    width: 20,
-    height: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: GOLD,
-    marginTop: 3,
-  } as ViewStyle,
-  chipPlain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingVertical: 9,
-  } as ViewStyle,
-  chipText: {
-    fontSize: fs(14),
+  searchMetaText: {
+    fontSize: fs(13),
+    color: coreColors.lakeBlue,
     fontWeight: '500',
   } as TextStyle,
-  stateWrap: {
+  filterSummaryText: {
+    fontSize: fs(12),
+    color: coreColors.mistBlueGray,
+  } as TextStyle,
+  cardWrap: {
+    marginLeft: CONTENT_INSET,
+    marginBottom: 10,
+  } as ViewStyle,
+  /** 卡片区左侧的时间线竖线段（连接日期节点，贯穿日期组） */
+  cardRailLine: {
+    position: 'absolute',
+    left: RAIL_CENTER_X - CONTENT_INSET - 0.5,
+    top: -5,
+    width: 1,
+    backgroundColor: 'rgba(184,198,206,0.85)',
+  } as ViewStyle,
+  /** 贯通段：跨过卡片间距延续到下一行 */
+  cardRailThrough: {
+    bottom: -10,
+  } as ViewStyle,
+  /** 组尾段：止于尾卡底 */
+  cardRailEnd: {
+    bottom: 0,
+  } as ViewStyle,
+  stateCard: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    gap: 6,
   } as ViewStyle,
   stateTitle: {
-    fontSize: fs(15),
+    fontSize: fs(16),
     fontWeight: '600',
+    color: coreColors.deepLakeBlue,
   } as TextStyle,
   stateText: {
     fontSize: fs(13),
+    color: coreColors.mistBlueGray,
     textAlign: 'center',
-    paddingVertical: spacing.xl,
   } as TextStyle,
-  retryHit: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+  stateActionHit: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 4,
   } as ViewStyle,
-  retryText: {
+  stateAction: {
     fontSize: fs(14),
     fontWeight: '600',
+    color: coreColors.deepLakeBlue,
   } as TextStyle,
-  monthGroup: {
-    marginTop: spacing.lg,
-  } as ViewStyle,
-  monthLabel: {
-    fontFamily: font.serif,
-    fontSize: fs(16),
-    fontWeight: '600',
-    marginBottom: spacing.md,
-    paddingHorizontal: 2,
-  } as TextStyle,
-  gridRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  } as ViewStyle,
-  gridFiller: {
-    flex: 1,
-  } as ViewStyle,
-  cardHit: {
-    width: CARD_W,
-  } as ViewStyle,
-  card: {
-    width: '100%',
-    aspectRatio: 0.78,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-    backgroundColor: palette.softWater,
-  } as ViewStyle,
-  cardImage: {
-    width: '100%',
-    height: '100%',
-  } as ViewStyle,
-  cardImageFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.softWater,
-  } as ViewStyle,
-  fallbackText: {
-    fontFamily: font.serif,
-    fontSize: fs(18),
-    color: palette.waterTeal,
-    letterSpacing: 3,
-  } as TextStyle,
-  cardOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-  } as ViewStyle,
-  cardInfo: {
-    paddingBottom: 14,
-    paddingHorizontal: 14,
-    gap: 4,
-  } as ViewStyle,
-  cardName: {
-    fontFamily: font.serif,
-    fontSize: fs(18),
-    fontWeight: '700',
-    letterSpacing: 2,
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(8,26,34,0.5)',
-    textShadowRadius: 6,
-    textShadowOffset: { width: 0, height: 1 },
-  } as TextStyle,
-  cardMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  } as ViewStyle,
-  cardMetaText: {
-    fontSize: fs(12),
-    letterSpacing: 0.5,
-    color: 'rgba(255,255,255,0.88)',
-    textShadowColor: 'rgba(8,26,34,0.5)',
-    textShadowRadius: 5,
-    textShadowOffset: { width: 0, height: 1 },
-  } as TextStyle,
+  /** 底部中央共享相机底座（My Catches 冻结稿：Camera 居中，全局不参与滚动） */
   fab: {
     position: 'absolute',
-    right: spacing.page,
-  } as ViewStyle,
-  fabCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 1.5,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#173B4B',
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
   } as ViewStyle,
-  optionHit: {
-    borderRadius: radius.s,
-  } as ViewStyle,
-  optionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 13,
-    paddingHorizontal: 6,
-  } as ViewStyle,
-  optionLabel: {
-    fontSize: fs(15),
-    fontWeight: '500',
-  } as TextStyle,
 });

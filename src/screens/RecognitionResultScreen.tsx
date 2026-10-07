@@ -1,23 +1,32 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   Easing,
-  Image,
-  ImageStyle,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
+  useWindowDimensions,
   StyleSheet,
   Text,
-  TextInput,
   TextStyle,
   View,
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useIsFocused, useNavigation } from '@react-navigation/native';
+import {
+  useIsFocused,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { launchImageLibrary } from 'react-native-image-picker';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
+import type { RouteProp } from '@react-navigation/native';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { useAuth, isUnauthorizedError } from '../contexts/AuthContext';
 import { useCatchArchive } from '../contexts/CatchContext';
@@ -32,31 +41,38 @@ import {
   RecognitionCandidate,
 } from '../types/models';
 import { catchService } from '../services/catchService';
-import { recognitionService } from '../services/recognitionService';
-import { locationPickerHub } from '../utils/locationPickerHub';
+import { catchMemoryService } from '../services/catchMemoryService';
 import {
   fishKnowledgeService,
   localGuideItems,
   mergeGuideItems,
 } from '../services/fishKnowledgeService';
-import { WaterBackdrop } from '../components/WaterBackdrop';
 import { PressableScale } from '../components/ui/PressableScale';
-import { RemoteImage } from '../components/RemoteImage';
 import { ScreenHeader } from '../components';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
-import { RadioDot } from '../components/ui/RadioDot';
-import { FishGlyph } from '../components/ui/FishGlyph';
+import { MorningLakeScene } from '../components/coreui';
+import {
+  RESULT_MARGIN,
+  ResultCandidateRow,
+  ResultFieldRows,
+  ResultHeroViewport,
+  ResultLocationSheet,
+  ResultNoteCard,
+  CandidateItem,
+} from '../components/result/ResultKit';
 import { palette } from '../constants/colors';
-import { font, fs, radius, spacing } from '../constants/tokens';
+import { font, fs } from '../constants/tokens';
+import { coreColors } from '../constants/coreUi';
 import { toFileUri } from '../utils/fileUri';
 import { haptics } from '../utils/haptics';
+import { Alert } from '../utils/alert';
 import { speciesPickerHub } from '../utils/speciesPickerHub';
 
-type ResultScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Result'>;
-
-const UNKNOWN_KEY = 'unknown';
-const UNKNOWN_NAME = '未识别鱼种';
-const GOLD = '#C9A96A';
+type ResultScreenNavigationProp = StackNavigationProp<
+  RootStackParamList,
+  'Result'
+>;
+type ResultScreenRouteProp = RouteProp<RootStackParamList, 'Result'>;
 
 const generateSourceEventId = (): string =>
   `APP_${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
@@ -64,19 +80,27 @@ const generateSourceEventId = (): string =>
 type ResultState = 'high' | 'medium' | 'low';
 
 /**
- * P04 识别结果（设计文档 7.3 置信度状态合同 + 高保真确认页参考稿）：
- * 真实鱼获照片 + 鱼名 + 长度重量地点 + 可修改鱼种 + 保存鱼获。
- * 中置信度：「帮我确认一下」+ Top3 候选行（缩略图 / 推荐 chip / 金色单选）。
+ * P04 识别结果（Recognition Result 冻结设计包 V1 + 关键帧 05-09 逐像素还原）：
+ * 高置信度 = Hero(主体优先) → 鱼种身份行(30sp + 修改鱼种›) → 行输入卡
+ * (长度/重量/地点 内联输入+›) → 感言卡(写下这次鱼获的故事+语音胶囊+0/300)
+ * → 双 CTA(继续记忆·相册图标 / 保存本次鱼获·金描边)。
+ * 中置信度 = 一行确认提示 + 横向候选卡(Top-1 模型建议·弱青边；选中 2dp 青) +
+ * 都不是？选择其他鱼种 ›；记录区常驻，选定鱼种前保存禁用。
+ * 低置信度 = 无法确认是什么鱼 + 按钮对(手动选择鱼种·白底金边 / 重新拍摄·灰蓝底)，
+ * 记录区同样常驻展示（保存需先选定鱼种）。
+ * 视觉基调自然安静纪实；不继承处理页任何 AI 光效。
  */
 export const RecognitionResultScreen: React.FC = () => {
   const navigation = useNavigation<ResultScreenNavigationProp>();
+  const route = useRoute<ResultScreenRouteProp>();
   const isFocused = useIsFocused();
-  const { image, result, selectImage, submitFeedback, reset } = useRecognition();
+  const { image, result, submitFeedback, reset } = useRecognition();
   const { session, logout } = useAuth();
   const { reload } = useCatchArchive();
   const { privacy } = usePreferences();
-  const { profile } = useTheme();
+  const { reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
 
   const [selectedKey, setSelectedKey] = useState('');
   const [selectedName, setSelectedName] = useState('');
@@ -84,14 +108,17 @@ export const RecognitionResultScreen: React.FC = () => {
   const [lengthAuto, setLengthAuto] = useState(false);
   const [weightText, setWeightText] = useState('');
   const [locationText, setLocationText] = useState('');
+  const [storyText, setStoryText] = useState('');
   const [saving, setSaving] = useState(false);
   const [slowSaving, setSlowSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** 地点编辑 Sheet（长度/重量为行内联输入，无需 Sheet） */
+  const [sheet, setSheet] = useState<'location' | null>(null);
 
   const prediction = result?.prediction ?? null;
 
-  // 拍照页量尺测得的真实长度：自动填入长度输入框，用户手动修改后提示退场
+  // 拍照页量尺测得的真实长度：自动填入长度字段，用户手动修改后提示退场
   const measuredCm = image?.measuredLengthCm ?? null;
   useEffect(() => {
     if (typeof measuredCm === 'number' && measuredCm > 0) {
@@ -102,9 +129,36 @@ export const RecognitionResultScreen: React.FC = () => {
     }
   }, [measuredCm]);
 
-  // 拍照页带入的钓点（自动定位 / 手动选点）：自动填入钓点输入框，可再在地图上调整
+  // 行输入离焦校验：长度 0.1-999.9（1 位小数）/ 重量 0.01-999.99（2 位小数）；
+  // 非法非空值直接清空（元数据可选，不弹错打断）
+  const commitLengthBlur = useCallback(() => {
+    const t = lengthText.trim();
+    if (!t) {
+      return;
+    }
+    const n = Number(t);
+    const dec = t.includes('.') ? t.split('.')[1].length : 0;
+    if (!Number.isFinite(n) || n < 0.1 || n > 999.9 || dec > 1) {
+      setLengthText('');
+    }
+  }, [lengthText]);
+  const commitWeightBlur = useCallback(() => {
+    const t = weightText.trim();
+    if (!t) {
+      return;
+    }
+    const n = Number(t);
+    const dec = t.includes('.') ? t.split('.')[1].length : 0;
+    if (!Number.isFinite(n) || n < 0.01 || n > 999.99 || dec > 2) {
+      setWeightText('');
+    }
+  }, [weightText]);
+
+  // 拍照页带入的钓点（自动定位 / 手动选点）：自动填入地点字段
   const carriedLocation = image?.location ?? null;
-  const [activeLocation, setActiveLocation] = useState<CatchLocation | null>(carriedLocation);
+  const [activeLocation, setActiveLocation] = useState<CatchLocation | null>(
+    carriedLocation
+  );
   useEffect(() => {
     if (carriedLocation?.label) {
       setLocationText(carriedLocation.label);
@@ -113,24 +167,6 @@ export const RecognitionResultScreen: React.FC = () => {
       setActiveLocation(null);
     }
   }, [carriedLocation]);
-
-  /** 地图选点：回填钓点名与坐标（受「允许手动修改地点」设置约束） */
-  const openLocationPicker = useCallback(async () => {
-    if (!privacy.manualLocationEdit) {
-      return;
-    }
-    haptics.selection();
-    navigation.navigate('LocationPicker', {
-      initial: activeLocation
-        ? { latitude: activeLocation.latitude, longitude: activeLocation.longitude }
-        : undefined,
-    });
-    const picked = await locationPickerHub.requestPick();
-    if (picked) {
-      setActiveLocation(picked);
-      setLocationText(picked.label.slice(0, 60));
-    }
-  }, [privacy.manualLocationEdit, navigation, activeLocation]);
 
   const state: ResultState = useMemo(() => {
     if (!prediction) {
@@ -155,18 +191,32 @@ export const RecognitionResultScreen: React.FC = () => {
     }
   }, [prediction, state]);
 
-  // 守卫只在获得焦点时生效：退场转场期间 IdentifyScreen 重挂载会 reset 清空 result，
-  // 若此刻再 replace 会与 pop 动画打架，把页面卡在空白中间态（重新拍摄白屏的根因）
+  // 兜底跳失败页：只在本屏仍是栈顶时生效（返回转场期间 IdentifyScreen 重挂载会
+  // reset 清空 result，此时本屏已在弹出中，再 replace 会与 pop 转场打架）。
   useEffect(() => {
     if (!isFocused) {
       return;
     }
-    if (!result || !result.ready || !prediction) {
-      navigation.replace('RecognitionIssue');
+    const routes = navigation.getState().routes;
+    if (routes[routes.length - 1]?.key !== route.key) {
+      return;
     }
-  }, [isFocused, result, prediction, navigation]);
+    // 宽限 600ms：换图重识别的 replace→挂载窗口内，识别上下文的 setResult
+    // 可能尚未对本屏可见（React Navigation 合并快速状态变更），瞬时读到空
+    // result 会误弹 Issue —— 持续无效状态才路由。
+    if (!result || !result.ready || !prediction) {
+      const t = setTimeout(() => {
+        const current = navigation.getState().routes;
+        if (current[current.length - 1]?.key === route.key) {
+          navigation.replace('RecognitionIssue');
+        }
+      }, 600);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [isFocused, result, prediction, navigation, route.key]);
 
-  // Reveal（17.8 / 17.9）：Hero 立即成为主角 + S2 Confirm 一次
+  // 入场（Motion Spec V1：克制的内容渐显；禁庆祝/光爆/循环动效）
   const heroOpacity = useRef(new Animated.Value(0)).current;
   const heroScale = useRef(new Animated.Value(0.985)).current;
   const nameTranslate = useRef(new Animated.Value(6)).current;
@@ -177,6 +227,13 @@ export const RecognitionResultScreen: React.FC = () => {
     if (!hapticFiredRef.current) {
       hapticFiredRef.current = true;
       haptics.confirm();
+    }
+    if (reduceMotion) {
+      heroOpacity.setValue(1);
+      heroScale.setValue(1);
+      nameOpacity.setValue(1);
+      nameTranslate.setValue(0);
+      return;
     }
     const animations = Animated.parallel([
       Animated.timing(heroOpacity, {
@@ -211,14 +268,14 @@ export const RecognitionResultScreen: React.FC = () => {
     ]);
     animations.start();
     return () => animations.stop();
-  }, [heroOpacity, heroScale, nameOpacity, nameTranslate]);
+  }, [reduceMotion, heroOpacity, heroScale, nameOpacity, nameTranslate]);
 
   const candidates: RecognitionCandidate[] = useMemo(
     () => prediction?.candidates.slice(0, 3) ?? [],
-    [prediction],
+    [prediction]
   );
 
-  // 候选 / 手动选择行缩略图：按 speciesKey 从鱼鉴封面补齐（离线时退回本地鱼种）
+  // 候选缩略图：按 speciesKey 从鱼鉴封面补齐（离线退回本地鱼种）
   const [guideCovers, setGuideCovers] = useState<Record<string, string>>({});
   useEffect(() => {
     let mounted = true;
@@ -246,6 +303,16 @@ export const RecognitionResultScreen: React.FC = () => {
     };
   }, []);
 
+  const candidateItems: CandidateItem[] = useMemo(
+    () =>
+      candidates.map((c) => ({
+        key: c.speciesKey,
+        name: c.speciesName,
+        cover: guideCovers[c.speciesKey],
+      })),
+    [candidates, guideCovers]
+  );
+
   const pickSpecies = useCallback(async () => {
     navigation.navigate('SpeciesPicker', { title: '选择鱼种' });
     const picked = await speciesPickerHub.requestPick();
@@ -256,58 +323,66 @@ export const RecognitionResultScreen: React.FC = () => {
     }
   }, [navigation]);
 
-  // 低置信度参考稿：「从相册选择」次级胶囊 —— 换一张照片重新识别
-  const repickFromGallery = useCallback(() => {
-    haptics.selection();
-    launchImageLibrary({ mediaType: 'photo', quality: 1, selectionLimit: 1 }, (response) => {
-      if (response.didCancel || response.errorCode) {
-        return;
-      }
-      const uri = response.assets?.[0]?.uri;
-      if (!uri) {
-        return;
-      }
-      void (async () => {
-        try {
-          const meta = await recognitionService.normalizeImage(uri, 'gallery');
-          selectImage(meta);
-          navigation.navigate('Recognizing');
-        } catch {
-          // 选片失败静默返回，不打断当前结果页
-        }
-      })();
-    });
-  }, [selectImage, navigation]);
+  /* 游客保存的续存意图：被引导去登录后，session 就绪自动完成本次保存 */
+  const pendingSaveRef = useRef<{ toMemory: boolean } | null>(null);
 
   const doSave = useCallback(
-    async (overrideKey?: string, overrideName?: string) => {
-      if (!session || !image || !prediction) {
-        setSaveError('登录状态已失效，请重新登录');
+    async (opts?: { toMemory?: boolean }) => {
+      if (!image || !prediction) {
+        setSaveError('识别信息缺失，请重新拍摄');
         return;
       }
-      const finalKey = overrideKey ?? selectedKey;
-      const finalName = overrideName ?? selectedName;
-      if (state === 'medium' && !finalKey) {
+      /* 拍照识别无需登录；保存鱼获才需要 —— 游客保存时提示登录，
+         记住本次保存意图，登录返回后自动续存。 */
+      if (!session) {
+        pendingSaveRef.current = { toMemory: Boolean(opts?.toMemory) };
+        Alert.alert(
+          '登录后保存这条鱼获',
+          '识别无需登录；登录后即可把这条鱼获存进你的自然档案，识别结果会为你保留。',
+          [
+            {
+              text: '取消',
+              style: 'cancel',
+              onPress: () => {
+                pendingSaveRef.current = null;
+              },
+            },
+            {
+              text: '去登录',
+              onPress: () => {
+                navigation.navigate('Login');
+              },
+            },
+          ]
+        );
         return;
       }
-      const isUnknown = finalKey === UNKNOWN_KEY;
-      const corrected = Boolean(finalKey) && finalKey !== prediction.top1.speciesKey;
+      const finalKey = selectedKey;
+      const finalName = selectedName;
+      if (!finalKey) {
+        return;
+      }
+      const corrected = finalKey !== prediction.top1.speciesKey;
       const custom = finalKey.startsWith('user_');
-      const feedbackType: FeedbackTypeWire =
-        isUnknown || custom ? 'new_species_candidate' : corrected ? 'corrected' : 'confirmed';
+      const feedbackType: FeedbackTypeWire = custom
+        ? 'new_species_candidate'
+        : corrected
+        ? 'corrected'
+        : 'confirmed';
       const feedback: FeedbackDraft = {
         sourceEventId: generateSourceEventId(),
         imageId: image.imageId,
         feedbackType,
         modelVersion: prediction.modelVersion,
-        predictedSpecies: prediction.top1.speciesName,
+        // 新后端契约：predicted/corrected_species 均传鱼种 ID（与 catches.species_id 同源）
+        predictedSpecies: prediction.top1.speciesKey,
         confidence: prediction.top1.confidence,
-        correctedSpecies: corrected || isUnknown || custom ? finalName : null,
+        correctedSpecies: corrected || custom ? finalKey : null,
         userNote: `source=${image.source ?? 'unknown'}`,
       };
       const draft: CatchSaveDraft = {
-        speciesId: finalKey || UNKNOWN_KEY,
-        speciesName: finalName || UNKNOWN_NAME,
+        speciesId: finalKey,
+        speciesName: finalName,
         confidence: prediction.top1.confidence,
         modelVersion: prediction.modelVersion,
         detectorResult: null,
@@ -315,7 +390,7 @@ export const RecognitionResultScreen: React.FC = () => {
           model_version: prediction.modelVersion,
           prediction_species: prediction.top1.speciesKey,
           confidence: prediction.top1.confidence,
-          user_selected_species: finalKey || UNKNOWN_KEY,
+          user_selected_species: finalKey,
         },
       };
 
@@ -323,28 +398,54 @@ export const RecognitionResultScreen: React.FC = () => {
       setSaveError(null);
       const slowTimer = setTimeout(() => setSlowSaving(true), 2000);
       try {
-        const upload = await catchService.uploadImage(session.accessToken, image.filePath);
-        const savedCatch = await catchService.saveCatch(session.accessToken, upload, draft);
+        const upload = await catchService.uploadImage(image.filePath);
+        const savedCatch = await catchService.saveCatch(upload, draft);
         clearTimeout(slowTimer);
         setSlowSaving(false);
         setSaving(false);
         setSaved(true);
         haptics.confirm();
         reload();
+        /* 填写内容（长度/重量/地点/感言）落本地记忆：普通保存不再丢失（18.2 本地优先） */
+        try {
+          const mem = await catchMemoryService.load(savedCatch.id);
+          mem.lengthCm =
+            mem.lengthCm ??
+            (Number(lengthText) > 0 ? Number(lengthText) : null);
+          mem.weightKg =
+            mem.weightKg ??
+            (Number(weightText) > 0 ? Number(weightText) : null);
+          mem.location = mem.location ?? (locationText.trim() || null);
+          mem.latitude = mem.latitude ?? activeLocation?.latitude ?? null;
+          mem.longitude = mem.longitude ?? activeLocation?.longitude ?? null;
+          if (storyText.trim()) {
+            mem.story = storyText.trim();
+          }
+          await catchMemoryService.save(savedCatch.id, mem);
+        } catch {
+          // 本地记忆写入失败不阻断保存
+        }
         submitFeedback(feedback).catch(() => undefined);
+        /* 核心导航合同（手册 8.4）：
+           保存鱼获 → Normal Home；保存并记录记忆 → CatchDetail(MEMORY) */
         setTimeout(() => {
           reset();
-          navigation.replace('CatchDetail', {
-            catchId: savedCatch.id,
-            initialCatch: savedCatch,
+          if (opts?.toMemory) {
+            navigation.replace('CatchDetail', {
+              catchId: savedCatch.id,
+              initialCatch: savedCatch,
               initialMemory: {
                 lengthCm: Number(lengthText) > 0 ? Number(lengthText) : null,
                 weightKg: Number(weightText) > 0 ? Number(weightText) : null,
                 location: locationText.trim() || null,
                 latitude: activeLocation?.latitude ?? null,
                 longitude: activeLocation?.longitude ?? null,
+                story: storyText.trim() || null,
               },
-          });
+            });
+          } else {
+            navigation.popTo('Home');
+          }
         }, 320);
       } catch (e) {
         clearTimeout(slowTimer);
@@ -354,389 +455,317 @@ export const RecognitionResultScreen: React.FC = () => {
           await logout();
           return;
         }
-        setSaveError(e instanceof Error ? e.message : '保存鱼获失败，内容没有丢失，请重试');
+        setSaveError(
+          e instanceof Error ? e.message : '保存鱼获失败，内容没有丢失，请重试'
+        );
       }
     },
     [
       session,
       image,
       prediction,
-      state,
       selectedKey,
       selectedName,
       lengthText,
       weightText,
       locationText,
+      storyText,
+      activeLocation,
       reload,
       submitFeedback,
       logout,
       navigation,
       reset,
-    ],
+    ]
   );
+
+  /* 游客保存被引导登录后：session 就绪即自动续存（识别上下文仍在内存，Result 页未销毁） */
+  useEffect(() => {
+    if (!session || !pendingSaveRef.current) {
+      return;
+    }
+    const opts = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    void doSave(opts);
+  }, [session, doSave]);
 
   if (!result || !result.ready || !prediction) {
     // 过渡期间 result 可能被清空：渲染带背景的空态，避免闪白屏
     return (
-      <View style={[styles.screen, { backgroundColor: profile.surface.canvas }]}>
-        <WaterBackdrop />
+      <View style={[styles.screen, { backgroundColor: coreColors.lakeWhite }]}>
+        <MorningLakeScene level="content" />
       </View>
     );
   }
 
   const imageUri = toFileUri(image?.filePath);
-  const textPrimary = profile.surface.textPrimary;
-  const textSecondary = profile.surface.textSecondary;
-  const saveDisabled = state === 'medium' && !selectedKey;
-  const rowIdleBg = profile.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)';
-  const rowGoldBg = profile.isDark ? 'rgba(201,169,106,0.2)' : 'rgba(201,169,106,0.14)';
-  /** 表单区域底色：比全局 glass 更实，避免填写区显得过透 */
-  const formBg = profile.isDark ? 'rgba(16,46,56,0.92)' : 'rgba(255,255,255,0.93)';
-  const dividerColor = profile.isDark ? 'rgba(255,255,255,0.12)' : 'rgba(23,59,75,0.10)';
+  /* Core UI V1 固定清晨湖畔世界 */
+  const textPrimary = coreColors.deepLakeBlue;
+  const textSecondary = coreColors.lakeBlue;
+  const saveDisabled = !selectedKey;
+  /** 低置信度：手动选择鱼种后才进入已解析记录契约 */
+  const resolved = state === 'high' || Boolean(selectedKey);
+  const bbox = result.assessment.primary?.box ?? null;
+  const contentWidth = Math.min(windowWidth - RESULT_MARGIN * 2, 440);
 
   return (
     <View style={styles.screen}>
-      <WaterBackdrop />
-      <ScreenHeader onBack={() => navigation.goBack()} />
-      <ScrollView
+      {/* BG_CONTENT：清晨湖畔世界，背景存在感降至 ~75%（Core Visual System §3） */}
+      <MorningLakeScene level="content" />
+      <ScreenHeader
+        title="识别结果"
+        onBack={() => navigation.popTo('Identify')}
+        titleColor={textPrimary}
+        backColor={textPrimary}
+      />
+      {/* 键盘避让：长度/重量行输入 / 感言卡聚焦时收缩滚动区并把聚焦输入滚进可视区；
+          Android 由 adjustResize 缩窗处理，这里仅 iOS 生效避免双重位移 */}
+      <KeyboardAvoidingView
         style={styles.flex}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: 48 + insets.bottom },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* 照片卡（设计稿：独立圆角照片卡，浮于湖面背景） */}
-        <Animated.View style={{ opacity: heroOpacity, transform: [{ scale: heroScale }] }}>
-          <View
-            style={[
-              styles.photoCard,
-              {
-                backgroundColor: formBg,
-                borderColor: profile.surface.glassBorder,
-              },
-            ]}
-          >
-            {imageUri ? (
-              <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
-            ) : (
-              <View style={[styles.heroImage, styles.heroPlaceholder]}>
-                <FishGlyph size={64} color={palette.fishMint} />
-              </View>
-            )}
-          </View>
-        </Animated.View>
-
-        {/* 确认面板（设计稿：照片下方毛玻璃长条面板，标题左对齐） */}
-        <Animated.View
-          style={{ opacity: nameOpacity, transform: [{ translateY: nameTranslate }] }}
-        >
-          <View
-            style={[
-              styles.panelCard,
-              {
-                backgroundColor: formBg,
-                borderColor: profile.surface.glassBorder,
-              },
-            ]}
-          >
-            {state === 'high' ? (
-              <View style={styles.nameRow}>
-                <Text style={[styles.name, { color: textPrimary }]} numberOfLines={2}>
-                  {selectedName || prediction.top1.speciesName}
-                </Text>
-                <PressableScale onPress={pickSpecies} scaleTo={0.96} style={styles.editHit}>
-                  <View
-                    style={[styles.editChip, { borderColor: profile.surface.textSecondary }]}
-                    pointerEvents="none"
-                  >
-                    <Icon name="create-outline" size={12} color={textSecondary} />
-                    <Text style={[styles.editChipText, { color: textSecondary }]}>修改鱼种</Text>
-                    <Icon name="chevron-forward" size={12} color={textSecondary} />
-                  </View>
-                </PressableScale>
-              </View>
-            ) : null}
-
-            {/* 中置信度：帮我确认一下（设计稿：标题左对齐 + 候选列表） */}
-            {state === 'medium' ? (
-              <>
-                <Text style={[styles.panelTitle, { color: textPrimary }]}>帮我确认一下</Text>
-                <Text style={[styles.panelSub, { color: textSecondary }]}>
-                  这条鱼更像下面哪一种？
-                </Text>
-                <View style={styles.candidateList}>
-                  {candidates.map((candidate, index) => {
-                    const active = selectedKey === candidate.speciesKey;
-                    return (
-                      <PressableScale
-                        key={candidate.speciesKey}
-                        scaleTo={0.985}
-                        onPress={() => {
-                          setSelectedKey(candidate.speciesKey);
-                          setSelectedName(candidate.speciesName);
-                        }}
-                      >
-                        <View
-                          style={[
-                            styles.candidateRow,
-                            {
-                              backgroundColor: active ? rowGoldBg : rowIdleBg,
-                              borderColor: active ? GOLD : profile.surface.glassBorder,
-                            },
-                            active && styles.candidateRowActive,
-                          ]}
-                        >
-                          <View style={styles.candidateGlyph}>
-                            {guideCovers[candidate.speciesKey] ? (
-                              <RemoteImage
-                                url={guideCovers[candidate.speciesKey]}
-                                style={styles.candidateThumb}
-                                resizeMode="contain"
-                              />
-                            ) : (
-                              <FishGlyph size={24} color={active ? GOLD : palette.fishGreen} />
-                            )}
-                          </View>
-                          <Text style={[styles.candidateName, { color: textPrimary }]} numberOfLines={1}>
-                            {candidate.speciesName}
-                          </Text>
-                          {index === 0 ? (
-                            <View style={styles.recommendChip}>
-                              <Text style={styles.recommendText}>推荐</Text>
-                            </View>
-                          ) : null}
-                          <RadioDot selected={active} color={GOLD} idleColor={textSecondary} />
-                        </View>
-                      </PressableScale>
-                    );
-                  })}
-                </View>
-                <PressableScale onPress={pickSpecies} style={styles.searchLinkHit}>
-                  <View style={styles.searchLink} pointerEvents="none">
-                    <Text style={[styles.searchLinkText, { color: textSecondary }]}>
-                      都不是？搜索其他鱼种
-                    </Text>
-                    <Icon name="chevron-forward" size={13} color={textSecondary} />
-                  </View>
-                </PressableScale>
-              </>
-            ) : null}
-
-            {/* 低置信度：还不能确定 */}
-            {state === 'low' ? (
-              <>
-                <View style={styles.questionBadge}>
-                  <Svg width={42} height={42}>
-                    <Defs>
-                      <LinearGradient id="questionGold" x1="0" y1="0" x2="1" y2="1">
-                        <Stop offset="0" stopColor="#E7CF96" />
-                        <Stop offset="1" stopColor={GOLD} />
-                      </LinearGradient>
-                    </Defs>
-                    <Circle cx={21} cy={21} r={21} fill="url(#questionGold)" />
-                  </Svg>
-                  <Text style={styles.questionMark}>?</Text>
-                </View>
-                <Text style={[styles.panelTitle, styles.panelTitleCenter, { color: textPrimary }]}>
-                  还不能确定这是什么鱼
-                </Text>
-                <Text style={[styles.panelSub, styles.panelSubCenter, { color: textSecondary }]}>
-                  可以手动选择，或先保存这次鱼获
-                </Text>
-                <PressableScale onPress={pickSpecies} scaleTo={0.98} style={styles.manualHit}>
-                  <View style={[styles.manualRow, { backgroundColor: rowIdleBg }]} pointerEvents="none">
-                    {selectedKey && selectedKey !== UNKNOWN_KEY && guideCovers[selectedKey] ? (
-                      <RemoteImage
-                        url={guideCovers[selectedKey]}
-                        style={styles.candidateThumb}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <FishGlyph size={22} color={palette.fishGreen} />
-                    )}
-                    <Text style={[styles.candidateName, { color: textPrimary, flex: 1 }]}>
-                      手动选择鱼种
-                    </Text>
-                    {selectedKey && selectedKey !== UNKNOWN_KEY ? (
-                      <Text style={[styles.pickedName, { color: GOLD }]} numberOfLines={1}>
-                        {selectedName}
-                      </Text>
-                    ) : null}
-                    <Icon name="chevron-forward" size={15} color={textSecondary} />
-                  </View>
-                </PressableScale>
-              </>
-            ) : null}
-          </View>
-        </Animated.View>
-
-        {/* 长度 / 重量 / 钓点：三列合一信息条（设计稿：icon + 值在上、label 在下） */}
-        <View
-          style={[
-            styles.metaBar,
-            { backgroundColor: formBg, borderColor: profile.surface.glassBorder },
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: 32 + insets.bottom },
           ]}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.metaCol}>
-            <View style={styles.metaValueRow}>
-              <Icon name="resize-outline" size={13} color={GOLD} />
-              <TextInput
-                style={[styles.metaInput, { color: textPrimary }]}
-                value={lengthText}
-                onChangeText={(text) => {
-                  setLengthText(text);
-                  setLengthAuto(false);
-                }}
-                placeholder="长度"
-                placeholderTextColor={textSecondary}
-                keyboardType="decimal-pad"
-              />
-              <Text style={[styles.metaUnit, { color: textSecondary }]}>cm</Text>
-            </View>
-            <Text style={[styles.metaLabel, { color: textSecondary }]}>长度</Text>
-          </View>
-          <View style={[styles.metaDivider, { backgroundColor: dividerColor }]} />
-          <View style={styles.metaCol}>
-            <View style={styles.metaValueRow}>
-              <Icon name="scale-outline" size={13} color={GOLD} />
-              <TextInput
-                style={[styles.metaInput, { color: textPrimary }]}
-                value={weightText}
-                onChangeText={setWeightText}
-                placeholder="重量"
-                placeholderTextColor={textSecondary}
-                keyboardType="decimal-pad"
-              />
-              <Text style={[styles.metaUnit, { color: textSecondary }]}>kg</Text>
-            </View>
-            <Text style={[styles.metaLabel, { color: textSecondary }]}>重量</Text>
-          </View>
-          <View style={[styles.metaDivider, { backgroundColor: dividerColor }]} />
-          <View style={styles.metaCol}>
-            <View style={styles.metaValueRow}>
-              <Icon name="location-outline" size={13} color={GOLD} />
-              <TextInput
-                style={[styles.metaInput, styles.metaInputLocation, { color: textPrimary }]}
-                value={locationText}
-                onChangeText={setLocationText}
-                placeholder="钓点"
-                placeholderTextColor={textSecondary}
-                maxLength={60}
-                editable={privacy.manualLocationEdit}
-              />
-              {privacy.manualLocationEdit ? (
-                <PressableScale
-                  onPress={() => void openLocationPicker()}
-                  scaleTo={0.9}
-                  style={styles.locMapHit}
-                  accessibilityLabel="地图选择钓点"
-                  accessibilityRole="button"
-                >
-                  <Icon name="map-outline" size={14} color={GOLD} />
-                </PressableScale>
-              ) : null}
-            </View>
-            <Text style={[styles.metaLabel, { color: textSecondary }]}>钓点</Text>
-          </View>
-        </View>
-
-        {lengthAuto && lengthText ? (
-          <View style={styles.autoLenRow}>
-            <Icon name="checkmark-circle" size={12} color={GOLD} />
-            <Text style={styles.autoLenText}>
-              已填入量尺测量结果 {lengthText} cm，可手动修改
-            </Text>
-          </View>
-        ) : null}
-
-        {/* 钓点提示行：已定位可回地图调整；未定位可打开地图选点（关闭手动修改时仅提示） */}
-        {privacy.manualLocationEdit ? (
-          <PressableScale
-            onPress={() => void openLocationPicker()}
-            style={styles.locLinkHit}
-            accessibilityLabel="地图选择钓点"
-            accessibilityRole="button"
+          {/* Hero（Hero Media Contract：主体优先裁剪；外框 320×248dp@360 规范） */}
+          <Animated.View
+            style={{ opacity: heroOpacity, transform: [{ scale: heroScale }] }}
           >
-            <View style={styles.locLinkRow} pointerEvents="none">
-              <Icon name={activeLocation ? 'checkmark-circle' : 'map-outline'} size={12} color={GOLD} />
-              <Text style={styles.autoLenText}>
-                {activeLocation
-                  ? `已${activeLocation.manual ? '选择' : '自动定位'}钓点，点击在地图上调整`
-                  : '在地图上选择钓点'}
+            <ResultHeroViewport
+              uri={imageUri}
+              bbox={
+                bbox
+                  ? { x1: bbox.x1, y1: bbox.y1, x2: bbox.x2, y2: bbox.y2 }
+                  : null
+              }
+              mode="subject"
+              width={contentWidth}
+              accessibilityLabel="本次鱼获照片"
+            />
+          </Animated.View>
+
+          {/* 高置信度 / 低置信度已解析：鱼种身份行（44dp 规范：30sp 衬线 + 修改鱼种›） */}
+          {state !== 'medium' && resolved ? (
+            <Animated.View
+              style={[
+                styles.identityRow,
+                {
+                  opacity: nameOpacity,
+                  transform: [{ translateY: nameTranslate }],
+                },
+              ]}
+            >
+              <Text
+                style={[styles.speciesTitle, { color: textPrimary }]}
+                numberOfLines={1}
+              >
+                {selectedName || prediction.top1.speciesName}
               </Text>
-              <Icon name="chevron-forward" size={12} color="#A5854D" />
+              <PressableScale
+                onPress={pickSpecies}
+                scaleTo={0.94}
+                style={styles.editLinkHit}
+              >
+                <View style={styles.editLink} pointerEvents="none">
+                  <Text style={styles.editLinkText}>修改鱼种</Text>
+                  <Icon
+                    name="chevron-forward"
+                    size={14}
+                    color="#0F7A78"
+                    style={styles.editLinkChevron}
+                  />
+                </View>
+              </PressableScale>
+            </Animated.View>
+          ) : null}
+
+          {/* 中置信度：一行确认提示 + 横向候选卡 + 都不是？选择其他鱼种 ›
+            （确认后候选区不收起，追加记录契约区） */}
+          {state === 'medium' ? (
+            <Animated.View
+              style={{
+                opacity: nameOpacity,
+                transform: [{ translateY: nameTranslate }],
+              }}
+            >
+              <Text style={[styles.mediumPrompt, { color: textPrimary }]}>
+                帮我确认一下，这条鱼更像哪一种？
+              </Text>
+              <View style={styles.candidateWrap}>
+                <ResultCandidateRow
+                  candidates={candidateItems}
+                  selectedKey={selectedKey}
+                  suggestedKey={candidates[0]?.speciesKey}
+                  onSelect={(c) => {
+                    setSelectedKey(c.key);
+                    setSelectedName(c.name);
+                    haptics.selection();
+                  }}
+                  contentWidth={contentWidth}
+                />
+              </View>
+              <PressableScale
+                onPress={pickSpecies}
+                style={styles.otherSpeciesHit}
+              >
+                <View style={styles.otherSpeciesLink} pointerEvents="none">
+                  <Text style={styles.otherSpeciesText}>
+                    都不是？选择其他鱼种
+                  </Text>
+                  <Icon
+                    name="chevron-forward"
+                    size={13}
+                    color={textSecondary}
+                  />
+                </View>
+              </PressableScale>
+            </Animated.View>
+          ) : null}
+
+          {/* 低置信度恢复对（Action Button V1.1 冻结配比：
+            SECONDARY_STRONG 手动选择 58% / SECONDARY_MUTED 重新拍摄 42%）；
+            选定鱼种后记录区可保存，按钮对保持常驻 */}
+          {state === 'low' ? (
+            <Animated.View
+              style={{
+                opacity: nameOpacity,
+                transform: [{ translateY: nameTranslate }],
+              }}
+            >
+              <Text style={[styles.lowMessage, { color: textPrimary }]}>
+                无法确认是什么鱼
+              </Text>
+              <View style={styles.lowPair}>
+                <PrimaryButton
+                  label="手动选择"
+                  variant="secondaryStrong"
+                  onPress={pickSpecies}
+                  disabled={saving || saved}
+                  style={styles.lowBtnStrong}
+                />
+                <PrimaryButton
+                  label="重新拍摄"
+                  variant="secondaryMuted"
+                  onPress={() => navigation.popTo('Identify')}
+                  disabled={saving || saved}
+                  style={styles.lowBtnMuted}
+                />
+              </View>
+            </Animated.View>
+          ) : null}
+
+          {/* 记录契约区（关键帧 05/06/07 常驻）：行输入卡 + 感言卡 + 双 CTA；
+            未选定鱼种时保存禁用（低/中置信度先确认鱼种） */}
+          <View style={styles.recordGap}>
+            <ResultFieldRows
+              lengthText={lengthText}
+              weightText={weightText}
+              locationLabel={locationText || null}
+              onLengthChange={(t) => {
+                setLengthText(t);
+                setLengthAuto(false);
+              }}
+              onWeightChange={setWeightText}
+              onLengthBlur={commitLengthBlur}
+              onWeightBlur={commitWeightBlur}
+              onEditLocation={() => {
+                if (privacy.manualLocationEdit) {
+                  setSheet('location');
+                }
+              }}
+            />
+
+            {/* 量尺自动填入提示（运行时行为：用户改动后消失） */}
+            {lengthAuto && lengthText ? (
+              <View style={styles.autoLenRow}>
+                <Icon
+                  name="checkmark-circle"
+                  size={12}
+                  color={coreColors.morningGold}
+                />
+                <Text style={styles.autoLenText}>
+                  已填入量尺测量结果 {lengthText} cm，可手动修改
+                </Text>
+              </View>
+            ) : null}
+
+            <ResultNoteCard value={storyText} onChange={setStoryText} />
+
+            {/* 关闭手动修改地点时：仅提示已自动定位 */}
+            {!privacy.manualLocationEdit && activeLocation ? (
+              <View style={styles.autoLenRow}>
+                <Icon
+                  name="checkmark-circle"
+                  size={12}
+                  color={coreColors.morningGold}
+                />
+                <Text style={styles.autoLenText}>
+                  已自动定位钓点（设置中已关闭手动修改地点）
+                </Text>
+              </View>
+            ) : null}
+
+            {saveError ? (
+              <Text
+                style={[styles.errorText, { color: palette.qualityInvalid }]}
+              >
+                {saveError}
+              </Text>
+            ) : null}
+            {slowSaving ? (
+              <Text style={[styles.slowHint, { color: textSecondary }]}>
+                正在保存这次鱼获…
+              </Text>
+            ) : null}
+
+            {/* 双 CTA（Action Button V1.1 冻结配比：SECONDARY_STRONG 继续记录记忆 44% / PRIMARY 保存本次鱼获 56%） */}
+            <View style={styles.ctaRow}>
+              <PrimaryButton
+                label="继续记录记忆"
+                variant="secondaryStrong"
+                onPress={() => doSave({ toMemory: true })}
+                disabled={saveDisabled || saving || saved}
+                loading={saving}
+                style={styles.ctaLight}
+              />
+              <PrimaryButton
+                label="保存本次鱼获"
+                variant="primary"
+                onPress={() => doSave()}
+                disabled={saveDisabled}
+                loading={saving}
+                saved={saved}
+                savedLabel="已保存"
+                style={styles.ctaPrimary}
+              />
             </View>
-          </PressableScale>
-        ) : activeLocation ? (
-          <View style={styles.locLinkRow}>
-            <Icon name="checkmark-circle" size={12} color={GOLD} />
-            <Text style={styles.autoLenText}>已自动定位钓点（设置中已关闭手动修改地点）</Text>
           </View>
-        ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-        {saveError ? (
-          <Text style={[styles.errorText, { color: palette.qualityInvalid }]}>{saveError}</Text>
-        ) : null}
-        {slowSaving ? (
-          <Text style={[styles.slowHint, { color: textSecondary }]}>正在保存这次鱼获…</Text>
-        ) : null}
-
-        {/* 主 CTA：高/中置信度 —— 白玻璃胶囊；低置信度 —— 金色渐变「保存为未知鱼种」 */}
-        {state === 'low' ? (
-          <PrimaryButton
-            label="保存为未知鱼种"
-            onPress={() => doSave(UNKNOWN_KEY, UNKNOWN_NAME)}
-            loading={saving}
-            saved={saved}
-            savedLabel="已保存"
-            variant="gold"
-            serif
-            style={styles.saveButton}
-          />
-        ) : (
-          <PrimaryButton
-            label={saveDisabled ? '选择候选后保存鱼获' : '保存鱼获'}
-            onPress={() => doSave()}
-            disabled={saveDisabled}
-            loading={saving}
-            saved={saved}
-            savedLabel="已保存"
-            variant="glass"
-            serif
-            style={styles.saveButton}
-          />
-        )}
-
-        {/* 次要操作：低置信度为两个白底胶囊（重新拍摄 / 从相册选择），其余为安静文字链接 */}
-        {state === 'low' ? (
-          <View style={styles.secondaryRow}>
-            <PrimaryButton
-              label="重新拍摄"
-              variant="ghost"
-              onPress={() => navigation.navigate('Identify')}
-              disabled={saving || saved}
-              style={styles.secondaryHalf}
-            />
-            <PrimaryButton
-              label="从相册选择"
-              variant="ghost"
-              onPress={repickFromGallery}
-              disabled={saving || saved}
-              style={styles.secondaryHalf}
-            />
-          </View>
-        ) : (
-          <PressableScale
-            onPress={() => navigation.navigate('Identify')}
-            disabled={saving || saved}
-            style={styles.textLinkHit}
-          >
-            <Text style={[styles.textLink, { color: textSecondary }]}>重新拍摄</Text>
-          </PressableScale>
-        )}
-      </ScrollView>
+      {/* 地点编辑 Sheet（编辑永不离开结果页） */}
+      {privacy.manualLocationEdit ? (
+        <ResultLocationSheet
+          visible={sheet === 'location'}
+          currentLabel={locationText || null}
+          onClose={() => setSheet(null)}
+          onCommit={(place) => {
+            setActiveLocation(place);
+            setLocationText(place.label.slice(0, 40));
+          }}
+          onClear={() => {
+            setActiveLocation(null);
+            setLocationText('');
+          }}
+        />
+      ) : null}
     </View>
   );
 };
@@ -749,285 +778,130 @@ const styles = StyleSheet.create({
     flex: 1,
   } as ViewStyle,
   content: {
-    paddingHorizontal: spacing.page,
-  } as ViewStyle,
-  photoCard: {
-    borderRadius: radius.l,
-    borderWidth: 1,
-    overflow: 'hidden',
-    shadowColor: '#173B4B',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  } as ViewStyle,
-  heroImage: {
+    paddingHorizontal: 20,
+    maxWidth: 480,
     width: '100%',
-    aspectRatio: 4 / 3,
-  } as ImageStyle,
-  heroPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.softWater,
+    alignSelf: 'center',
   } as ViewStyle,
-  panelCard: {
-    marginTop: spacing.md,
-    borderRadius: radius.m + 2,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    shadowColor: '#173B4B',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  } as ViewStyle,
-  nameRow: {
+  /* 鱼种身份行：44dp 规范，标题 30sp/36sp 衬线 */
+  identityRow: {
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: 8,
+    marginTop: 16,
   } as ViewStyle,
-  name: {
+  speciesTitle: {
+    flexShrink: 1,
     fontFamily: font.serif,
-    fontSize: fs(22),
+    fontSize: fs(30),
+    lineHeight: fs(36),
     fontWeight: '700',
     letterSpacing: 2,
-    flexShrink: 1,
   } as TextStyle,
-  editHit: {
+  editLinkHit: {
     borderRadius: 12,
   } as ViewStyle,
-  editChip: {
+  editLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 13,
-    borderWidth: 1,
+    gap: 1,
+    paddingVertical: 6,
+    paddingLeft: 8,
   } as ViewStyle,
-  editChipText: {
-    fontSize: fs(11),
-    fontWeight: '600',
-    letterSpacing: 1,
+  editLinkText: {
+    /* Text Action V1 / NORMAL / LIGHT：14sp·500·Deep Lake Teal（无下划线、无金色） */
+    fontSize: fs(14),
+    fontWeight: '500',
+    color: '#0F7A78',
   } as TextStyle,
-  panelTitle: {
-    fontFamily: font.serif,
-    fontSize: fs(19),
-    fontWeight: '700',
-    letterSpacing: 2,
-  } as TextStyle,
-  panelTitleCenter: {
-    textAlign: 'center',
-  } as TextStyle,
-  panelSub: {
-    fontSize: fs(13),
-    marginTop: 4,
-  } as TextStyle,
-  panelSubCenter: {
-    textAlign: 'center',
-  } as TextStyle,
-  questionBadge: {
-    alignSelf: 'center',
-    width: 42,
-    height: 42,
-    marginBottom: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#A5854D',
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+  editLinkChevron: {
+    /* 文字↔chevron 4dp；chevron 继承动作色调 */
+    marginLeft: 4,
   } as ViewStyle,
-  questionMark: {
-    position: 'absolute',
+  /* 中置信度 */
+  mediumPrompt: {
     fontFamily: font.serif,
     fontSize: fs(20),
-    fontWeight: '700',
-    color: '#FFFFFF',
-  } as TextStyle,
-  candidateList: {
-    marginTop: spacing.sm,
-    gap: 10,
-  } as ViewStyle,
-  candidateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: radius.m - 4,
-    borderWidth: 1,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-  } as ViewStyle,
-  candidateRowActive: {
-    borderWidth: 1.5,
-  } as ViewStyle,
-  candidateGlyph: {
-    width: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as ViewStyle,
-  candidateThumb: {
-    width: 34,
-    height: 26,
-    borderRadius: 6,
-  } as ImageStyle,
-  candidateName: {
-    fontFamily: font.serif,
-    fontSize: fs(15),
+    lineHeight: fs(28),
     fontWeight: '700',
     letterSpacing: 1,
-    flexShrink: 1,
+    marginTop: 16,
   } as TextStyle,
-  recommendChip: {
-    backgroundColor: 'rgba(201,169,106,0.18)',
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+  candidateWrap: {
+    marginTop: 12,
   } as ViewStyle,
-  recommendText: {
-    color: '#A5854D',
-    fontSize: fs(10),
-    fontWeight: '600',
-  } as TextStyle,
-  searchLinkHit: {
-    alignSelf: 'center',
-    marginTop: spacing.sm,
+  otherSpeciesHit: {
+    alignSelf: 'flex-start',
+    marginTop: 16,
+    paddingVertical: 4,
   } as ViewStyle,
-  searchLink: {
+  otherSpeciesLink: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
   } as ViewStyle,
-  searchLinkText: {
+  otherSpeciesText: {
     fontSize: fs(13),
+    color: coreColors.lakeBlue,
+    letterSpacing: 1,
   } as TextStyle,
-  manualHit: {
-    marginTop: spacing.sm,
-  } as ViewStyle,
-  manualRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: radius.m - 4,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-  } as ViewStyle,
-  pickedName: {
-    fontSize: fs(12),
-    fontWeight: '600',
-    maxWidth: 72,
-  } as TextStyle,
-  metaBar: {
-    marginTop: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    borderRadius: radius.m,
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    shadowColor: '#173B4B',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  } as ViewStyle,
-  metaCol: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-  } as ViewStyle,
-  metaDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    marginVertical: 3,
-  } as ViewStyle,
-  metaValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  } as ViewStyle,
-  metaInput: {
+  /* 低置信度 */
+  lowMessage: {
     fontFamily: font.serif,
-    fontSize: fs(14),
+    fontSize: fs(26),
+    lineHeight: fs(34),
     fontWeight: '700',
-    paddingVertical: 0,
-    minWidth: 34,
-    textAlign: 'center',
+    letterSpacing: 2,
+    marginTop: 16,
   } as TextStyle,
-  metaInputLocation: {
-    fontSize: fs(13),
-    minWidth: 0,
-    flexShrink: 1,
-  } as TextStyle,
-  metaUnit: {
-    fontSize: fs(11),
-  } as TextStyle,
-  metaLabel: {
-    fontSize: fs(11),
-  } as TextStyle,
-  /** 量尺自动填入提示：metaBar 下方一行小字，用户改动后消失 */
+  lowPair: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  } as ViewStyle,
+  /* Action Button V1.1 低置信度冻结配比 58/42 */
+  lowBtnStrong: {
+    flex: 58,
+  } as ViewStyle,
+  lowBtnMuted: {
+    flex: 42,
+  } as ViewStyle,
+  /* 记录契约区 */
+  recordGap: {
+    gap: 12,
+    marginTop: 16,
+  } as ViewStyle,
   autoLenRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.sm,
     gap: 4,
   } as ViewStyle,
   autoLenText: {
-    color: '#A5854D',
+    color: '#9A7B3F',
     fontSize: fs(12),
     letterSpacing: 0.5,
   } as TextStyle,
-  /** 钓点地图选点入口 */
-  locMapHit: {
-    padding: 3,
-    borderRadius: 8,
-  } as ViewStyle,
-  locLinkHit: {
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  } as ViewStyle,
-  locLinkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  } as ViewStyle,
   errorText: {
     textAlign: 'center',
-    marginTop: spacing.sm,
     fontSize: fs(12),
   } as TextStyle,
   slowHint: {
     textAlign: 'center',
-    marginTop: spacing.sm,
     fontSize: fs(12),
   } as TextStyle,
-  saveButton: {
-    marginTop: spacing.md,
-  } as ViewStyle,
-  secondaryRow: {
+  /* 双 CTA（Action Button V1.1：确认态 44/56 冻结配比，间距 12dp） */
+  ctaRow: {
     flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.sm,
+    gap: 12,
+    marginTop: 4,
   } as ViewStyle,
-  secondaryHalf: {
-    flex: 1,
+  ctaLight: {
+    flex: 44,
   } as ViewStyle,
-  textLinkHit: {
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  ctaPrimary: {
+    flex: 56,
   } as ViewStyle,
-  textLink: {
-    fontSize: fs(13),
-  } as TextStyle,
 });

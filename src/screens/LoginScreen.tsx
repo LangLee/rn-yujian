@@ -39,13 +39,15 @@ export const LoginScreen: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      // 登录成功后 AuthContext 更新 session，导航器自动切换到主界面。
+      // 登录成功后 AuthContext 更新 session；Login 是从 Empty Home 推入的
+      // 普通页面（Login/Guest 不决定 Empty/Normal），返回即可看到刷新后的首页。
       await login(username.trim(), password);
+      navigation.goBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : '登录失败，请稍后重试');
       setLoading(false);
     }
-  }, [canSubmit, login, username, password]);
+  }, [canSubmit, login, username, password, navigation]);
 
   return (
     <AuthLayout title="渔见" subtitle="拍照收藏每次渔获">
@@ -78,14 +80,14 @@ export const LoginScreen: React.FC = () => {
         accessibilityRole="button"
         accessibilityLabel="忘记密码"
       >
-        <Text style={styles.forgotText}>忘记密码</Text>
+        <Text style={styles.forgotText}>忘记密码？</Text>
       </Pressable>
       {forgotNote ? (
         <Text style={styles.forgotNote}>找回密码能力即将开放，当前可联系管理员重置</Text>
       ) : null}
       <AuthTextButton
         label="还没有账号？"
-        actionLabel="注册"
+        actionLabel="创建账号"
         onPress={() => navigation.navigate('Register')}
         disabled={loading}
       />
@@ -99,9 +101,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
   },
+  /* Text Action V1 / MUTED：13sp·500·#748897 */
   forgotText: {
-    color: '#6A7D86',
-    fontSize: fs(14),
+    color: '#748897',
+    fontSize: fs(13),
+    fontWeight: '500',
   },
   forgotNote: {
     textAlign: 'center',

@@ -68,7 +68,7 @@ export const IdentifyScreen: React.FC = () => {
 
   const device = useCameraDevice('back');
   const photoOutput = usePhotoOutput({ qualityPrioritization: 'quality' });
-  const { hasPermission, requestPermission } = useCameraPermission();
+  const { hasPermission, canRequestPermission, requestPermission } = useCameraPermission();
 
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [shooting, setShooting] = useState(false);
@@ -82,6 +82,8 @@ export const IdentifyScreen: React.FC = () => {
    */
   const [rulerMode, setRulerMode] = useState<'off' | 'ar' | 'manual'>('off');
   const [rulerProbing, setRulerProbing] = useState(false);
+  /** AR 浮层使用的引擎：arcore（GMS）| huawei（华为/荣耀 AR Engine） */
+  const [arEngine, setArEngine] = useState<'arcore' | 'huawei'>('arcore');
   const [measuredCm, setMeasuredCm] = useState<number | null>(null);
   /**
    * 钓点：进入取景页按隐私设置自动定位（'none' 不记录），也可点角标在地图上手动选点。
@@ -96,6 +98,20 @@ export const IdentifyScreen: React.FC = () => {
   const [locPermSheet, setLocPermSheet] = useState(false);
   /** 每次挂载只自动提示一次，避免每次回到取景页都被打断 */
   const locPermPromptedRef = useRef(false);
+  /** 相机权限引导进行中（说明 Sheet 或系统弹窗）：定位引导排队其后，避免首进取景页两个权限弹层叠着弹 */
+  const [cameraGuideActive, setCameraGuideActive] = useState(false);
+  const cameraGuideActiveRef = useRef(false);
+  /** 相机引导期间被推迟的自动定位提示，待引导结束再补弹（仍只补一次） */
+  const locPermDeferredRef = useRef(false);
+  const setCameraGuide = useCallback((active: boolean) => {
+    cameraGuideActiveRef.current = active;
+    setCameraGuideActive(active);
+  }, []);
+  /** 关闭相机权限说明 Sheet：相机引导阶段就此结束（定位引导随后补弹） */
+  const closePermSheet = useCallback(() => {
+    setPermSheet(false);
+    setCameraGuide(false);
+  }, [setCameraGuide]);
 
   // 进入 P02 时清理上一条流程的残留状态
   useEffect(() => {
@@ -123,7 +139,7 @@ export const IdentifyScreen: React.FC = () => {
     }
   }, []);
 
-  /** 静默自动定位；要用定位但权限未开时，主动提示去开启（每次挂载只自动提示一次） */
+  /** 静默自动定位；要用定位但权限未开时，主动提示去开启（每次挂载只自动提示一次；相机引导进行中先排队） */
   const refreshSpotLocation = useCallback(async () => {
     if (!precisionRequiresLocation(privacy.recordPrecision)) {
       setSpotLocation(null);
@@ -137,8 +153,13 @@ export const IdentifyScreen: React.FC = () => {
     if (status !== 'granted') {
       setSpotLocation(null);
       if (!locPermPromptedRef.current) {
-        locPermPromptedRef.current = true;
-        promptLocationPermission(status);
+        if (cameraGuideActiveRef.current) {
+          // 相机权限引导还没结束：推迟到引导结束后再弹，避免两个权限弹层叠加
+          locPermDeferredRef.current = true;
+        } else {
+          locPermPromptedRef.current = true;
+          promptLocationPermission(status);
+        }
       }
       return;
     }
@@ -184,6 +205,44 @@ export const IdentifyScreen: React.FC = () => {
     }, [refreshSpotLocation]),
   );
 
+  // 进入取景页就补上相机权限请求：没授权时取景一直黑屏，等用户按快门再问就晚了。
+  // 首次启动先出自有说明 Sheet，之后再直接弹系统权限弹窗。
+  useEffect(() => {
+    if (hasPermission || !canRequestPermission) {
+      return;
+    }
+    if (permAskedRef.current || permSheet) {
+      return;
+    }
+    permAskedRef.current = true;
+    // 同步标记引导开始：定位引导排队其后，结束后由 flush 补弹
+    setCameraGuide(true);
+    void (async () => {
+      const seen = await AsyncStorage.getItem(CAMERA_PERM_SEEN_KEY);
+      if (!seen) {
+        setPermSheet(true);
+        return;
+      }
+      try {
+        await requestPermission();
+      } finally {
+        setCameraGuide(false);
+      }
+    })();
+  }, [hasPermission, canRequestPermission, requestPermission, permSheet, setCameraGuide]);
+
+  // 相机权限引导结束后，补弹被推迟的定位引导（仍受「每次挂载只提示一次」约束）
+  useEffect(() => {
+    if (cameraGuideActive || !locPermDeferredRef.current || locPermPromptedRef.current) {
+      return;
+    }
+    locPermDeferredRef.current = false;
+    if (locPerm === 'denied' || locPerm === 'blocked') {
+      locPermPromptedRef.current = true;
+      promptLocationPermission(locPerm);
+    }
+  }, [cameraGuideActive, locPerm, promptLocationPermission]);
+
   // 识别页异常退回时带回原因（Recognizing catch → navigate Identify { error }）
   useEffect(() => {
     if (route.params?.error) {
@@ -191,6 +250,19 @@ export const IdentifyScreen: React.FC = () => {
       navigation.setParams({ error: undefined });
     }
   }, [route.params?.error, navigation]);
+
+  // 空首页「从相册选择」入口：进入后自动拉起既有相册选择（不新建第二套 Picker）
+  const albumPromptedRef = useRef(false);
+  const openGalleryRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!route.params?.openAlbum || albumPromptedRef.current) {
+      return;
+    }
+    albumPromptedRef.current = true;
+    navigation.setParams({ openAlbum: undefined });
+    const t = setTimeout(() => openGalleryRef.current?.(), 350);
+    return () => clearTimeout(t);
+  }, [route.params?.openAlbum, navigation]);
 
   /** 地图选点：返回后覆盖自动定位结果，且本次取景期间不再自动刷新 */
   const openLocationPicker = useCallback(async () => {
@@ -251,12 +323,25 @@ export const IdentifyScreen: React.FC = () => {
       const seen = await AsyncStorage.getItem(CAMERA_PERM_SEEN_KEY);
       if (!seen && !permAskedRef.current) {
         permAskedRef.current = true;
+        setCameraGuide(true);
         setPermSheet(true);
         return;
       }
       const granted = await requestPermission();
       if (!granted) {
-        setError('需要相机权限才能拍照，也可以从右下角选择相册照片');
+        if (!canRequestPermission) {
+          // 已被系统标记为不再询问：弹窗弹不出来，只能去系统设置里手动开
+          Alert.alert(
+            '开启相机权限',
+            '拍照识鱼需要相机权限，且你已选择不再询问。请到「系统设置 → 渔见 → 相机」中改为允许。',
+            [
+              { text: '取消', style: 'cancel' },
+              { text: '去系统设置', onPress: () => void Linking.openSettings() },
+            ],
+          );
+        } else {
+          setError('需要相机权限才能拍照，也可以从右下角选择相册照片');
+        }
         return;
       }
     }
@@ -280,7 +365,9 @@ export const IdentifyScreen: React.FC = () => {
     shooting,
     loading,
     hasPermission,
+    canRequestPermission,
     requestPermission,
+    setCameraGuide,
     device,
     photoOutput,
     handlePicked,
@@ -304,6 +391,7 @@ export const IdentifyScreen: React.FC = () => {
       void handlePicked(uri, 'gallery');
     });
   }, [handlePicked]);
+  openGalleryRef.current = openGallery;
 
   /** 当前量尺模式镜像（异步探测完成后校验期间是否已被关闭） */
   const rulerModeRef = useRef<'off' | 'ar' | 'manual'>('off');
@@ -311,8 +399,8 @@ export const IdentifyScreen: React.FC = () => {
   const rulerProbingRef = useRef(false);
 
   /**
-   * 量尺开关：优先 AR 自动量尺（ARCore），不可用时回落手动校准量尺。
-   * 'installable' 设备触发一次 ARCore 安装引导，未就绪则先进手动量尺。
+   * 量尺开关：优先 AR 自动量尺（GMS 设备走 ARCore，华为/荣耀走 AR Engine），
+   * 不可用时回落手动校准量尺；'installable' 触发一次引擎安装引导。
    */
   const toggleRuler = useCallback(async () => {
     haptics.selection();
@@ -323,20 +411,26 @@ export const IdentifyScreen: React.FC = () => {
     rulerProbingRef.current = true;
     setRulerProbing(true);
     try {
-      const support = await arMeasure.probeSupport();
+      const { level, engine } = await arMeasure.probeSupport();
       if (rulerModeRef.current !== 'off') {
         return;
       }
-      if (support === 'supported') {
+      if (level === 'supported' && engine) {
+        setArEngine(engine);
         setRulerMode('ar');
         return;
       }
-      if (support === 'installable') {
-        const ready = await arMeasure.requestInstall();
+      if (level === 'installable' && engine) {
+        const ready = await arMeasure.requestInstall(engine);
         if (rulerModeRef.current !== 'off') {
           return;
         }
-        setRulerMode(ready ? 'ar' : 'manual');
+        if (ready) {
+          setArEngine(engine);
+          setRulerMode('ar');
+        } else {
+          setRulerMode('manual');
+        }
         return;
       }
       setRulerMode('manual');
@@ -349,8 +443,8 @@ export const IdentifyScreen: React.FC = () => {
   /** AR 会话失败 / 用户改用：回落手动量尺（reason 用于状态文案） */
   const fallbackToManualRuler = useCallback((reason?: string) => {
     setRulerMode('manual');
-    if (reason === 'arcore_not_installed') {
-      setError('ARCore 未安装，已切换手动量尺');
+    if (reason === 'engine_not_installed') {
+      setError('AR 引擎未安装，已切换手动量尺');
     } else if (reason === 'unsupported_device') {
       setError('此设备不支持 AR 量尺，已切换手动量尺');
     } else if (reason) {
@@ -371,6 +465,9 @@ export const IdentifyScreen: React.FC = () => {
   } else if (!device) {
     statusCopy = '相机启动中…';
     statusMark = 'spinner';
+  } else if (!hasPermission) {
+    statusCopy = '未开启相机权限，点击快门去开启';
+    statusMark = 'warn';
   } else if (rulerProbing) {
     statusCopy = '正在检查 AR 量尺支持…';
     statusMark = 'spinner';
@@ -495,7 +592,7 @@ export const IdentifyScreen: React.FC = () => {
           accessibilityLabel={rulerMode !== 'off' ? '关闭量尺' : '打开量尺'}
           accessibilityRole="button"
         >
-          <View style={[styles.albumBtn, rulerMode === 'manual' && styles.rulerBtnActive]}>
+          <View style={[styles.albumBtn, rulerMode !== 'off' && styles.rulerBtnActive]}>
             {rulerProbing ? (
               <ActivityIndicator size="small" color="#EAD9AE" />
             ) : (
@@ -533,6 +630,7 @@ export const IdentifyScreen: React.FC = () => {
       {/* AR 自动量尺全屏浮层：接管相机（VisionCamera 已停用），盖住 dock */}
       {rulerMode === 'ar' ? (
         <ARMeasureLayer
+          engine={arEngine}
           onMeasured={(cm) => {
             setMeasuredCm(cm);
             setRulerMode('off');
@@ -545,7 +643,7 @@ export const IdentifyScreen: React.FC = () => {
       {/* 首次相机权限引导（自有说明 Sheet → 继续 → 系统权限弹窗） */}
       <BottomSheet
         visible={permSheet}
-        onClose={() => setPermSheet(false)}
+        onClose={closePermSheet}
         title="使用相机"
       >
         <Text style={styles.permText}>
@@ -557,6 +655,8 @@ export const IdentifyScreen: React.FC = () => {
             setPermSheet(false);
             AsyncStorage.setItem(CAMERA_PERM_SEEN_KEY, '1').catch(() => undefined);
             const granted = await requestPermission();
+            // 系统弹窗结束，相机引导阶段结束（定位引导随后补弹）
+            setCameraGuide(false);
             if (!granted) {
               setError('需要相机权限才能拍照，也可以从右下角选择相册照片');
             }
@@ -565,7 +665,7 @@ export const IdentifyScreen: React.FC = () => {
         <PrimaryButton
           label="先不用"
           variant="ghost"
-          onPress={() => setPermSheet(false)}
+          onPress={closePermSheet}
           style={styles.permSecondary}
         />
       </BottomSheet>

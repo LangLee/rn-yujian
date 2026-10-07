@@ -38,7 +38,7 @@ import { haptics } from '../../utils/haptics';
 
 type PrivacyNavigationProp = StackNavigationProp<RootStackParamList, 'PrivacySettings'>;
 
-const GOLD = '#C9A96A';
+const GOLD = '#D6A541';
 const PERM_ALLOWED = '#6FA08A';
 
 const RECORD_OPTIONS: { id: RecordPrecision; label: string }[] = [

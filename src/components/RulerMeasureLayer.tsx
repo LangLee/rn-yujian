@@ -390,7 +390,7 @@ export const RulerMeasureLayer: React.FC<RulerMeasureLayerProps> = ({
             />
             <PrimaryButton
               label="确定"
-              variant="soft"
+              variant="secondaryMuted"
               disabled={!customValid}
               onPress={() => confirmCalibration(customCm)}
               style={styles.customBtn}
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   } as TextStyle,
   presetCm: {
-    color: '#A5854D',
+    color: '#9A7B3F',
     fontFamily: font.serif,
     fontSize: fs(typeScale.body - 1),
     fontWeight: '700',

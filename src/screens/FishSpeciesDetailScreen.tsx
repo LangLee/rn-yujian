@@ -9,8 +9,10 @@ import {
   Text,
   View,
   ViewStyle,
+  TextStyle,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
@@ -25,6 +27,7 @@ import { ScreenHeader } from '../components';
 import { CardCarousel, EmptyState, useCarouselCardTransform } from '../components/ui';
 import { palette } from '../constants/colors';
 import { font, fs } from '../constants/tokens';
+import { coreColors } from '../constants/coreUi';
 import { formatCaptureWhen, formatLength, formatWeight } from '../utils/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { useCatchArchive } from '../contexts/CatchContext';
@@ -111,6 +114,7 @@ const cardSupportText = (card: FishKnowledgeCard): string => {
  * Fish Knowledge 内容全部来自后台 CMS（fishKnowledgeService），App 内不硬编码。
  */
 export const FishSpeciesDetailScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<FishSpeciesDetailScreenNavigationProp>();
   const route = useRoute<SpeciesRouteProp>();
   const key = route.params?.key ?? 'grass_carp';
@@ -185,14 +189,14 @@ export const FishSpeciesDetailScreen: React.FC = () => {
       {/* 顶部栏固定，不随内容滚动，高度与边距与其他页面一致 */}
       <ScreenHeader
         title={species.nameCn}
-        subtitle={
-          species.aliases.join('、').length > 0 ? species.aliases.join('、') : species.id
-        }
         onBack={() => navigation.goBack()}
       />
+      {species.aliases.length > 0 ? (
+        <Text style={styles.headerSubline}>{species.aliases.join('、')}</Text>
+      ) : null}
       <ScrollView
         style={styles.scrollBody}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
       >
       {error !== null || offlinePreview ? (
@@ -510,6 +514,15 @@ const SpeciesCatchList: React.FC<{ speciesId: string; speciesName: string }> = (
 };
 
 const styles = StyleSheet.create({
+  /* 页面自有的别名说明行（Top Navigation V1 不承载副标题） */
+  headerSubline: {
+    fontSize: fs(13),
+    lineHeight: fs(18),
+    color: coreColors.mistBlueGray,
+    paddingHorizontal: 16,
+    marginTop: 2,
+    marginBottom: 4,
+  } as TextStyle,
   screen: { flex: 1, backgroundColor: palette.warmBackground },
   scrollBody: { flex: 1 },
   content: { paddingTop: 14, paddingBottom: 40 },

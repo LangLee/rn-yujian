@@ -3,6 +3,7 @@ import {
   Animated,
   BackHandler,
   Easing,
+  KeyboardAvoidingView,
   Modal,
   StyleSheet,
   Text,
@@ -93,25 +94,44 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         <TouchableWithoutFeedback onPress={onClose}>
           <Animated.View style={[styles.scrim, { opacity: scrimOpacity }]} />
         </TouchableWithoutFeedback>
-        <Animated.View
-          style={[
-            styles.sheet,
-            {
-              maxHeight: `${Math.round(maxHeightRatio * 100)}%` as `${number}%`,
-              backgroundColor: profile.isDark ? '#12333D' : '#FDFEFD',
-              transform: [{ translateY: sheetTranslateY }],
-            },
-          ]}
+        {/* 键盘避让：Sheet 内含输入框（昵称、量尺校准等）时整体上抬到键盘上方；
+            Android 若弹窗窗口已随键盘 resize，遮挡量为 0 自动不动作（KAV 只补差值） */}
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={styles.avoid}
+          pointerEvents="box-none"
         >
-          <View style={styles.handleWrap}>
-            <View style={[styles.handle, { backgroundColor: profile.surface.glassBorder }]} />
-          </View>
-          {title ? (
-            <Text style={[styles.title, { color: profile.surface.textPrimary }]}>{title}</Text>
-          ) : null}
-          {children}
-          <View style={{ height: spacing.xl }} />
-        </Animated.View>
+          <Animated.View
+            style={[
+              styles.sheet,
+              {
+                maxHeight: `${Math.round(
+                  maxHeightRatio * 100
+                )}%` as `${number}%`,
+                backgroundColor: profile.isDark ? '#12333D' : '#FDFEFD',
+                transform: [{ translateY: sheetTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.handleWrap}>
+              <View
+                style={[
+                  styles.handle,
+                  { backgroundColor: profile.surface.glassBorder },
+                ]}
+              />
+            </View>
+            {title ? (
+              <Text
+                style={[styles.title, { color: profile.surface.textPrimary }]}
+              >
+                {title}
+              </Text>
+            ) : null}
+            {children}
+            <View style={{ height: spacing.xl }} />
+          </Animated.View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -119,6 +139,10 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
 
 const styles = StyleSheet.create({
   fill: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  } as ViewStyle,
+  avoid: {
     flex: 1,
     justifyContent: 'flex-end',
   } as ViewStyle,

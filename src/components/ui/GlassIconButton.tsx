@@ -59,10 +59,10 @@ export const GlassIconButton: React.FC<GlassIconButtonProps> = ({
   /** 呼吸光圈直径 = size + 32，提供足够光晕扩散空间 */
   const D = size + 32;
 
-  const gold = ringColor ?? '#C9A96A';
+  const gold = ringColor ?? '#D6A541';
   const glass = profile.isDark ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.44)';
   const glassCore = profile.isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.58)';
-  const iconColor = profile.isDark ? '#EAF4F2' : '#1F4A56';
+  const iconColor = profile.isDark ? '#EAF4F2' : '#0B2D4B';
 
   // 呼吸动画
   useEffect(() => {

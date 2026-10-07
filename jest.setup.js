@@ -23,6 +23,42 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 // Mock react-native-vector-icons
 jest.mock('react-native-vector-icons/Ionicons', () => 'Icon');
 
+// Mock @shopify/react-native-skia（依赖 CanvasKit/RNSkiaModule 原生，jest 下不可用；
+// 仅 ScanEffect 视觉动效使用，桩化为不渲染的空组件即可）
+jest.mock('@shopify/react-native-skia', () => {
+  const React = require('react');
+  const Noop = () => null;
+  const make = (name) => {
+    const Comp = (props) => <>{props?.children ?? null}</>;
+    Comp.displayName = name;
+    return Comp;
+  };
+  return {
+    Canvas: make('Canvas'),
+    Circle: Noop,
+    Group: make('Group'),
+    Line: Noop,
+    LinearGradient: Noop,
+    Path: Noop,
+    Rect: Noop,
+    RoundedRect: Noop,
+    Blur: Noop,
+    Paint: Noop,
+    vec: (x, y) => ({ x, y }),
+    Skia: new Proxy(
+      {},
+      {
+        get: (_t, prop) => {
+          if (prop === 'MakeLinearGradientShader') {
+            return () => null;
+          }
+          return () => null;
+        },
+      },
+    ),
+  };
+});
+
 // Mock react-native-vision-camera（v5 依赖 NitroModules 原生模块，jest 下不可用）
 jest.mock('react-native-vision-camera', () => ({
   Camera: () => null,
@@ -52,14 +88,38 @@ jest.mock('react-native/Libraries/ReactNative/requireNativeComponent', () => {
   };
 });
 
-// Mock Reanimated（仅在安装了 reanimated 时生效）
-try {
-  require.resolve('react-native-reanimated');
-  jest.mock('react-native-reanimated', () => {
-    const Reanimated = require('react-native-reanimated/mock');
-    Reanimated.default.call = () => {};
-    return Reanimated;
-  });
-} catch {
-  // 未安装 reanimated，跳过
-}
+// Mock Reanimated（v4 官方 mock 依赖 worklets 原生，jest 下不可用；
+// 仅 ScanEffect 动效使用，桩化核心 API）
+jest.mock('react-native-reanimated', () => {
+  const identity = (v) => v;
+  const chainable = () => chainable;
+  return {
+    __esModule: true,
+    default: {
+      createAnimatedComponent: (Comp) => Comp,
+      View: require('react-native').View,
+    },
+    useSharedValue: (initial) => ({ value: initial }),
+    useDerivedValue: (fn) => ({ value: fn?.() ?? null }),
+    useAnimatedProps: () => ({}),
+    useAnimatedStyle: () => ({}),
+    useAnimatedReaction: () => {},
+    withTiming: identity,
+    withRepeat: identity,
+    withSequence: identity,
+    withDelay: (_d, v) => v,
+    withSpring: identity,
+    cancelAnimation: () => {},
+    runOnJS: (fn) => fn,
+    runOnUI: (fn) => fn,
+    Easing: {
+      linear: identity,
+      ease: identity,
+      quad: identity,
+      bezier: () => identity,
+      in: identity,
+      out: identity,
+      inOut: identity,
+    },
+  };
+});

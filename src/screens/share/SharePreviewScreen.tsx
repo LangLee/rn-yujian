@@ -38,7 +38,7 @@ type PreviewRoute = RouteProp<
 
 type Stage = 'preview' | 'generating' | 'result';
 
-const GOLD = '#C9A25E';
+const GOLD = '#D6A541';
 const GOLD_LIGHT = '#E7D2A2';
 
 const GEN_STEPS = [
@@ -210,7 +210,6 @@ export const SharePreviewScreen: React.FC = () => {
       {/* 统一头部：返回 + 居中标题 + 分享按钮（与全应用一致） */}
       <ScreenHeader
         title={isResult ? '生成完成' : `${templateName}预览`}
-        subtitle={isResult ? '你的鱼获记忆已生成' : '已根据你的设置自动排版'}
         onBack={handleBack}
         right={
           !isResult ? (
@@ -233,6 +232,9 @@ export const SharePreviewScreen: React.FC = () => {
           ) : null
         }
       />
+      <Text style={styles.headerSubline}>
+        {isResult ? '你的鱼获记忆已生成' : '已根据你的设置自动排版'}
+      </Text>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[
@@ -250,7 +252,7 @@ export const SharePreviewScreen: React.FC = () => {
               styles.posterCard,
               {
                 borderRadius: 18,
-                shadowColor: '#173B4B',
+                shadowColor: '#0B2D4B',
                 shadowOpacity: 0.18,
                 shadowRadius: 18,
                 shadowOffset: { width: 0, height: 8 },
@@ -491,6 +493,15 @@ const LayoutThumb: React.FC<{
 };
 
 const styles = StyleSheet.create({
+  /* 页面说明行（Top Navigation V1 不承载副标题） */
+  headerSubline: {
+    fontSize: fs(13),
+    lineHeight: fs(18),
+    color: '#748897',
+    paddingHorizontal: 16,
+    marginTop: 2,
+    marginBottom: 6,
+  } as TextStyle,
   screen: {
     flex: 1,
   } as ViewStyle,
@@ -512,7 +523,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    shadowColor: '#173B4B',
+    shadowColor: '#0B2D4B',
     shadowOpacity: 0.1,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },

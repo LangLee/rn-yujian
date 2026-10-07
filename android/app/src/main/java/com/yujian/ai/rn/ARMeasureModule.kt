@@ -7,12 +7,17 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.google.ar.core.ArCoreApk
 import com.yujian.ai.ar.ARMeasureView
+import com.yujian.ai.ar.HuaweiARController
 
 /**
- * AR 自动量尺模块：支持度探测 / ARCore 安装引导 / 屏幕坐标 hitTest。
+ * AR 自动量尺模块：双引擎支持度探测 / 安装引导 / 屏幕坐标 hitTest。
  *
- * 相机会话由 ARMeasureView 的挂载/卸载管理，本模块只做无副作用的查询与
- * 对当前活跃视图的命中测试转发。
+ * 引擎优先级：ARCore（GMS 设备）→ 华为 AR Engine（HMS 设备：华为/荣耀）。
+ * isARSupported 返回组合码 'level:engine'：
+ *   supported:arcore / supported:huawei / installable:arcore / installable:huawei
+ *   / unsupported / unknown（检测中）
+ *
+ * 相机会话由 ARMeasureView 的挂载/卸载管理，本模块只做无副作用查询与转发。
  */
 class ARMeasureModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -23,44 +28,77 @@ class ARMeasureModule(reactContext: ReactApplicationContext) :
 
     override fun getName(): String = NAME
 
-    /** 'supported' 已就绪 | 'installable' 设备支持但 ARCore 未装/需更新 | 'unsupported' | 'unknown' 检测中 */
     @ReactMethod
     fun isARSupported(promise: Promise) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             promise.resolve("unsupported")
             return
         }
-        val availability = try {
+
+        // 1) ARCore
+        val arcoreAvailability = try {
             ArCoreApk.getInstance().checkAvailability(reactApplicationContext)
         } catch (e: Exception) {
+            null
+        }
+        if (arcoreAvailability == ArCoreApk.Availability.SUPPORTED_INSTALLED) {
+            promise.resolve("supported:arcore")
+            return
+        }
+
+        // 2) 华为 AR Engine（checkAvailability 为同步枚举，UNKNOWN 时也先看华为）
+        val huaweiAvailability = try {
+            com.huawei.hiar.AREnginesApk.checkAvailability(reactApplicationContext)
+        } catch (e: Exception) {
+            null
+        }
+        if (huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_INSTALLED) {
+            promise.resolve("supported:huawei")
+            return
+        }
+
+        // 3) 可安装的优先级：ARCore 可装 → 华为可装 → 都在检测 → 不支持
+        if (arcoreAvailability == ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED ||
+            arcoreAvailability == ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD
+        ) {
+            promise.resolve("installable:arcore")
+            return
+        }
+        if (huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_NOT_INSTALLED ||
+            huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_APK_TOO_OLD
+        ) {
+            promise.resolve("installable:huawei")
+            return
+        }
+        if (arcoreAvailability == null && huaweiAvailability == null) {
             promise.resolve("unsupported")
             return
         }
-        val result = when (availability) {
-            ArCoreApk.Availability.SUPPORTED_INSTALLED -> "supported"
-            ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED,
-            ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD,
-            -> "installable"
-            ArCoreApk.Availability.UNSUPPORTED_DEVICE_NOT_CAPABLE -> "unsupported"
-            else -> "unknown"
-        }
-        promise.resolve(result)
+        val stillChecking =
+            arcoreAvailability == ArCoreApk.Availability.UNKNOWN_CHECKING ||
+                huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.UNKNOWN_CHECKING
+        promise.resolve(if (stillChecking) "unknown" else "unsupported")
     }
 
     /**
-     * 引导安装/更新 Google Play Services for AR（设备支持但未安装时）。
-     * resolve(true) = 已就绪可进 AR；resolve(false) = 触发了商店安装流程，需稍后再试。
+     * 引导安装/更新对应引擎（ARCore → Play；AR Engine → 应用市场/系统组件）。
+     * resolve(true) = 已就绪；resolve(false) = 触发了安装流程需稍后再试。
      */
     @ReactMethod
-    fun requestARCoreInstall(promise: Promise) {
+    fun requestARCoreInstall(engine: String?, promise: Promise) {
         val activity = reactApplicationContext.currentActivity
         if (activity == null) {
             promise.resolve(false)
             return
         }
         try {
-            val result = ArCoreApk.getInstance().requestInstall(activity, true)
-            promise.resolve(result == ArCoreApk.InstallStatus.INSTALLED)
+            if (engine == "huawei") {
+                val result = com.huawei.hiar.AREnginesApk.requestInstall(activity, true)
+                promise.resolve(result == com.huawei.hiar.AREnginesApk.ARInstallStatus.INSTALLED)
+            } else {
+                val result = ArCoreApk.getInstance().requestInstall(activity, true)
+                promise.resolve(result == ArCoreApk.InstallStatus.INSTALLED)
+            }
         } catch (e: Exception) {
             promise.resolve(false)
         }

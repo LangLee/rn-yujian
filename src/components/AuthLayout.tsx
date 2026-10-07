@@ -1,8 +1,5 @@
 import React, { ReactNode, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  ImageStyle,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,33 +13,36 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { palette } from '../constants/colors';
 import { font, fs } from '../constants/tokens';
-import authBg from '../assets/bg/auth.jpg';
-
-const GOLD = '#D4B578';
-const BUTTON_TEAL = '#4E9490';
-const INK = '#2F5560';
+import { coreColors } from '../constants/coreUi';
+import { MorningLakeScene } from './coreui/MorningLakeScene';
+import { PrimaryButton } from './ui/PrimaryButton';
 
 /**
- * 登录 / 注册公共布局（高保真设计稿）：
- * 全屏晨雾湖面插画背景，居中衬线品牌区（渔见 + 金菱形副标题），
- * 全圆角胶囊白玻璃输入框、青绿胶囊主按钮直接落在背景上（无大白卡）。
+ * 登录 / 注册公共布局（Core Visual System V1）：
+ * - 背景：BG_CONTENT —— Morning_Lake_Master_V1 同一清晨湖世界（15% 雾白存在感），
+ *   不再使用页面私有的 auth 湖景资产（背景系统 V1 禁止第三湖景世界）；
+ * - 品牌区：BRAND 角色（衬线品牌字 + MorningGold 菱形装饰，金仅用于品牌）；
+ * - 输入框：GLASS_A 白玻璃；
+ * - 主按钮：Action Button V1.1 / PRIMARY（56dp/28dp/#0F7A78）；
+ * - 文本动作：Text Action V1（STRONG #168B88 / MUTED #748897）；
+ * - 页面左右内容边距 24dp（Action Button V1.1 §7）。
  */
-export const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, children }) => {
+
+/** Text Action V1 · LIGHT 冻结色 */
+const TEXT_ACTION_STRONG = '#168B88';
+const TEXT_ACTION_MUTED = '#748897';
+
+export const AuthLayout: React.FC<AuthLayoutProps> = ({
+  title,
+  subtitle,
+  children,
+}) => {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.flex}>
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Image
-          source={authBg}
-          style={styles.backdropImage}
-          resizeMode="cover"
-          resizeMethod="scale"
-        />
-        {/* 轻雾白纱，保证玻璃输入框与文字在晨雾背景上可读 */}
-        <View style={[StyleSheet.absoluteFill, styles.backdropScrim]} />
-      </View>
+      {/* BG_CONTENT：同一清晨湖畔世界，背景存在感 ~75% */}
+      <MorningLakeScene level="content" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -54,9 +54,10 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, childre
             { paddingTop: insets.top + 64, paddingBottom: 32 + insets.bottom },
           ]}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           showsVerticalScrollIndicator={false}
         >
-          {/* 品牌区 */}
+          {/* 品牌区（BRAND 角色：品牌/情绪书法字，金色仅此一处） */}
           <View style={styles.brandBlock}>
             <Text style={styles.brand}>{title}</Text>
             <View style={styles.brandSubRow}>
@@ -92,7 +93,7 @@ interface AuthFieldProps {
   icon?: string;
 }
 
-/** 白玻璃输入框（左侧图标 + 密码可见切换，参考稿样式）。 */
+/** 白玻璃输入框（GLASS_A 主内容面 + 左侧 Context 图标 + 密码可见切换）。 */
 export const AuthField: React.FC<AuthFieldProps> = ({
   label,
   value,
@@ -108,7 +109,7 @@ export const AuthField: React.FC<AuthFieldProps> = ({
   return (
     <View>
       <View style={styles.inputWrap}>
-        <Icon name={icon} size={17} color="#7C959C" style={styles.inputIcon} />
+        <Icon name={icon} size={18} color="rgba(11,45,75,0.88)" style={styles.inputIcon} />
         <TextInput
           style={styles.input}
           value={value}
@@ -119,8 +120,8 @@ export const AuthField: React.FC<AuthFieldProps> = ({
           autoCorrect={false}
           keyboardType={keyboardType}
           placeholder={label}
-          placeholderTextColor="#8AA0A6"
-          selectionColor={palette.waterTeal}
+          placeholderTextColor={coreColors.mistBlueGray}
+          selectionColor={coreColors.morningGold}
         />
         {secureTextEntry ? (
           <Pressable
@@ -129,11 +130,17 @@ export const AuthField: React.FC<AuthFieldProps> = ({
             accessibilityRole="button"
             accessibilityLabel={visible ? '隐藏密码' : '显示密码'}
           >
-            <Icon name={visible ? 'eye-outline' : 'eye-off-outline'} size={18} color="#7C959C" />
+            <Icon
+              name={visible ? 'eye-outline' : 'eye-off-outline'}
+              size={18}
+              color="rgba(11,45,75,0.88)"
+            />
           </Pressable>
         ) : null}
       </View>
-      {supportingText ? <Text style={styles.supporting}>{supportingText}</Text> : null}
+      {supportingText ? (
+        <Text style={styles.supporting}>{supportingText}</Text>
+      ) : null}
     </View>
   );
 };
@@ -153,32 +160,23 @@ interface AuthPrimaryButtonProps {
   loading?: boolean;
 }
 
-/** 雾青主按钮（参考稿：柔和湖青、白字、大圆角）。 */
+/** 主按钮：Action Button V1.1 / PRIMARY（登录/注册全宽单按钮冻结用法）。 */
 export const AuthPrimaryButton: React.FC<AuthPrimaryButtonProps> = ({
   label,
   onPress,
   disabled = false,
   loading = false,
 }) => (
-  <Pressable
+  <PrimaryButton
+    label={label}
     onPress={onPress}
-    disabled={disabled || loading}
-    style={({ pressed }) => [
-      styles.primaryButton,
-      (disabled || loading) && styles.primaryButtonDisabled,
-      pressed && !disabled && !loading && { opacity: 0.88 },
-    ]}
-    accessibilityRole="button"
-  >
-    {loading ? (
-      <ActivityIndicator size="small" color="#FFFFFF" />
-    ) : (
-      <Text style={styles.primaryButtonText}>{label}</Text>
-    )}
-  </Pressable>
+    disabled={disabled}
+    loading={loading}
+    style={styles.primaryButton}
+  />
 );
 
-/** 文本切换行：「还没有账号？ 注册」灰字 + 湖青强调。 */
+/** 文本切换行（Text Action V1）：伴随文案 LakeBlue + STRONG 13sp/600 #168B88。 */
 export const AuthTextButton: React.FC<{
   label: string;
   actionLabel: string;
@@ -188,16 +186,16 @@ export const AuthTextButton: React.FC<{
   <Pressable
     onPress={onPress}
     disabled={disabled}
-    style={({ pressed }) => [styles.linkWrap, pressed && { opacity: 0.6 }]}
-    hitSlop={8}
+    style={({ pressed }) => [styles.linkWrap, pressed && styles.linkWrapPressed]}
     accessibilityRole="button"
+    accessibilityLabel={actionLabel}
   >
     <Text style={styles.linkMuted}>{label}</Text>
     <Text style={styles.linkAction}>{actionLabel}</Text>
   </Pressable>
 );
 
-/** 底部协议轻链接（用户协议 · 隐私政策）。 */
+/** 底部协议轻链接（Text Action V1 / MUTED 13sp·500·#748897）。 */
 export const AuthFooterLinks: React.FC = () => (
   <View style={styles.footerRow}>
     <Text style={styles.footerLink}>用户协议</Text>
@@ -210,21 +208,10 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   } as ViewStyle,
-  backdropImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    right: 0,
-    width: '100%',
-    height: '100%',
-  } as ImageStyle,
-  backdropScrim: {
-    backgroundColor: 'rgba(244,249,248,0.30)',
-  } as ViewStyle,
   content: {
     flexGrow: 1,
-    paddingHorizontal: 28,
+    /* Action Button V1.1 §7：登录/注册页内容左右边距 24dp */
+    paddingHorizontal: 24,
   } as ViewStyle,
   brandBlock: {
     alignItems: 'center',
@@ -235,7 +222,7 @@ const styles = StyleSheet.create({
     fontSize: fs(44),
     fontWeight: '700',
     letterSpacing: 14,
-    color: INK,
+    color: coreColors.deepLakeBlue,
     marginLeft: 14, // 抵消 letterSpacing 右偏，保持视觉居中
   } as TextStyle,
   brandSubRow: {
@@ -247,13 +234,13 @@ const styles = StyleSheet.create({
   goldDiamond: {
     width: 5,
     height: 5,
-    backgroundColor: GOLD,
+    backgroundColor: coreColors.morningGold,
     transform: [{ rotate: '45deg' }],
   } as ViewStyle,
   subtitle: {
     fontSize: fs(13),
     letterSpacing: 4,
-    color: '#5E7A82',
+    color: coreColors.lakeBlue,
   } as TextStyle,
   fields: {
     gap: 16,
@@ -261,13 +248,14 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.82)',
-    borderColor: 'rgba(255,255,255,0.95)',
+    /* GLASS_A：主内容面 white 0.72-0.80 + 1px 轻白边 */
+    backgroundColor: 'rgba(255,255,255,0.80)',
+    borderColor: 'rgba(255,255,255,0.85)',
     borderWidth: 1,
     borderRadius: 27,
     paddingHorizontal: 18,
     height: 54,
-    shadowColor: '#173B4B',
+    shadowColor: coreColors.deepLakeBlue,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -279,11 +267,11 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: fs(15),
-    color: INK,
+    color: coreColors.deepLakeBlue,
     paddingVertical: 0,
   } as TextStyle,
   supporting: {
-    color: '#8AA0A6',
+    color: coreColors.mistBlueGray,
     fontSize: fs(11),
     marginTop: 5,
     marginLeft: 4,
@@ -296,32 +284,13 @@ const styles = StyleSheet.create({
     padding: 12,
   } as ViewStyle,
   errorText: {
-    color: palette.qualityInvalid,
+    color: '#C25B4E',
     fontSize: fs(12),
     lineHeight: 18,
   } as TextStyle,
   primaryButton: {
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: BUTTON_TEAL,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginTop: 10,
-    shadowColor: '#3F7D82',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
   } as ViewStyle,
-  primaryButtonDisabled: {
-    opacity: 0.5,
-  } as ViewStyle,
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: fs(17),
-    fontWeight: '600',
-    letterSpacing: 2,
-  } as TextStyle,
   linkWrap: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -329,14 +298,19 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingVertical: 10,
   } as ViewStyle,
+  /* Text Action 按压：仅色调/透明度变化，无缩放 */
+  linkWrapPressed: {
+    opacity: 0.72,
+  } as ViewStyle,
   linkMuted: {
-    color: '#4E646D',
+    color: coreColors.lakeBlue,
     fontSize: fs(14),
   } as TextStyle,
   linkAction: {
-    color: palette.waterTeal,
-    fontSize: fs(15),
-    fontWeight: '700',
+    /* STRONG：13sp·600·#168B88，无下划线 */
+    color: TEXT_ACTION_STRONG,
+    fontSize: fs(13),
+    fontWeight: '600',
   } as TextStyle,
   footerRow: {
     flexDirection: 'row',
@@ -349,10 +323,12 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: '#7C8F94',
+    backgroundColor: coreColors.mistBlueGray,
   } as ViewStyle,
   footerLink: {
-    color: '#5F747A',
-    fontSize: fs(12),
+    /* MUTED：13sp·500·#748897 */
+    color: TEXT_ACTION_MUTED,
+    fontSize: fs(13),
+    fontWeight: '500',
   } as TextStyle,
 });

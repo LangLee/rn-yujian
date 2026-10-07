@@ -133,19 +133,21 @@ describe('量尺测长 → 识别结果自动填入', () => {
     mockImageState = { ...mockImage };
   });
 
-  test('measuredLengthCm 存在时，长度输入框自动填入（保留 1 位小数）并显示提示', async () => {
+  test('measuredLengthCm 存在时，长度行输入自动填入（保留 1 位小数）并显示提示', async () => {
     render(<TestApp />);
 
     expect(await screen.findByText('草鱼')).toBeTruthy();
-    // 32.56 → 四舍五入到 32.6
+    // 32.56 → 四舍五入到 32.6（行输入卡内联输入框的值，无单位）
     expect(screen.getByDisplayValue('32.6')).toBeTruthy();
     expect(screen.getByText('已填入量尺测量结果 32.6 cm，可手动修改')).toBeTruthy();
   });
 
-  test('用户手动改长度后，自动填入提示消失', async () => {
+  test('用户在行输入中手动改长度后，自动填入提示消失', async () => {
     render(<TestApp />);
 
-    const input = await screen.findByDisplayValue('32.6');
+    expect(await screen.findByText('草鱼')).toBeTruthy();
+    const input = await screen.findByLabelText('长度输入框');
+    expect(input.props.value).toBe('32.6');
     fireEvent.changeText(input, '40');
     expect(screen.getByDisplayValue('40')).toBeTruthy();
     expect(screen.queryByText('已填入量尺测量结果 32.6 cm，可手动修改')).toBeNull();

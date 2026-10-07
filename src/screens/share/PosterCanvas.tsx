@@ -4,7 +4,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { RemoteImage } from '../../components/RemoteImage';
 import { FishGlyph } from '../../components/ui/FishGlyph';
-import { environmentBackgrounds } from '../../constants/environmentAssets';
+import sceneBase from '../../assets/coreui/scene_base.jpg';
 import { font, fs } from '../../constants/tokens';
 import { ShareWork } from '../../services/shareWorkService';
 import { ShareSnapshotFish } from '../../services/shareWorkService';
@@ -20,7 +20,7 @@ export const POSTER_ASPECT = 1.55;
 
 const INK = '#1E3A49';
 const INK_SOFT = 'rgba(30,58,73,0.72)';
-const GOLD = '#C9A25E';
+const GOLD = '#D6A541';
 const GOLD_DEEP = '#A8823E';
 const PAPER_INK = '#33424A';
 
@@ -146,9 +146,9 @@ const ScorePoster: React.FC<{
 
   return (
     <View style={[styles.poster, { width, borderRadius: u(18), overflow: 'hidden' }]}>
-      {/* 环境底图 + 可读性 Scrim */}
+      {/* Morning Lake 同一母版底图 + 可读性 Scrim */}
       <Image
-        source={environmentBackgrounds.day}
+        source={sceneBase}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
       />
@@ -410,7 +410,7 @@ const StoryPoster: React.FC<{
   return (
     <View style={[styles.poster, { width, borderRadius: u(18), overflow: 'hidden' }]}>
       <Image
-        source={environmentBackgrounds.sunset}
+        source={sceneBase}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
       />

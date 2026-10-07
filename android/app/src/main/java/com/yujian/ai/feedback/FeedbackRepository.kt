@@ -27,6 +27,10 @@ class FeedbackRepository(private val context: Context) {
     private val queueDir = File(context.filesDir, "feedback_queue").apply { mkdirs() }
     private val inferenceQueueDir = File(context.filesDir, "inference_queue").apply { mkdirs() }
 
+    /** 登录后由 RN 侧注入的访问令牌；反馈/推理上传改为 JWT Bearer 鉴权。 */
+    @Volatile
+    var accessToken: String? = null
+
     suspend fun submitOrQueue(imageFile: File, draft: FeedbackDraft): Boolean = withContext(Dispatchers.IO) {
         val entry = persistQueueEntry(imageFile, draft)
         if (!isConfigured()) return@withContext false
@@ -84,7 +88,9 @@ class FeedbackRepository(private val context: Context) {
 
     fun isNetworkConfigured(): Boolean = isConfigured()
 
-    private fun isConfigured(): Boolean = BuildConfig.FEEDBACK_BASE_URL.isNotBlank() && BuildConfig.FEEDBACK_INGEST_KEY.isNotBlank()
+    /** 新后端契约：地址已配置且已注入访问令牌（Bearer）即视为可用。 */
+    private fun isConfigured(): Boolean =
+        BuildConfig.FEEDBACK_BASE_URL.isNotBlank() && !accessToken.isNullOrBlank()
 
     private fun persistQueueEntry(source: File, draft: FeedbackDraft): Pair<File, File> {
         val base = draft.sourceEventId.replace(Regex("[^A-Za-z0-9_.-]"), "_")
@@ -137,34 +143,50 @@ class FeedbackRepository(private val context: Context) {
         return sent
     }
 
+    /**
+     * 新后端 POST /api/feedback/ingest：
+     * 业务参数全部走查询字符串（source_event_id/feedback_type 必填），图片为唯一
+     * multipart 文件分片，鉴权使用 Authorization: Bearer <accessToken>。
+     */
     private fun upload(image: File, json: JSONObject, smoke: Boolean): Boolean = runCatching {
         val boundary = "YuJianBoundary${System.currentTimeMillis()}"
         val baseUrl = BuildConfig.FEEDBACK_BASE_URL.trimEnd('/')
-        val connection = (URL("$baseUrl/api/feedback/ingest").openConnection() as HttpURLConnection).apply {
+        val query = buildString {
+            append("?source_event_id=").append(urlEncode(json.getString("source_event_id")))
+            append("&feedback_type=").append(urlEncode(json.getString("feedback_type")))
+            json.optString("source").ifBlank { "android_app" }.let {
+                append("&source=").append(urlEncode(it))
+            }
+            json.optString("model_version").ifBlank { null }?.let {
+                append("&model_version=").append(urlEncode(it))
+            }
+            json.optString("predicted_species").ifBlank { null }?.let {
+                append("&predicted_species=").append(urlEncode(it))
+            }
+            if (!json.isNull("confidence") && json.optDouble("confidence").let { !it.isNaN() }) {
+                append("&confidence=").append(json.optDouble("confidence").toString())
+            }
+            if (!json.isNull("corrected_species")) {
+                json.optString("corrected_species").ifBlank { null }?.let {
+                    append("&corrected_species=").append(urlEncode(it))
+                }
+            }
+            if (!json.isNull("user_note")) {
+                json.optString("user_note").ifBlank { null }?.let {
+                    append("&user_note=").append(urlEncode(it))
+                }
+            }
+            if (smoke) append("&smoke=true")
+        }
+        val connection = (URL("$baseUrl/api/feedback/ingest$query").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 12_000
             readTimeout = 20_000
             doOutput = true
-            setRequestProperty("X-YuJian-Ingest-Key", BuildConfig.FEEDBACK_INGEST_KEY)
+            setRequestProperty("Authorization", "Bearer ${accessToken!!}")
             setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
         }
         DataOutputStream(connection.outputStream).use { out ->
-            fun field(name: String, value: String?) {
-                if (value == null) return
-                out.writeBytes("--$boundary\r\n")
-                out.writeBytes("Content-Disposition: form-data; name=\"$name\"\r\n\r\n")
-                out.write(value.toByteArray(Charsets.UTF_8))
-                out.writeBytes("\r\n")
-            }
-            field("source_event_id", json.getString("source_event_id"))
-            field("feedback_type", json.getString("feedback_type"))
-            field("source", json.optString("source", "android_app"))
-            field("model_version", json.optString("model_version").ifBlank { null })
-            field("predicted_species", json.optString("predicted_species").ifBlank { null })
-            field("confidence", json.optDouble("confidence").takeIf { !it.isNaN() }?.toString())
-            field("corrected_species", if (json.isNull("corrected_species")) null else json.optString("corrected_species"))
-            field("user_note", if (json.isNull("user_note")) null else json.optString("user_note"))
-            if (smoke) field("smoke", "true")
             out.writeBytes("--$boundary\r\n")
             out.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"feedback.jpg\"\r\n")
             out.writeBytes("Content-Type: image/jpeg\r\n\r\n")
@@ -177,6 +199,9 @@ class FeedbackRepository(private val context: Context) {
         code in 200..299
     }.getOrDefault(false)
 
+    private fun urlEncode(value: String): String =
+        java.net.URLEncoder.encode(value, Charsets.UTF_8.name())
+
     private fun uploadInference(record: File, image: File, crop: File?): Boolean = runCatching {
         val boundary = "YuJianInferenceBoundary${System.currentTimeMillis()}"
         val baseUrl = BuildConfig.FEEDBACK_BASE_URL.trimEnd('/')
@@ -185,7 +210,7 @@ class FeedbackRepository(private val context: Context) {
             connectTimeout = 12_000
             readTimeout = 20_000
             doOutput = true
-            setRequestProperty("X-YuJian-Ingest-Key", BuildConfig.FEEDBACK_INGEST_KEY)
+            setRequestProperty("Authorization", "Bearer ${accessToken!!}")
             setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
         }
         DataOutputStream(connection.outputStream).use { out ->

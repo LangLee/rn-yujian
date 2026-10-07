@@ -30,6 +30,8 @@ allprojects {
         maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
         maven { url 'https://maven.aliyun.com/repository/central' }
         maven { url 'https://maven.aliyun.com/repository/jcenter' }
+        // 华为 AR Engine SDK（arenginesdk）
+        maven { url 'https://developer.huawei.com/repo/' }
         google()
         mavenCentral()
     }

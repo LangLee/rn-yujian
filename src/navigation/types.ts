@@ -18,8 +18,8 @@ export type RootStackParamList = {
   Register: undefined;
   /** P01 首页 */
   Home: undefined;
-  /** P02 拍照识鱼（识别异常退回时携带原因） */
-  Identify: { error?: string } | undefined;
+  /** P02 拍照识鱼（识别异常退回时携带原因；空首页相册入口自动拉起选图） */
+  Identify: { error?: string; openAlbum?: boolean } | undefined;
   /** P03 识别处理中 */
   Recognizing: undefined;
   /** P04 识别结果（高/中/低置信度同一容器） */
@@ -33,17 +33,20 @@ export type RootStackParamList = {
     catchId?: string;
     /** 保存后直传的新鱼获（列表尚未同步时使用） */
     initialCatch?: RemoteCatch;
-    /** 保存流程附带的可选补充信息（长度/重量/地点地址 + 钓点坐标） */
+    /** 保存流程附带的可选补充信息（长度/重量/地点地址 + 钓点坐标 + 故事） */
     initialMemory?: {
       lengthCm?: number | null;
       weightKg?: number | null;
       location?: string | null;
       latitude?: number | null;
       longitude?: number | null;
+      story?: string | null;
     };
   } | undefined;
   /** 我的鱼获 Hub（P20：我的鱼获 / 鱼获分享 / 成长历程 三分段） */
   MyCatches: { tab?: CatchHubTab } | undefined;
+  /** 当天鱼获详情（My Catches 时间线单日 >10 条「查看全部」进入） */
+  CatchDay: { dayKey: string };
   /** 鱼鉴首页（P08） */
   Guide: undefined;
   /** 记录日历（月/年视图） */
@@ -66,7 +69,6 @@ export type RootStackParamList = {
   /** 我的 */
   Profile: undefined;
   /** 环境主题设置 */
-  ThemeSettings: undefined;
   /** 隐私与定位 */
   PrivacySettings: undefined;
   /** 单位与偏好 */

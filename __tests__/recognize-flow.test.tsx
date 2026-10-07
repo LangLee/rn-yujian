@@ -40,31 +40,17 @@ jest.mock('react-native-image-picker', () => ({
 jest.mock('../src/components/WaterBackdrop', () => ({ WaterBackdrop: () => null }));
 jest.mock('../src/components/FishScanFrame', () => ({ FishScanFrame: () => null }));
 jest.mock('../src/components/FishIllustration', () => ({ FishIllustration: () => null }));
+// AIAmbientField 含大量动画 SVG 路径与粒子，jest 的 mock rAF 下会产生
+// 大量重渲染拖垮流程测试；桩化为空组件（保留导出的阶段时序常量）
+jest.mock('../src/components/coreui/AIAmbientField', () => ({
+  AIAmbientField: () => null,
+  AI_STATE_MIN_MS: { imageRecognizing: 900, fishLocated: 600, speciesRecognizing: 1250 },
+}));
 jest.mock('../src/utils/haptics', () => ({
   haptics: { selection: jest.fn(), confirm: jest.fn(), critical: jest.fn(), cancel: jest.fn() },
   hapticForLevel: jest.fn(),
 }));
 
-// CaptureButton 内含 SVG/动画，替换为可按压的占位按钮，保留 accessibilityLabel
-jest.mock('../src/components/CaptureButton', () => {
-  const React = require('react');
-  const { Pressable, Text } = require('react-native');
-  return {
-    CaptureButton: (props: {
-      onPress: () => void;
-      accessibilityLabel?: string;
-      icon?: string;
-    }) => (
-      <Pressable
-        onPress={props.onPress}
-        accessibilityRole="button"
-        accessibilityLabel={props.accessibilityLabel ?? 'capture'}
-      >
-        <Text>{props.icon ?? 'capture'}</Text>
-      </Pressable>
-    ),
-  };
-});
 
 import { RecognitionProvider } from '../src/contexts/RecognitionContext';
 import { PreferencesProvider } from '../src/contexts/PreferencesContext';

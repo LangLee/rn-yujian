@@ -1,6 +1,6 @@
 /**
- * AR 自动量尺层测试：平面检测 → 点鱼头 → 点鱼尾 → 自动长度 → 确认上抛；
- * 以及会话失败回落手动量尺。
+ * AR 自动量尺层测试（全屏浮层形态）：平面检测 → 点鱼头 → 点鱼尾 → 自动长度 → 「用 X cm」上抛；
+ * 以及会话失败回落手动量尺、关闭按钮。
  * 原生视图与 hitTest 均 mock（requireNativeComponent 已在 setup 兜底为 View）。
  */
 import React from 'react';
@@ -10,7 +10,7 @@ const mockHitTest = jest.fn();
 jest.mock('../src/native/arMeasure', () => ({
   arMeasure: {
     available: true,
-    probeSupport: async () => 'supported',
+    probeSupport: async () => ({ level: 'supported', engine: 'huawei' }),
     requestInstall: async () => true,
     hitTest: (...args) => mockHitTest(...args),
   },
@@ -24,13 +24,16 @@ jest.mock('../src/utils/haptics', () => ({
 import { ARMeasureLayer } from '../src/components/ARMeasureLayer';
 import { ThemeProvider } from '../src/contexts/ThemeContext';
 
-const renderLayer = async (props?: Partial<Parameters<typeof ARMeasureLayer>[0]>) => {
+const renderLayer = async (
+  props?: Partial<Parameters<typeof ARMeasureLayer>[0]>,
+) => {
   const onMeasured = jest.fn();
   const onFallbackManual = jest.fn();
   const onClose = jest.fn();
   render(
     <ThemeProvider>
       <ARMeasureLayer
+        engine="huawei"
         onMeasured={onMeasured}
         onFallbackManual={onFallbackManual}
         onClose={onClose}
@@ -50,7 +53,7 @@ describe('ARMeasureLayer AR 自动量尺', () => {
     jest.clearAllMocks();
   });
 
-  test('扫平面 → 点鱼头 → 点鱼尾 → 显示 AR 实测长度并上抛', async () => {
+  test('扫平面 → 点鱼头 → 点鱼尾 → 显示 AR 实测长度，「用 X cm」上抛', async () => {
     // 第一点 (0,0,0) 米；第二点 (0.3,0,0) 米 → 30 cm
     mockHitTest
       .mockResolvedValueOnce({ x: 0, y: 0, z: 0, plane: true })
@@ -81,7 +84,7 @@ describe('ARMeasureLayer AR 自动量尺', () => {
     await flush();
     expect(screen.getAllByText('30.0 cm').length).toBeGreaterThanOrEqual(1);
 
-    // 确认使用 → 上抛 AR 实测长度
+    // 「用 30.0 cm」→ 上抛 AR 实测长度
     fireEvent.press(screen.getByText('用 30.0 cm'));
     expect(onMeasured).toHaveBeenCalledTimes(1);
     const reported = onMeasured.mock.calls[0][0];
@@ -114,5 +117,11 @@ describe('ARMeasureLayer AR 自动量尺', () => {
     const { onFallbackManual } = await renderLayer();
     fireEvent.press(screen.getByText('改用普通量尺'));
     expect(onFallbackManual).toHaveBeenCalledWith();
+  });
+
+  test('右上角关闭 → onClose', async () => {
+    const { onClose } = await renderLayer();
+    fireEvent.press(screen.getByLabelText('关闭 AR 量尺'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

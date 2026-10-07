@@ -19,7 +19,6 @@ export { RecordCalendarScreen } from './RecordCalendarScreen';
 export { SpeciesPickerScreen } from './SpeciesPickerScreen';
 export { LocationPickerScreen } from './LocationPickerScreen';
 export { ProfileScreen } from './ProfileScreen';
-export { ThemeSettingsScreen } from './settings/ThemeSettingsScreen';
 export { PrivacySettingsScreen } from './settings/PrivacySettingsScreen';
 export { UnitsSettingsScreen } from './settings/UnitsSettingsScreen';
 export { AccountSecurityScreen } from './settings/AccountSecurityScreen';

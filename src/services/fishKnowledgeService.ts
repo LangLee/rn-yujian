@@ -1,5 +1,6 @@
 import Config from 'react-native-config';
 import { demoSpecies } from '../constants/demoData';
+import { parseResultBody } from './apiClient';
 import {
   FishGuideItem,
   FishKnowledgeCard,
@@ -9,14 +10,16 @@ import {
   FishKnowledgeSimilar,
 } from '../types/models';
 
-const DEFAULT_BASE_URL = 'https://yujian-model-factory-console-571785698442.asia-east1.run.app';
+/** 鱼鉴内容与用户 API 同源部署（新后端 81.71.1.11，02.鱼种图鉴）。 */
+const DEFAULT_BASE_URL = 'https://81.71.1.11';
 
 export const knowledgeBaseUrl = (): string =>
   ((Config.YUJIAN_FISH_KNOWLEDGE_BASE_URL ?? '').trim() || DEFAULT_BASE_URL);
 
 const REQUEST_TIMEOUT_MS = 20000;
 
-async function get(path: string): Promise<string> {
+/** GET 并解包 Result 包裹（成功码 00000 → data；失败抛出带 msg 的 Error）。 */
+async function get(path: string): Promise<unknown> {
   const root = knowledgeBaseUrl().replace(/\/+$/, '');
   if (!root) {
     throw new Error('Fish Knowledge API 未配置');
@@ -31,9 +34,15 @@ async function get(path: string): Promise<string> {
     });
     const text = await response.text();
     if (!response.ok) {
-      throw new Error(`Fish Knowledge API ${response.status}: ${text}`);
+      let detail = '';
+      try {
+        detail = (JSON.parse(text) as { msg?: string }).msg ?? '';
+      } catch {
+        detail = '';
+      }
+      throw new Error(detail || `Fish Knowledge API ${response.status}: ${text.slice(0, 120)}`);
     }
-    return text;
+    return parseResultBody(text, response.status);
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('Fish Knowledge API 请求超时');
@@ -165,9 +174,9 @@ function parseCards(value: unknown): FishKnowledgeCard[] {
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-/** 与原 FishKnowledgeRepository.parseDetail 逐字段对应。 */
-export function parseDetailJson(json: string): FishKnowledgeDetail {
-  const root = (JSON.parse(json) ?? {}) as JsonObject;
+/** 与原 FishKnowledgeRepository.parseDetail 逐字段对应；入参为 Result.data（VO 本体）。 */
+export function parseDetailData(rootValue: unknown): FishKnowledgeDetail {
+  const root = asObject(rootValue) ?? {};
   const species = asObject(root.species) ?? {};
   const profile = asObject(root.profile) ?? {};
   const fishing = asObject(root.fishing) ?? {};
@@ -275,15 +284,14 @@ export function parseDetailJson(json: string): FishKnowledgeDetail {
   };
 }
 
-/** 鱼鉴内容 API（对应原 FishKnowledgeRepository）。 */
+/** 鱼鉴内容 API（对应原 FishKnowledgeRepository；响应经 Result 解包后为 VO 本体）。 */
 export const fishKnowledgeService = {
   async listSpecies(): Promise<FishGuideItem[]> {
-    const text = await get('/api/v1/fish/species');
-    const array = JSON.parse(text);
-    if (!Array.isArray(array)) {
+    const data = await get('/api/v1/fish/species');
+    if (!Array.isArray(data)) {
       return [];
     }
-    return (array as JsonObject[])
+    return (data as JsonObject[])
       .map((item) => ({
         id: optString(item.id),
         nameCn: optString(item.name_cn),
@@ -296,8 +304,8 @@ export const fishKnowledgeService = {
 
   async getDetail(speciesId: string): Promise<FishKnowledgeDetail> {
     const encoded = encodeURIComponent(speciesId);
-    const text = await get(`/api/v1/fish/species/${encoded}/detail`);
-    return parseDetailJson(text);
+    const data = await get(`/api/v1/fish/species/${encoded}/detail`);
+    return parseDetailData(data);
   },
 
   resolveAssetUrl(asset?: string | null): string | null {

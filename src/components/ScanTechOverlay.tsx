@@ -17,7 +17,7 @@ import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-nat
  * 所有动效只驱动 transform / opacity（native driver）；Reduce Motion 冻结为静态构图。
  */
 
-const TEAL = '#4D9EA1';
+const TEAL = '#0F7A78';
 const TEAL_BRIGHT = '#9FF2E8';
 const GOLD = '#EAD9AE';
 const GOLD_DEEP = '#D9AF69';

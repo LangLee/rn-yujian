@@ -3,18 +3,25 @@ package com.yujian.ai.ar
 import android.content.Context
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
-import android.opengl.GLSurfaceView
-import com.google.ar.core.Frame
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
 /**
- * ARCore 相机画面背景渲染器。
+ * 相机背景帧的最小接口：ARCore Frame 与华为 ARFrame 的 UV 变换签名一致，
+ * 用该接口让 BackgroundRenderer 同时服务两个引擎。
+ */
+interface CameraBackgroundFrame {
+    fun hasDisplayGeometryChanged(): Boolean
+    fun transformDisplayUvCoords(input: FloatBuffer, output: FloatBuffer)
+}
+
+/**
+ * AR 相机画面背景渲染器（ARCore / 华为 AR Engine 通用）。
  *
- * ARCore 不提供系统级相机预览，需要自己用 GL 把相机纹理（GL_TEXTURE_EXTERNAL_OES）
- * 铺满全屏；相机纹理 id 通过 Session.setCameraTextureName 交给 ARCore 写入。
- * 绘制时用 Frame.transformDisplayUvCoords 修正屏幕旋转/裁切后的 UV。
+ * 两个引擎都不提供系统级相机预览，需要自己用 GL 把相机纹理
+ * （GL_TEXTURE_EXTERNAL_OES）铺满全屏；相机纹理 id 交给引擎写入，
+ * 绘制时用 transformDisplayUvCoords 修正屏幕旋转/裁切后的 UV。
  * 实现遵循 ARCore 官方 hello_ar 示例（Apache License 2.0）。
  */
 class BackgroundRenderer {
@@ -102,7 +109,7 @@ class BackgroundRenderer {
     }
 
     /** GL 线程：把当前帧的相机画面铺满全屏 */
-    fun draw(frame: Frame) {
+    fun draw(frame: CameraBackgroundFrame) {
         synchronized(lock) {
             if (frame.hasDisplayGeometryChanged()) {
                 frame.transformDisplayUvCoords(quadTexCoords, transformedTexCoords)
@@ -133,4 +140,3 @@ class BackgroundRenderer {
                 position(0)
             }
 }
-

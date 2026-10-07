@@ -38,8 +38,8 @@ interface EmptyStateProps {
 /**
  * 空状态（14 空状态系统）：空状态不是错误，是在给下一段钓鱼记忆留位置。
  * 文案使用「还没有 / 会收藏在这里 / 留下 / 遇见」语气。
- * 图案模式：核心图案为透明底 SVG，颜色注入主题 accent，
- * 随清晨/白天/傍晚/夜晚主题变化，与背景协调。
+ * 图案模式：核心图案为 new001 水彩贴纸插画（透明底 PNG，固定配色），
+ * 叠在跟随主题的玻璃卡片上，与水景背景协调。
  */
 export const EmptyState: React.FC<EmptyStateProps> = ({
   title,
@@ -68,7 +68,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         <PrimaryButton
           label={actionLabel}
           onPress={onAction}
-          variant="soft"
+          variant="secondaryMuted"
           // 相机图标只用于拍照类操作，清空/返回等操作保持纯文字
           icon={actionLabel.includes('拍照') ? 'camera-outline' : undefined}
           style={styles.action}
@@ -104,11 +104,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           ]}
         >
           <View style={styles.artWrap}>
-            <EmptyIllustration
-              variant={variant}
-              color={profile.surface.accent}
-              mutedColor={profile.surface.textSecondary}
-            />
+            <EmptyIllustration variant={variant} />
           </View>
           {content}
         </View>
@@ -146,13 +142,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   } as ViewStyle,
   cardShadow: {
-    shadowColor: '#173B4B',
+    shadowColor: '#0B2D4B',
     shadowOpacity: 0.06,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 1,
   } as ViewStyle,
-  /** 核心图案区：透明底 SVG，主题色注入 */
+  /** 核心图案区：透明底水彩 PNG */
   artWrap: {
     width: '100%',
     alignItems: 'center',
