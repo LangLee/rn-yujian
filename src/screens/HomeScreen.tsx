@@ -61,7 +61,9 @@ export const HomeScreen: React.FC = () => {
   const { reduceMotion } = useTheme();
   const { session } = useAuth();
   const { catches, statistics, loading, reload } = useCatchArchive();
-  const { avatar } = usePreferences();
+  const { avatar: legacyAvatar } = usePreferences();
+  /* 头像权威：服务端 avatar_url（编辑资料保存成功后同步）→ 本地遗留头像 → 默认人像 */
+  const avatar = session?.avatarUrl || legacyAvatar || null;
   const insets = useSafeAreaInsets();
   const [memories, setMemories] = useState<Record<string, CatchMemoryData>>({});
 
@@ -349,7 +351,11 @@ export const HomeScreen: React.FC = () => {
 
 const AvatarFace: React.FC<{ avatar: string | null }> = ({ avatar }) =>
   avatar ? (
-    <Image source={{ uri: avatar }} style={styles.avatarPhoto} />
+    <RemoteImage
+      url={avatar}
+      style={styles.avatarPhoto}
+      placeholder={<Icon name="person-outline" size={19} color="#30485A" />}
+    />
   ) : (
     <Icon name="person-outline" size={19} color="#30485A" />
   );

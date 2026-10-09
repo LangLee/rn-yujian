@@ -24,10 +24,12 @@ import { RecordCalendarScreen } from '../screens/RecordCalendarScreen';
 import { SpeciesPickerScreen } from '../screens/SpeciesPickerScreen';
 import { LocationPickerScreen } from '../screens/LocationPickerScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
-import { PrivacySettingsScreen } from '../screens/settings/PrivacySettingsScreen';
-import { UnitsSettingsScreen } from '../screens/settings/UnitsSettingsScreen';
+import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
 import { AccountSecurityScreen } from '../screens/settings/AccountSecurityScreen';
+import { ChangePasswordScreen } from '../screens/settings/ChangePasswordScreen';
+import { DataPrivacyScreen } from '../screens/settings/DataPrivacyScreen';
 import { AboutScreen } from '../screens/settings/AboutScreen';
+import { LegalScreen } from '../screens/legal/LegalScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -118,9 +120,12 @@ export const AppNavigator: React.FC = () => {
       <Stack.Screen name="SpeciesPicker" component={SpeciesPickerScreen} />
       <Stack.Screen name="LocationPicker" component={LocationPickerScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
-      <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
-      <Stack.Screen name="UnitsSettings" component={UnitsSettingsScreen} />
+      {/* 账号与隐私 Active Path：我的 → 编辑资料 / 账号与安全 → 修改密码 / 数据与隐私 */}
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="AccountSecurity" component={AccountSecurityScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+      <Stack.Screen name="DataPrivacy" component={DataPrivacyScreen} />
+      <Stack.Screen name="LegalDocument" component={LegalScreen} />
       <Stack.Screen name="About" component={AboutScreen} />
     </Stack.Navigator>
   );

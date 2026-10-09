@@ -157,6 +157,8 @@ export interface UserSession {
   userId: string;
   username: string;
   nickname: string;
+  /** 服务端头像（编辑资料保存成功后由 /api/v1/me/avatar 返回的 URL）。 */
+  avatarUrl?: string | null;
 }
 
 // ---------------------------------------------------------------------------

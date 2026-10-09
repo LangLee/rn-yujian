@@ -2,7 +2,6 @@ export { TagChip } from './Common';
 export { FishIllustration } from './FishIllustration';
 export { RemoteImage } from './RemoteImage';
 export { DetectorOverlayImage, DetectorOverlayLegend } from './DetectorOverlay';
-export { AuthLayout, AuthField, AuthError, AuthPrimaryButton, AuthTextButton } from './AuthLayout';
 export { WaterBackdrop } from './WaterBackdrop';
 export { FishScanFrame } from './FishScanFrame';
 export { ScanTechOverlay } from './ScanTechOverlay';

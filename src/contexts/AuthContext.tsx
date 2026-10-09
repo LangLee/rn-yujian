@@ -9,6 +9,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { authService } from '../services/authService';
+import { accountService } from '../services/accountService';
 import {
   ApiError,
   onApiSessionExpired,
@@ -25,6 +26,11 @@ interface AuthContextType {
   login: (username: string, password: string, nickname?: string) => Promise<void>;
   register: (username: string, password: string, nickname: string) => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * 以服务端确认结果合并当前会话资料（编辑资料保存成功后调用；
+   * 令牌不变，仅更新 nickname/avatarUrl 并同步持久化与消费方）。
+   */
+  applyProfile: (patch: { nickname?: string; avatarUrl?: string | null }) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -54,10 +60,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       );
       recognitionService.setAuthToken(current?.accessToken ?? null);
       recognitionService.flushQueued().catch(() => undefined);
+      // 恢复会话后同步服务端资料（昵称/头像为服务端权威；失败静默，不阻塞启动）
+      if (current) {
+        try {
+          const profile = await accountService.getProfile();
+          if (mounted && profile.nickname) {
+            applyProfile({
+              nickname: profile.nickname,
+              avatarUrl: profile.avatarUrl,
+            });
+          }
+        } catch {
+          // 资料拉取失败不阻断启动；页面按会话缓存渲染
+        }
+      }
     })();
     return () => {
       mounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 访问令牌刷新失败（refreshToken 也失效）时全局登出
@@ -103,6 +124,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     recognitionService.setAuthToken(loggedIn.accessToken);
     recognitionService.flushQueued().catch(() => undefined);
     setSession(loggedIn);
+    // 登录后拉取服务端资料（昵称/头像）；失败不阻断登录流程
+    try {
+      const profile = await accountService.getProfile();
+      if (profile.nickname || profile.avatarUrl) {
+        const next: UserSession = {
+          ...loggedIn,
+          nickname: profile.nickname || loggedIn.nickname,
+          avatarUrl: profile.avatarUrl,
+        };
+        await sessionService.save(next);
+        setSession(next);
+      }
+    } catch {
+      // 后端暂未提供 /me 时保持登录响应资料
+    }
   }, []);
 
   const register = useCallback(
@@ -126,6 +162,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setSession(null);
   }, []);
 
+  const applyProfile = useCallback(
+    (patch: { nickname?: string; avatarUrl?: string | null }) => {
+      setSession((previous) => {
+        if (!previous) {
+          return previous;
+        }
+        const next: UserSession = {
+          ...previous,
+          ...(patch.nickname !== undefined ? { nickname: patch.nickname } : {}),
+          ...(patch.avatarUrl !== undefined ? { avatarUrl: patch.avatarUrl } : {}),
+        };
+        sessionRef.current = next;
+        void sessionService.save(next);
+        return next;
+      });
+    },
+    [],
+  );
+
   const value = useMemo<AuthContextType>(
     () => ({
       session,
@@ -133,8 +188,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       login,
       register,
       logout,
+      applyProfile,
     }),
-    [session, initializing, login, register, logout],
+    [session, initializing, login, register, logout, applyProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

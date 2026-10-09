@@ -185,6 +185,30 @@ export const formatCoordLabel = (latitude: number, longitude: number): string =>
   return `${lat} ${lon}`;
 };
 
+/* ─── 定位权限申请记录（数据与隐私「已拒绝 / 未授权」语义）─────────────────
+ * 产品需区分「曾申请过但被拒」与「从未申请」：
+ * 每次真实系统申请后落一个本地标记；数据与隐私行据此显示状态。
+ * 申请只发生在用户主动选择「使用当前位置」时（Location_Privacy_Spec_V1）。 */
+const LOCATION_ASKED_KEY = 'yj_perm_location_asked_v1';
+
+async function markLocationAsked(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(LOCATION_ASKED_KEY, '1');
+  } catch {
+    // 标记写入失败静默（最多退化成「未授权」展示）
+  }
+}
+
+/** 是否曾经发起过系统定位权限申请 */
+export async function hasRequestedLocationPermission(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(LOCATION_ASKED_KEY);
+    return value === '1';
+  } catch {
+    return false;
+  }
+}
+
 export const locationService = {
   /** 当前定位权限状态（不发系统弹窗的静默检查） */
   async getPermissionStatus(): Promise<LocationPermissionStatus> {
@@ -211,9 +235,14 @@ export const locationService = {
       return 'unavailable';
     }
     if (!permissionRequestInFlight) {
-      permissionRequestInFlight = doRequestLocationPermission().finally(() => {
-        permissionRequestInFlight = null;
-      });
+      permissionRequestInFlight = doRequestLocationPermission()
+        .then(async (status) => {
+          await markLocationAsked();
+          return status;
+        })
+        .finally(() => {
+          permissionRequestInFlight = null;
+        });
     }
     return permissionRequestInFlight;
   },

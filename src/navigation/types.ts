@@ -68,13 +68,16 @@ export type RootStackParamList = {
   AnnualReview: { year?: number } | undefined;
   /** 我的 */
   Profile: undefined;
-  /** 环境主题设置 */
-  /** 隐私与定位 */
-  PrivacySettings: undefined;
-  /** 单位与偏好 */
-  UnitsSettings: undefined;
+  /** 编辑资料（头像/昵称单一保存事务） */
+  EditProfile: undefined;
   /** 账号与安全 */
   AccountSecurity: undefined;
+  /** 修改密码 */
+  ChangePassword: undefined;
+  /** 数据与隐私 */
+  DataPrivacy: undefined;
+  /** 法律文档壳（隐私政策 / 用户协议共用） */
+  LegalDocument: { doc: 'privacy' | 'agreement' };
   /** 关于渔见 */
   About: undefined;
 };
