@@ -23,8 +23,15 @@ jest.mock('react-native-image-picker', () => ({
 // 隔离 authService → react-native-config 的原生依赖链；B 面生成端点桩化
 jest.mock('../src/services/catchService', () => ({
   catchService: {
-    resolveUrl: (path?: string | null) =>
-      path ? `https://api.example.com${path.startsWith('/') ? path : `/${path}`}` : null,
+    // 与 apiClient.resolveMediaUrl 行为对齐：带协议的 URI（file:// 等）原样返回
+    resolveUrl: (path?: string | null) => {
+      if (!path) {
+        return null;
+      }
+      return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)
+        ? path
+        : `https://api.example.com${path.startsWith('/') ? path : `/${path}`}`;
+    },
     createBsideJob: jest.fn(),
     bsideStatus: jest.fn(),
   },
@@ -144,6 +151,36 @@ describe('鱼获详情页（冻结稿）', () => {
     expect(screen.queryByText('留下这次鱼获的画面')).toBeNull();
   });
 
+  // 回归：记忆媒体的 file:// URI 曾被 resolveUrl 拼成「API域名/file://...」，
+  // 查看器第二张起加载失败落白色占位卡
+  test('媒体查看器：记忆媒体 file:// 原样进入 Image，不被拼接 API 域名', async () => {
+    await AsyncStorage.setItem(
+      '@yujian/catch_memory/',
+      JSON.stringify({
+        media: [
+          { id: 'p1', uri: 'file:///tmp/a.jpg', kind: 'photo', addedAt: '2026-09-03T10:00:00Z' },
+          { id: 'p2', uri: 'file:///tmp/b.jpg', kind: 'photo', addedAt: '2026-09-03T10:01:00Z' },
+        ],
+      }),
+    );
+
+    render(<TestApp />);
+    expect(await screen.findByText('2 张照片 · 0 段视频')).toBeTruthy();
+
+    // 打开第二张（此前白卡的首个位置）
+    fireEvent.press(screen.getByLabelText('查看记忆照片 2'));
+    expect(await screen.findByText('2 / 2')).toBeTruthy();
+
+    const sources = remoteImageSources();
+    // 查看器与方格各自渲染同一 file:// URI，均未被误拼
+    expect(
+      sources.filter((source) => source?.uri === 'file:///tmp/b.jpg').length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      sources.some((source) => source?.uri?.includes('api.example.com/file://')),
+    ).toBe(false);
+  });
+
   test('Hero 照片经 resolveUrl 解析相对路径后渲染（原生 Image 不认相对路径）', async () => {
     render(
       <TestApp
@@ -212,58 +249,33 @@ describe('鱼获详情页（冻结稿）', () => {
     );
   });
 
-  test('生成模块：NOT_GENERATED → GENERATING 文案与轮询查询', async () => {
-    jest.useFakeTimers();
+  // 生成入口暂时屏蔽（CatchDetailScreen MEMORY_GENERATION_ENABLED = false）：
+  // 登录 + 真实记录下也不显示生成模块；恢复开关后需还原为原流程测试
+  test('生成模块：入口暂时屏蔽，登录后也不显示', async () => {
     mockSessionRef.current = { accessToken: 'token' };
-    (catchService.createBsideJob as jest.Mock).mockResolvedValue({
-      jobId: 'job_1',
-      status: 'GENERATING',
-      resultUri: null,
-    });
-    (catchService.bsideStatus as jest.Mock).mockResolvedValue({
-      jobId: 'job_1',
-      status: 'READY',
-      resultUri: '/bside/fish_09.png',
-    });
 
-    try {
-      render(
-        <TestApp
-          params={{
-            catchId: 'catch_9',
-            initialCatch: {
-              id: 'catch_9',
-              imageUrl: '/uploads/fish_09.jpg',
-              speciesId: 'grass_carp',
-              speciesName: '草鱼',
-              confidence: 0.9,
-              modelVersion: 'v1',
-              capturedAt: '2026-09-03T18:20:00+08:00',
-              createdAt: '2026-09-03T18:21:00+08:00',
-            },
-          }}
-        />,
-      );
+    render(
+      <TestApp
+        params={{
+          catchId: 'catch_9',
+          initialCatch: {
+            id: 'catch_9',
+            imageUrl: '/uploads/fish_09.jpg',
+            speciesId: 'grass_carp',
+            speciesName: '草鱼',
+            confidence: 0.9,
+            modelVersion: 'v1',
+            capturedAt: '2026-09-03T18:20:00+08:00',
+            createdAt: '2026-09-03T18:21:00+08:00',
+          },
+        }}
+      />,
+    );
 
-      expect(await screen.findByText('为这次相遇生成一份鱼获记忆')).toBeTruthy();
-      fireEvent.press(screen.getByText('生成鱼获记忆'));
-
-      expect(await screen.findByText('正在生成鱼获记忆…')).toBeTruthy();
-      expect(
-        screen.getByText('可以继续浏览或离开，完成后会保留在这条鱼获里。'),
-      ).toBeTruthy();
-      expect(catchService.createBsideJob).toHaveBeenCalledWith('catch_9');
-
-      // 推进轮询周期：GENERATING → READY 后生成模块退场、Flip 出现
-      await act(async () => {
-        jest.advanceTimersByTime(6100);
-      });
-      expect(await screen.findByLabelText('翻面')).toBeTruthy();
-      expect(screen.queryByText('正在生成鱼获记忆…')).toBeNull();
-      expect(catchService.bsideStatus).toHaveBeenCalledWith('catch_9');
-    } finally {
-      jest.useRealTimers();
-    }
+    expect(await screen.findByText('草鱼')).toBeTruthy();
+    expect(screen.queryByText('为这次相遇生成一份鱼获记忆')).toBeNull();
+    expect(screen.queryByText('生成鱼获记忆')).toBeNull();
+    expect(catchService.createBsideJob).not.toHaveBeenCalled();
   });
 
   test('编辑工作台：草稿回填、非法数值拦截保存、保存后数据行更新', async () => {

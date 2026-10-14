@@ -35,7 +35,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from './icons/AppIcon';
 import { BottomSheet } from './ui/BottomSheet';
 import { PressableScale } from './ui/PressableScale';
 import { PrimaryButton } from './ui/PrimaryButton';
@@ -373,7 +373,7 @@ export const RulerMeasureLayer: React.FC<RulerMeasureLayerProps> = ({
         <PressableScale onPress={() => setCustomOpen((v) => !v)} scaleTo={0.985}>
           <View style={styles.presetRow}>
             <Text style={styles.presetName}>自定义长度…</Text>
-            <Icon name="chevron-forward" size={15} color={palette.mutedInk} />
+            <AppIcon name="chevron_right" size={15} color={palette.mutedInk} />
           </View>
         </PressableScale>
         {customOpen ? (

@@ -1,9 +1,6 @@
 import React, { ReactNode } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,20 +10,26 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../icons/AppIcon';
 import { coreColors } from '../../constants/coreUi';
 import { fs } from '../../constants/tokens';
 import { LakeContentBackdrop, CONTENT_FIELD } from '../coreui/LakeContentBackdrop';
 import { FooterGrass } from '../ui/FooterGrass';
+import {
+  KeyboardAvoidingScrollView,
+  useEnsureInputVisible,
+} from '../ui/KeyboardAvoidingScrollView';
 
 /**
  * 登录 / 注册 V2 共享壳（Login V2.1 + Register V2 冻结稿）。
  *
- * 三视觉区：顶部无太阳晨湖环境区（约 1/3，无任何文字/口号）→
- * 大面积白/MistWhite 主内容场（标题/表单/动作，表单不加整卡玻璃）→
- * 低存在感水岸草丛贴页面绝对底边。湖景自然渐隐入白场。
+ * 三视觉区（冻结稿实测比例）：顶部无太阳晨湖环境区约至 42% 屏高（无任何
+ * 文字/口号）→ 大面积白/MistWhite 主内容场，标题落在约 44% 屏高处
+ * （表单不加整卡玻璃）→ 低存在感水岸草丛贴页面绝对底边（约 8.5% 高）。
  * 输入 18dp 圆角；主按钮复用 Action Button V1 / PRIMARY；
  * 文本动作 MUTED #748897 13sp·500 / STRONG。
+ * 键盘避让：iOS 原生 automaticallyAdjustKeyboardInsets；Android edge-to-edge
+ * 下由 KeyboardAvoidingScrollView 手动补内边距并滚动聚焦框。
  */
 
 interface AuthV2ShellProps {
@@ -39,31 +42,28 @@ interface AuthV2ShellProps {
 export const AuthV2Shell: React.FC<AuthV2ShellProps> = ({ title, subtitle, children }) => {
   const insets = useSafeAreaInsets();
   const { height: windowH } = useWindowDimensions();
-  /* 标题落在湖景渐变结束后的白场（顶部环境区约 32% + 过渡余量） */
-  const contentTop = Math.round(windowH * 0.32) + insets.top;
+  /* 冻结稿：湖景渐隐完成约 42% 屏高；标题 43.9–45.3%，取 44% 白场 */
+  const lakeHeight = Math.round(windowH * 0.42);
+  const contentTop = Math.round(windowH * 0.44);
   return (
-    /* 仅根 View 持底色（位于绝对定位背景层之下）；KAV/ScrollView 必须透明，
+    /* 仅根 View 持底色（位于绝对定位背景层之下）；ScrollView 必须透明，
        否则不透明兄弟节点会整屏盖住 LakeContentBackdrop 的湖景 */
     <View style={styles.root}>
-      <LakeContentBackdrop />
-      <KeyboardAvoidingView
+      <LakeContentBackdrop topHeight={lakeHeight} />
+      <KeyboardAvoidingScrollView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        contentContainerStyle={[
+          styles.content,
+          /* 底部链接压在草丛上缘之上（冻结稿：链接 ~92.8%，草顶 ~93%） */
+          { paddingTop: contentTop, paddingBottom: Math.round(windowH * 0.085) + 8 + insets.bottom },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={[
-            styles.content,
-            { paddingTop: contentTop, paddingBottom: 120 + insets.bottom },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
-          <View style={styles.fields}>{children}</View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.subtitle}>{subtitle}</Text>
+        <View style={styles.fields}>{children}</View>
+      </KeyboardAvoidingScrollView>
       {/* 底部水岸草丛：页面自有前景装饰，不遮挡文字与 CTA */}
       <FooterGrass />
     </View>
@@ -81,7 +81,7 @@ interface AuthV2FieldProps {
   supportingText?: string;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
-  icon?: string;
+  icon?: AppIconName;
   /** 密码可见切换（Icon Action V1 / CONTEXT / ON_LIGHT） */
   onToggleVisibility?: () => void;
   visible?: boolean;
@@ -94,6 +94,10 @@ interface AuthV2FieldProps {
   onBlur?: () => void;
   autoFocus?: boolean;
   accessible?: boolean;
+  /** 暴露内部 TextInput（表单内回车键流转焦点用） */
+  inputRef?: React.RefObject<TextInput | null>;
+  /** 回车只触发 onSubmitEditing 不失焦（next 键跳下一栏时避免键盘闪缩） */
+  blurOnSubmit?: boolean;
 }
 
 /** V2 输入框：标签在上方；白面 18dp 圆角；可选前导图标与右缘动作。 */
@@ -117,14 +121,20 @@ export const AuthV2Field: React.FC<AuthV2FieldProps> = ({
   onBlur,
   autoFocus,
   accessible,
-}) => (
+  inputRef,
+  blurOnSubmit,
+}) => {
+  /* Android 键盘已开时回车跳下一栏不触发键盘事件：聚焦时主动请求滚动 */
+  const ensureInputVisible = useEnsureInputVisible();
+  return (
   <View>
     <Text style={styles.fieldLabel}>{label}</Text>
     <View style={[styles.inputWrap, errorText ? styles.inputWrapError : null]}>
       {icon ? (
-        <Icon name={icon} size={18} color="rgba(11,45,75,0.55)" style={styles.inputIcon} />
+        <AppIcon name={icon} size={18} color="rgba(11,45,75,0.55)" style={styles.inputIcon} />
       ) : null}
       <TextInput
+        ref={inputRef}
         style={styles.input}
         value={value}
         onChangeText={onChangeText}
@@ -138,7 +148,13 @@ export const AuthV2Field: React.FC<AuthV2FieldProps> = ({
         selectionColor={coreColors.morningGold}
         returnKeyType={returnKeyType}
         onSubmitEditing={onSubmitEditing}
+        blurOnSubmit={blurOnSubmit}
         onBlur={onBlur}
+        onFocus={() =>
+          requestAnimationFrame(() =>
+            ensureInputVisible(TextInput.State.currentlyFocusedInput()),
+          )
+        }
         autoFocus={autoFocus}
         importantForAutofill={accessible ? 'no' : undefined}
       />
@@ -149,8 +165,8 @@ export const AuthV2Field: React.FC<AuthV2FieldProps> = ({
           accessibilityRole="button"
           accessibilityLabel={visible ? '隐藏密码' : '显示密码'}
         >
-          <Icon
-            name={visible ? 'eye-outline' : 'eye-off-outline'}
+          <AppIcon
+            name={visible ? 'visibility' : 'visibility_off'}
             size={19}
             color="rgba(11,45,75,0.62)"
           />
@@ -163,7 +179,7 @@ export const AuthV2Field: React.FC<AuthV2FieldProps> = ({
           accessibilityRole="button"
           accessibilityLabel={`清空${label}`}
         >
-          <Icon name="close-circle" size={18} color="rgba(116,136,151,0.7)" />
+          <AppIcon name="clear_field" size={18} color="rgba(116,136,151,0.7)" />
         </Pressable>
       ) : null}
     </View>
@@ -173,7 +189,8 @@ export const AuthV2Field: React.FC<AuthV2FieldProps> = ({
       <Text style={styles.supporting}>{supportingText}</Text>
     ) : null}
   </View>
-);
+  );
+};
 
 /** 页面级错误条（表单下方，网络/服务端错误） */
 export const AuthV2Error: React.FC<{ message: string | null }> = ({ message }) =>
@@ -185,7 +202,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: CONTENT_FIELD,
   } as ViewStyle,
-  /** KAV / ScrollView：透明容器，不得携带背景色盖住背景层 */
+  /** ScrollView：透明容器，不得携带背景色盖住背景层 */
   flex: {
     flex: 1,
   } as ViewStyle,
@@ -206,7 +223,8 @@ const styles = StyleSheet.create({
     lineHeight: fs(20),
     color: coreColors.mistBlueGray,
     marginTop: 6,
-    marginBottom: 30,
+    /* 冻结稿节奏：副标题底部到首栏标签 ~4.7% 屏高（含行高） */
+    marginBottom: 20,
   } as TextStyle,
   fields: {
     gap: 18,

@@ -4,6 +4,7 @@
  * F1 内联筛选面板、搜索摘要与三类空状态、单日折叠规则、相机按钮常驻。
  */
 import React from 'react';
+import { SectionList, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react-native';
@@ -14,8 +15,14 @@ jest.mock('../src/utils/haptics', () => ({
 }));
 jest.mock('../src/services/catchService', () => ({
   catchService: {
-    resolveUrl: (path?: string | null) =>
-      path ? `https://api.example.com${path.startsWith('/') ? path : `/${path}`}` : null,
+    resolveUrl: (path?: string | null) => {
+      if (!path) {
+        return null;
+      }
+      return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)
+        ? path
+        : `https://api.example.com${path.startsWith('/') ? path : `/${path}`}`;
+    },
   },
 }));
 const mockNavigate = jest.fn();
@@ -111,7 +118,7 @@ describe('我的鱼获 Tab（时间档案）', () => {
     // 主题与记忆均为异步装载：等时间线本体出现
     expect(await screen.findByText('2026年9月')).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText('4 次鱼获 · 3 种鱼')).toBeTruthy();
+      expect(screen.getByText('4 次鱼获 · 3 种鱼 · 3 记录天数')).toBeTruthy();
       expect(screen.getByText('千岛湖 · 2条鱼获 · 2种鱼')).toBeTruthy();
     });
 
@@ -180,13 +187,13 @@ describe('我的鱼获 Tab（时间档案）', () => {
     // 特殊记录=首条（首条某鱼种）：c/b/d 各是本鱼种首条 → 3 条命中
     fireEvent.press(screen.getAllByText('首条')[0]);
     await waitFor(() => {
-      expect(screen.getByText('3 次鱼获 · 3 种鱼')).toBeTruthy();
+      expect(screen.getByText('3 次鱼获 · 3 种鱼 · 3 记录天数')).toBeTruthy();
     });
 
     // 先清空特殊记录（第 4 个「不限」属于特殊记录维度），再单选里程碑
     fireEvent.press(screen.getAllByText('不限')[3]);
     await waitFor(() => {
-      expect(screen.getByText('4 次鱼获 · 3 种鱼')).toBeTruthy();
+      expect(screen.getByText('4 次鱼获 · 3 种鱼 · 3 记录天数')).toBeTruthy();
     });
 
     // 里程碑：档案不足 10 条 → 无命中 → Filter Empty（F7）
@@ -198,8 +205,52 @@ describe('我的鱼获 Tab（时间档案）', () => {
     // 清除筛选恢复时间线
     fireEvent.press(screen.getByText('清除筛选'));
     await waitFor(() => {
-      expect(screen.getByText('4 次鱼获 · 3 种鱼')).toBeTruthy();
+      expect(screen.getByText('4 次鱼获 · 3 种鱼 · 3 记录天数')).toBeTruthy();
     });
+  });
+
+  test('筛选摘要：可移除条件 chips + 清空（Filter Spec V2 §4）', async () => {
+    const view = render(<Harness filterOpen />);
+    // F1 快捷鱼种 chip（ListHeader 在卡片之前渲染）
+    fireEvent.press((await screen.findAllByText('草鱼'))[0]);
+    await waitFor(() => {
+      expect(screen.getByText('2 次鱼获 · 1 种鱼 · 2 记录天数')).toBeTruthy();
+    });
+
+    // 收起 F1（Hub Filter Action 再点一次）→ compact removable summary
+    view.rerender(<Harness filterOpen={false} />);
+    expect(screen.getByLabelText('移除筛选条件 草鱼')).toBeTruthy();
+    expect(screen.getByText('清空')).toBeTruthy();
+
+    // × 移除该维度 → 即时恢复全量档案
+    fireEvent.press(screen.getByLabelText('移除筛选条件 草鱼'));
+    await waitFor(() => {
+      expect(screen.getByText('4 次鱼获 · 3 种鱼 · 3 记录天数')).toBeTruthy();
+    });
+    expect(screen.queryByText('清空')).toBeNull();
+  });
+
+  test('B4 Search + Filter：低权重筛选摘要卡 + 点击展开 F1（Search Spec §12）', async () => {
+    const onEditFilter = jest.fn();
+    const view = render(<Harness filterOpen />);
+    fireEvent.press((await screen.findAllByText('鲫鱼'))[0]);
+    await waitFor(() => {
+      expect(screen.getByText('1 次鱼获 · 1 种鱼 · 1 记录天数')).toBeTruthy();
+    });
+
+    // 进入 Search Mode（Filter 条件保留）：摘要卡 + 条件行 + 结果计数
+    view.rerender(
+      <Harness searchMode query="千岛湖" onEditFilterFromSearch={onEditFilter} />,
+    );
+    expect(await screen.findByText('筛选中 · 1个条件')).toBeTruthy();
+    expect(screen.getAllByText('鲫鱼').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getByText('1 次鱼获')).toBeTruthy();
+    });
+
+    // 点击摘要卡：通知 Hub 返回原页面并展开 F1（query 保留）
+    fireEvent.press(screen.getByLabelText('编辑筛选'));
+    expect(onEditFilter).toHaveBeenCalled();
   });
 
   test('档案空状态：还没有鱼获记录', async () => {
@@ -216,7 +267,7 @@ describe('我的鱼获 Tab（时间档案）', () => {
     );
     render(<Harness />);
     await waitFor(() => {
-      expect(screen.getByText('7 次鱼获 · 1 种鱼')).toBeTruthy();
+      expect(screen.getByText('7 次鱼获 · 1 种鱼 · 1 记录天数')).toBeTruthy();
     });
     expect(screen.getByText('查看另外 2 条')).toBeTruthy();
     // 只显示 5 张卡（鱼名重复，统计渲染次数）
@@ -244,6 +295,39 @@ describe('我的鱼获 Tab（时间档案）', () => {
     const card = await screen.findByText('鲫鱼', {}, { timeout: 3000 });
     fireEvent.press(card);
     expect(mockNavigate).toHaveBeenCalledWith('CatchDetail', expect.anything());
+  });
+
+  test('点击 Hub Search / Filter：列表滚回顶部；收起 Filter 不打断阅读位置', async () => {
+    const view = render(<Harness />);
+    await screen.findByText('2026年9月');
+
+    // 监听 SectionList 底层 scroll responder 的 scrollTo
+    const scrollTo = jest.fn();
+    const listInstance = view.UNSAFE_getByType(SectionList).instance;
+    jest
+      .spyOn(listInstance as { getScrollResponder: () => ScrollView }, 'getScrollResponder')
+      .mockReturnValue({ scrollTo } as unknown as ScrollView);
+
+    // 点击 Filter（Hub Filter Action）：F1 展开在 ListHeader → 列表回顶
+    view.rerender(<Harness filterOpen />);
+    expect(await screen.findByText('筛选')).toBeTruthy();
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenCalledWith({ x: 0, y: 0, animated: true });
+    });
+
+    // 收起 F1：不滚动，保持阅读位置（rAF 已 flush 后仍无调用）
+    scrollTo.mockClear();
+    view.rerender(<Harness filterOpen={false} />);
+    expect(await screen.findByText('2026年9月')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // 点击 Search（进入 Search Mode）：最近搜索在 ListHeader → 列表回顶
+    scrollTo.mockClear();
+    view.rerender(<Harness searchMode />);
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenCalledWith({ x: 0, y: 0, animated: true });
+    });
   });
 });
 

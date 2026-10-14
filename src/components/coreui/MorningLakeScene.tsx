@@ -11,6 +11,7 @@ import {
   StyleProp,
   ViewStyle,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
   BackgroundLevel,
@@ -26,8 +27,8 @@ import {
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 import sceneBase from '../../assets/coreui/scene_base.jpg';
+import sceneBaseLake from '../../assets/coreui/scene_base_lake.jpg';
 import fishingRod from '../../assets/coreui/fishing_rod.png';
-import fishingLine from '../../assets/coreui/fishing_line.png';
 import fishingBobber from '../../assets/coreui/fishing_bobber.png';
 import fishingRippleMask from '../../assets/coreui/fishing_ripple_mask.png';
 import atmosphereCloud from '../../assets/coreui/atmosphere_cloud.png';
@@ -49,6 +50,18 @@ import atmosphereParticle from '../../assets/coreui/atmosphere_particle.png';
 interface MorningLakeSceneProps {
   /** 背景存在感层级（BG_ENV_HERO / BG_CONTENT / BG_DATA） */
   level?: BackgroundLevel;
+  /**
+   * 覆盖 level 对应的存在感默认值（0-1，越大白纱越薄）。
+   * 用于同一 level 下按页面设计稿微调，如账号路径 BG_CONTENT
+   * 顶部近全强度（仅轻纱）；不传则用 backgroundSalience[level]。
+   */
+  salience?: number;
+  /**
+   * 背景源变体（morning_lake_v1 treatment_contract）：
+   * - sunrise：Empty Home 专用 Sunrise Hero 源（可见太阳、晨光金）
+   * - lake：共享 Morning_Lake_Master_V1 清晨晨雾湖（普通主页 / 内容页 / 数据页默认）
+   */
+  variant?: 'sunrise' | 'lake';
   /** 是否渲染钓竿 + 鱼线 + 鱼漂 + 涟漪（仅 Empty Home） */
   fishing?: boolean;
   /** 是否渲染云 / 晨光 / 粒子氛围层 */
@@ -56,8 +69,21 @@ interface MorningLakeSceneProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/**
+ * 钓线几何（参考画布 1080×1920，cubic_bezier_slack）：
+ * 起点严格锚定竿尖像素（rod 锚点 (0,950) + 竿尖像素 (399,23)），
+ * 控制点取弦下方 ~18% 弦长的松弛下垂，终点藏于鱼漂身后（line_terminates_
+ * behind_or_below_contact）。矢量绘制保证衔接零偏差且颜色可控。
+ */
+const LINE_START: [number, number] = [399, 973];
+const LINE_CP1: [number, number] = [438, 1056];
+const LINE_CP2: [number, number] = [491, 1135];
+const LINE_END: [number, number] = [530, 1170];
+
 export const MorningLakeScene: React.FC<MorningLakeSceneProps> = ({
   level = 'hero',
+  salience,
+  variant = 'lake',
   fishing = false,
   atmosphere = false,
   style,
@@ -98,9 +124,9 @@ export const MorningLakeScene: React.FC<MorningLakeSceneProps> = ({
     return () => loop.stop();
   }, [fishing, reduceMotion, bobberY, cover]);
 
-  /* ── 涟漪：仅 1 个，scale 1→1.22 / alpha .30→0，3200ms 循环 ── */
+  /* ── 涟漪：仅 1 个，scale 1→1.22 / alpha 依 token 提亮，3200ms 循环 ── */
   const rippleScale = useRef(new Animated.Value(1)).current;
-  const rippleAlpha = useRef(new Animated.Value(0.3)).current;
+  const rippleAlpha = useRef(new Animated.Value(coreMotion.emptyHome.ripple.alphaFrom)).current;
   useEffect(() => {
     if (!fishing || reduceMotion) return;
     const { durationMs, scaleFrom, scaleTo, alphaFrom, alphaTo } = coreMotion.emptyHome.ripple;
@@ -202,13 +228,18 @@ export const MorningLakeScene: React.FC<MorningLakeSceneProps> = ({
     [cover],
   );
 
-  const veilOpacity = 1 - backgroundSalience[level];
+  const veilOpacity = 1 - (salience ?? backgroundSalience[level]);
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.layer, style]} onLayout={onLayout} pointerEvents="none">
-      {/* 场景底图：cover 等比（可能溢出屏幕边缘，被容器裁掉） */}
+    <View
+      style={[StyleSheet.absoluteFill, styles.layer, style, { backgroundColor: variant === 'sunrise' ? '#72643C' : '#5B6F6B' }]}
+      onLayout={onLayout}
+      pointerEvents="none"
+    >
+      {/* 场景底图：cover 等比（可能溢出屏幕边缘，被容器裁掉）。
+          变体按 treatment_contract：sunrise=Empty Home 专用；lake=共享晨雾湖母版 */}
       <Image
-        source={sceneBase}
+        source={variant === 'sunrise' ? sceneBase : sceneBaseLake}
         style={{
           position: 'absolute',
           left: cover.x(0),
@@ -273,17 +304,24 @@ export const MorningLakeScene: React.FC<MorningLakeSceneProps> = ({
               height: cover.s(emptyHomeAnchors.rod.h),
             } as ImageStyle}
           />
-          {/* 鱼线 */}
-          <Image
-            source={fishingLine}
-            style={{
-              position: 'absolute',
-              left: cover.x(emptyHomeAnchors.line.x),
-              top: cover.y(emptyHomeAnchors.line.y),
-              width: cover.s(emptyHomeAnchors.line.w),
-              height: cover.s(emptyHomeAnchors.line.h),
-            } as ImageStyle}
-          />
+          {/* 鱼线：矢量松弛曲线，起点严格锚定竿尖、终点藏于鱼漂身后。
+              柔和白（近白偏湖色，不过曝），渲染于钓竿之上、涟漪/鱼漂之下；
+              鱼漂 ±3px 浮动由漂体自身遮挡吸收。 */}
+          <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Path
+              d={
+                `M ${cover.x(LINE_START[0])} ${cover.y(LINE_START[1])} ` +
+                `C ${cover.x(LINE_CP1[0])} ${cover.y(LINE_CP1[1])}, ` +
+                `${cover.x(LINE_CP2[0])} ${cover.y(LINE_CP2[1])}, ` +
+                `${cover.x(LINE_END[0])} ${cover.y(LINE_END[1])}`
+              }
+              stroke="#E9F1F2"
+              strokeWidth={Math.max(1, cover.s(1.5))}
+              strokeLinecap="round"
+              strokeOpacity={0.8}
+              fill="none"
+            />
+          </Svg>
           {/* 涟漪：位于鱼漂下层（render order: lake → ripple → bobber） */}
           <Animated.Image
             source={fishingRippleMask}
@@ -294,7 +332,7 @@ export const MorningLakeScene: React.FC<MorningLakeSceneProps> = ({
               width: cover.s(emptyHomeAnchors.ripple.w),
               height: cover.s(emptyHomeAnchors.ripple.h),
               tintColor: '#FFFFFF',
-              opacity: reduceMotion ? 0.16 : rippleAlpha,
+              opacity: reduceMotion ? 0.24 : rippleAlpha,
               transform: [
                 {
                   translateX: cover.s(emptyHomeAnchors.ripple.w / 2),
@@ -393,6 +431,5 @@ const Particle: React.FC<{ particle: ParticleSpec; reduceMotion: boolean }> = ({
 const styles = StyleSheet.create({
   layer: {
     overflow: 'hidden',
-    backgroundColor: '#72643C',
   } as ViewStyle,
 });

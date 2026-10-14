@@ -1,7 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../../components/icons/AppIcon';
 import { RemoteImage } from '../../components/RemoteImage';
 import { FishGlyph } from '../../components/ui/FishGlyph';
 import sceneBase from '../../assets/coreui/scene_base.jpg';
@@ -187,7 +187,7 @@ const ScorePoster: React.FC<{
             </Text>
             {work.location ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(3), marginTop: u(3) }}>
-                <Icon name="location" size={u(12)} color={GOLD_DEEP} />
+                <AppIcon name="location" size={u(12)} color={GOLD_DEEP} />
                 <Text style={[styles.scoreMeta, { color: INK_SOFT, fontSize: fs(u(12)) }]}>
                   {work.location}
                 </Text>
@@ -217,7 +217,7 @@ const ScorePoster: React.FC<{
           <View style={{ width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(30,58,73,0.18)' }} />
           <View style={{ flex: 1.35 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(3) }}>
-              <Icon name="trophy" size={u(12)} color={GOLD_DEEP} />
+              <AppIcon name="weight" size={u(12)} color={GOLD_DEEP} />
               <Text style={[styles.scoreMeta, { color: GOLD_DEEP, fontSize: fs(u(11)) }]}>最大鱼获</Text>
             </View>
             <Text
@@ -236,7 +236,7 @@ const ScorePoster: React.FC<{
         {hero ? (
           <View style={{ marginTop: u(12), alignItems: 'center' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(4), marginBottom: u(6) }}>
-              <Icon name="ribbon" size={u(14)} color={GOLD_DEEP} />
+              <AppIcon name="species" size={u(14)} color={GOLD_DEEP} />
               <Text style={[styles.topBadgeText, { color: GOLD_DEEP, fontSize: fs(u(14)) }]}>TOP 1</Text>
             </View>
             <View
@@ -600,7 +600,7 @@ const StoryPoster: React.FC<{
           ]}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(5) }}>
-            <Icon name="book-outline" size={u(13)} color={PAPER_INK} />
+            <AppIcon name="fish_guide" size={u(13)} color={PAPER_INK} />
             <Text style={[styles.storyChipText, { fontSize: fs(u(12)), color: PAPER_INK, fontWeight: '700' }]}>
               我的记录
             </Text>

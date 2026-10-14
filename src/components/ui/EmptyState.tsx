@@ -70,7 +70,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           onPress={onAction}
           variant="secondaryMuted"
           // 相机图标只用于拍照类操作，清空/返回等操作保持纯文字
-          icon={actionLabel.includes('拍照') ? 'camera-outline' : undefined}
+          icon={actionLabel.includes('拍照') ? 'camera' : undefined}
           style={styles.action}
         />
       ) : null}

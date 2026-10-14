@@ -106,19 +106,19 @@ export const ProfileScreen: React.FC = () => {
         {/* 设置导航：冻结顺序 编辑个人资料 / 账号与安全 / 关于渔见 */}
         <SettingsCard style={styles.menuCard}>
           <SettingsRow
-            icon="person-circle-outline"
+            icon="person"
             tint="teal"
             label="编辑个人资料"
             onPress={() => navigation.navigate('EditProfile')}
           />
           <SettingsRow
-            icon="shield-checkmark-outline"
+            icon="lock"
             tint="blue"
             label="账号与安全"
             onPress={() => navigation.navigate('AccountSecurity')}
           />
           <SettingsRow
-            icon="information-circle-outline"
+            icon="help"
             tint="amber"
             label="关于渔见"
             onPress={() => navigation.navigate('About')}

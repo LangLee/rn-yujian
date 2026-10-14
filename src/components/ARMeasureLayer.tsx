@@ -2,8 +2,9 @@
  * ARMeasureLayer —— AR 自动量尺全屏浮层。
  *
  * 原生 YujianARMeasureView（ARCore / 华为 AR Engine）接管相机背景与水平面检测；
- * 本层只做交互与展示：检测到平面后「点击鱼头 → 拖动实时预览 → 点击鱼尾」，
- * 两个屏幕点经原生 hitTest 得到 AR 世界坐标（米），自动算出真实长度，
+ * 本层只做交互与展示：检测到平面后「按下鱼头锚定 → 拖动全程实时画线 → 松手确认鱼尾」
+ * （也兼容点鱼头再点鱼尾的两次轻点），屏幕点经原生 hitTest 得到 AR 世界坐标（米），
+ * 自动算出真实长度，
  * 测线与长度标签用 react-native-svg / RN 绘制（与手动量尺同款视觉）。
  *
  * 与 VisionCamera 分时复用相机：本浮层挂载期间父级应停用 VisionCamera；
@@ -22,7 +23,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from './icons/AppIcon';
 import { PressableScale } from './ui/PressableScale';
 import { PrimaryButton } from './ui/PrimaryButton';
 import { RulerGlyph } from './RulerGlyph';
@@ -60,6 +61,8 @@ interface MeasureAnchor {
 
 /** 预览拖动时 hitTest 的节流间隔 */
 const LIVE_HIT_INTERVAL_MS = 120;
+/** 按下后位移超过该值（dp）视为拖动；刚锚定就松手（轻点）不确认鱼尾 */
+const DRAG_SLOP_DP = 12;
 
 const worldDistanceCm = (a: WorldPoint, b: WorldPoint): number =>
   Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) * 100;
@@ -86,11 +89,24 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
 
   const [phase, setPhase] = useState<'scanning' | 'ready' | 'measuring' | 'done'>('scanning');
   const [pointA, setPointA] = useState<MeasureAnchor | null>(null);
-  const [previewB, setPreviewB] = useState<MeasureAnchor | null>(null);
+  /** measuring 阶段线尾跟随手指的屏幕点：每个 move 同步更新，白线恒可见 */
+  const [fingerB, setFingerB] = useState<{ x: number; y: number } | null>(null);
+  /** 线尾最新命中的世界坐标（节流 hitTest），只用于换算 cm 数值 */
+  const [previewWorld, setPreviewWorld] = useState<WorldPoint | null>(null);
   const [confirmedB, setConfirmedB] = useState<MeasureAnchor | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const lastHitAtRef = useRef(0);
+  /** 预览 hitTest 序号：只接受最新一次结果，防止乱序返回导致数值回跳 */
+  const hitSeqRef = useRef(0);
+  /** 手势跟踪：区分「刚放下鱼头锚点的轻点」与「确认鱼尾的拖动 / 点击」 */
+  const gestureRef = useRef<{ startX: number; startY: number; moved: boolean; placedA: boolean } | null>(null);
   const [measuredCm, setMeasuredCm] = useState<number | null>(null);
+
+  // hitTest 桥接往返期间 phase 可能已变化，异步回调里读最新阶段
+  const phaseRef = useRef(phase);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   // notice 自动消退
   useEffect(() => {
@@ -133,77 +149,119 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
     }
   };
 
-  const handleTap = async (e: GestureResponderEvent) => {
+  /** 按下：ready 阶段立刻以按下点锚定鱼头（hitTest 命中后进入 measuring），
+   *  拖动全程白线从按下点跟随手指，单个手势即可完成测量 */
+  const handleGrant = (e: GestureResponderEvent) => {
     const p = pointFromEvent(e);
-    if (phase === 'ready') {
-      const world = await hitTestAt(p.x, p.y);
-      if (!world) {
+    gestureRef.current = { startX: p.x, startY: p.y, moved: false, placedA: false };
+    if (phaseRef.current !== 'ready') {
+      return;
+    }
+    hitTestAt(p.x, p.y).then((world) => {
+      if (!world || phaseRef.current !== 'ready') {
         return;
+      }
+      if (gestureRef.current) {
+        gestureRef.current.placedA = true;
       }
       haptics.selection();
       setPointA({ screen: p, world });
-      setPreviewB(null);
+      setFingerB(p);
+      setPreviewWorld(null);
       setConfirmedB(null);
+      setMeasuredCm(null);
       setPhase('measuring');
-      return;
-    }
-    if (phase === 'measuring') {
-      const world = await hitTestAt(p.x, p.y);
-      if (!world || !pointA) {
-        return;
+    });
+  };
+
+  /** 节流 hitTest：更新线尾世界坐标（cm 数值）；未命中 / 失败静默保持上一帧 */
+  const runPreviewHitTest = async (x: number, y: number) => {
+    const seq = ++hitSeqRef.current;
+    try {
+      const world = await arMeasure.hitTest(x, y);
+      if (world && seq === hitSeqRef.current) {
+        setPreviewWorld(world);
       }
-      haptics.confirm();
-      setConfirmedB({ screen: p, world });
-      setMeasuredCm(worldDistanceCm(pointA.world, world));
-      setPhase('done');
+    } catch {
+      // 预览失败静默：白线仍跟手，数值保持上一帧
     }
   };
 
-  /** measuring 阶段：拖动实时预览（节流 hitTest） */
-  const handleMove = async (e: GestureResponderEvent) => {
-    if (phase !== 'measuring') {
+  /** measuring 阶段：线尾屏幕点每个 move 同步跟手（白线恒可见），
+   *  世界坐标换算走节流 hitTest，与画线解耦 */
+  const handleMove = (e: GestureResponderEvent) => {
+    const p = pointFromEvent(e);
+    const g = gestureRef.current;
+    if (g && Math.hypot(p.x - g.startX, p.y - g.startY) > DRAG_SLOP_DP) {
+      g.moved = true;
+    }
+    if (phaseRef.current !== 'measuring') {
       return;
     }
+    setFingerB(p);
     const now = Date.now();
     if (now - lastHitAtRef.current < LIVE_HIT_INTERVAL_MS) {
       return;
     }
     lastHitAtRef.current = now;
+    runPreviewHitTest(p.x, p.y);
+  };
+
+  /** 松手：刚放下鱼头锚点的轻点不确认；拖动到位 / 点击鱼尾时 hitTest 确认并算长度 */
+  const handleRelease = (e: GestureResponderEvent) => {
     const p = pointFromEvent(e);
-    try {
-      const world = await arMeasure.hitTest(p.x, p.y);
-      if (world) {
-        setPreviewB({ screen: p, world });
-      }
-    } catch {
-      // 预览失败静默：保持上一帧
+    const g = gestureRef.current;
+    gestureRef.current = null;
+    if (phaseRef.current !== 'measuring' || !pointA) {
+      return;
     }
+    if (g?.placedA && !g.moved) {
+      // 本手势只是放下鱼头锚点：等待鱼尾手势
+      return;
+    }
+    setFingerB(p);
+    hitTestAt(p.x, p.y).then((world) => {
+      if (!world || phaseRef.current !== 'measuring') {
+        return; // 未命中：提示已弹出，保持预览线等待重试
+      }
+      haptics.confirm();
+      setConfirmedB({ screen: p, world });
+      setMeasuredCm(worldDistanceCm(pointA.world, world));
+      setPhase('done');
+    });
+  };
+
+  /** 系统 / 其他组件抢占（如边缘返回）：结束手势跟踪，已画的锚点与测线保持 */
+  const handleTerminate = () => {
+    gestureRef.current = null;
   };
 
   const resetMeasure = () => {
     haptics.selection();
     setPointA(null);
-    setPreviewB(null);
+    setFingerB(null);
+    setPreviewWorld(null);
     setConfirmedB(null);
     setMeasuredCm(null);
     setPhase('ready');
   };
 
-  // 测线：done 用确认点，measuring 用实时预览
-  const endPoint = phase === 'done' ? confirmedB : previewB;
+  // 测线：done 用确认点；measuring 用跟手的预览端点（hitTest 未命中也画线）
+  const endScreen = phase === 'done' ? confirmedB?.screen : fingerB;
   const line: MeasureLine | null =
-    pointA && endPoint
-      ? { x1: pointA.screen.x, y1: pointA.screen.y, x2: endPoint.screen.x, y2: endPoint.screen.y }
+    pointA && endScreen
+      ? { x1: pointA.screen.x, y1: pointA.screen.y, x2: endScreen.x, y2: endScreen.y }
       : null;
-  const liveCm = pointA && endPoint ? worldDistanceCm(pointA.world, endPoint.world) : null;
+  const endWorld = phase === 'done' ? confirmedB?.world : previewWorld;
+  const liveCm = pointA && endWorld ? worldDistanceCm(pointA.world, endWorld) : null;
 
   const bannerCopy =
     phase === 'scanning'
       ? '缓慢移动手机，扫描鱼身下的平面'
       : phase === 'ready'
-        ? '点击鱼头，再点击鱼尾'
+        ? '按住鱼头，拖到鱼尾松手'
         : phase === 'measuring'
-          ? '拖动预览长度，点击鱼尾确认'
+          ? '拖动实时预览，松手确认长度'
           : '完成';
 
   return (
@@ -217,23 +275,25 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
         onSessionError={handleSessionError}
       />
 
-      {/* 交互层：点击 / 拖动预览 */}
+      {/* 交互层：按下锚定鱼头 / 拖动实时画线 / 松手确认 */}
       <View
         style={StyleSheet.absoluteFill}
         testID="ar-touch-layer"
         onStartShouldSetResponder={() => true}
-        onResponderRelease={handleTap}
+        onResponderGrant={handleGrant}
         onResponderMove={handleMove}
+        onResponderRelease={handleRelease}
+        onResponderTerminate={handleTerminate}
       />
 
       {/* 视觉层：测线 + 扫描提示（不拦截触摸） */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {line && liveCm != null ? (
+        {line ? (
           <MeasureLineOverlay
             line={line}
             width={width}
             height={height}
-            value={`${liveCm.toFixed(1)} cm`}
+            value={liveCm != null ? `${liveCm.toFixed(1)} cm` : '-- cm'}
             caption={phase === 'done' ? 'AR 实测长度' : '实时测量中'}
             topMin={insets.top + 96}
             bottomMax={height - 260}
@@ -275,7 +335,7 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
             accessibilityRole="button"
           >
             <View style={styles.closeBtn}>
-              <Icon name="close" size={19} color="#F6FAF8" />
+              <AppIcon name="close" size={19} color="#F6FAF8" />
             </View>
           </PressableScale>
         </View>
@@ -318,8 +378,8 @@ export const ARMeasureLayer: React.FC<ARMeasureLayerProps> = ({
               {phase === 'scanning'
                 ? '正在扫描平面，稍作移动即可'
                 : phase === 'ready'
-                  ? '把鱼头和鱼尾各点一下，长度自动算出'
-                  : '拖动手指实时预览，点鱼尾确认'}
+                  ? '按住鱼头拖到鱼尾松手，长度自动算出'
+                  : '拖到鱼尾松手完成，也可点击鱼尾确认'}
             </Text>
             <PrimaryButton
               label="改用普通量尺"

@@ -264,6 +264,128 @@ export function activeConditionCount(filter: MyCatchesFilterState): number {
   return count;
 }
 
+// ---------------------------------------------------------------------------
+// 已选条件可读摘要（Filter Spec V2 §4 / Search Spec §12 B4）
+// ---------------------------------------------------------------------------
+
+export type ActiveConditionKey = 'species' | 'time' | 'length' | 'weight' | 'special';
+
+export interface ActiveCondition {
+  key: ActiveConditionKey;
+  label: string;
+}
+
+const TIME_QUICK_LABELS: Partial<Record<TimeQuickKey, string>> = {
+  thisMonth: '本月',
+  last3Months: '近3个月',
+  thisYear: '今年',
+};
+
+const LENGTH_QUICK_LABELS: Partial<Record<SizeQuickKey, string>> = {
+  lt20: '<20 cm',
+  '20to40': '20-40 cm',
+  '40to60': '40-60 cm',
+  gte60: '≥60 cm',
+};
+
+const WEIGHT_QUICK_LABELS: Partial<Record<SizeQuickKey, string>> = {
+  lt05: '<0.5 kg',
+  '05to1': '0.5-1 kg',
+  '1to3': '1-3 kg',
+  gte3: '≥3 kg',
+};
+
+const SPECIAL_LABELS: Record<string, string> = {
+  first: '首条',
+  longest: '最长',
+  heaviest: '最重',
+  milestone: '里程碑',
+};
+
+function shortDate(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getMonth() + 1}.${date.getDate()}`;
+}
+
+function rangeLabel(range: SizeRange, unit: 'cm' | 'kg'): string {
+  const { min, max } = range;
+  if (typeof min === 'number' && typeof max === 'number') {
+    return `${min}-${max} ${unit}`;
+  }
+  if (typeof min === 'number') return `≥${min} ${unit}`;
+  if (typeof max === 'number') return `≤${max} ${unit}`;
+  return `自定义 ${unit}`;
+}
+
+/** 维度级已选条件列表：同维多选合并为一个标签（OR），顺序 = F1 四维顺序。 */
+export function activeConditions(
+  filter: MyCatchesFilterState,
+  speciesNameOf: (key: string) => string,
+): ActiveCondition[] {
+  const result: ActiveCondition[] = [];
+  if (filter.species.length > 0) {
+    result.push({
+      key: 'species',
+      label: filter.species.map(speciesNameOf).filter(Boolean).join('/'),
+    });
+  }
+  if (filter.time !== 'all') {
+    result.push({
+      key: 'time',
+      label:
+        filter.time === 'custom'
+          ? filter.timeCustom
+            ? `${shortDate(filter.timeCustom.start)}–${shortDate(filter.timeCustom.end)}`
+            : '自定义时间'
+          : TIME_QUICK_LABELS[filter.time] ?? '',
+    });
+  }
+  if (filter.lengthQuick !== 'all' || filter.lengthCustom) {
+    result.push({
+      key: 'length',
+      label: filter.lengthCustom
+        ? rangeLabel(filter.lengthCustom, 'cm')
+        : LENGTH_QUICK_LABELS[filter.lengthQuick] ?? '自定义 cm',
+    });
+  }
+  if (filter.weightQuick !== 'all' || filter.weightCustom) {
+    result.push({
+      key: 'weight',
+      label: filter.weightCustom
+        ? rangeLabel(filter.weightCustom, 'kg')
+        : WEIGHT_QUICK_LABELS[filter.weightQuick] ?? '自定义 kg',
+    });
+  }
+  if (filter.special.length > 0) {
+    result.push({
+      key: 'special',
+      label: filter.special.map((kind) => SPECIAL_LABELS[kind] ?? kind).join('/'),
+    });
+  }
+  return result;
+}
+
+/** 移除单个维度条件后的 filter（compact removable summary 的 × 行为）。 */
+export function withoutCondition(
+  filter: MyCatchesFilterState,
+  key: ActiveConditionKey,
+): MyCatchesFilterState {
+  switch (key) {
+    case 'species':
+      return { ...filter, species: [] };
+    case 'time':
+      return { ...filter, time: 'all', timeCustom: null };
+    case 'length':
+      return { ...filter, lengthQuick: 'all', lengthCustom: null };
+    case 'weight':
+      return { ...filter, weightQuick: 'all', weightCustom: null };
+    case 'special':
+      return { ...filter, special: [] };
+    default:
+      return filter;
+  }
+}
+
 function matchTime(entry: CatchEntry, filter: MyCatchesFilterState, now: Date): boolean {
   if (filter.time === 'all') return true;
   if (entry.time === null) return false;
@@ -467,6 +589,8 @@ export interface DayGroup {
   dayLabel: string;
   /** SEP */
   monthLabel: string;
+  /** 周三（日期栏第三行；时间未知为空） */
+  weekday: string;
   /** 2026年9月23日 星期三 */
   fullLabel: string;
   /** 单一地点：「地点 · N条鱼获 · M种鱼」；多地点/无地点：「N条鱼获 · M种鱼」 */
@@ -528,6 +652,7 @@ export function groupByMonthAndDay(entries: CatchEntry[]): MonthGroup[] {
             key: dayKey,
             dayLabel: first.date ? `${first.day}` : '·',
             monthLabel: first.date ? MONTHS_EN[first.month - 1] : '',
+            weekday: weekday ? `周${weekday}` : '',
             fullLabel: first.date
               ? `${first.year}年${first.month}月${first.day}日${weekday ? ` 星期${weekday}` : ''}`
               : '日期未知',

@@ -6,6 +6,10 @@ export { EmptyIllustration } from './EmptyIllustration';
 export type { EmptyStateVariant } from './EmptyIllustration';
 export { MemoryFrameGlyph } from './MemoryFrameGlyph';
 export { BottomSheet } from './BottomSheet';
+export {
+  KeyboardAvoidingScrollView,
+  useEnsureInputVisible,
+} from './KeyboardAvoidingScrollView';
 export { FishGlyph } from './FishGlyph';
 export { IconButton } from './IconButton';
 export { GlassIconButton } from './GlassIconButton';

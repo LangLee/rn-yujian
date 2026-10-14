@@ -13,7 +13,7 @@ import {
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Rect, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../../components/icons/AppIcon';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -225,7 +225,7 @@ export const SharePreviewScreen: React.FC = () => {
                   },
                 ]}
               >
-                <Icon name="share-social-outline" size={14} color={textPrimary} />
+                <AppIcon name="share" size={14} color={textPrimary} />
                 <Text style={[styles.sharePillText, { color: textPrimary }]}>分享预览</Text>
               </View>
             </PressableScale>
@@ -284,7 +284,7 @@ export const SharePreviewScreen: React.FC = () => {
                 scaleTo={0.96}
               >
                 <View style={styles.layoutShuffle}>
-                  <Icon name="sync" size={13} color={GOLD} />
+                  <AppIcon name="retry_refresh" size={13} color={GOLD} />
                   <Text style={[styles.layoutShuffleText, { color: GOLD }]}>换一种布局</Text>
                 </View>
               </PressableScale>
@@ -330,8 +330,8 @@ export const SharePreviewScreen: React.FC = () => {
                   },
                 ]}
               >
-                <Icon
-                  name={saved ? 'checkmark' : 'save-outline'}
+                <AppIcon
+                  name={saved ? 'check' : 'save'}
                   size={17}
                   color={saved ? profile.surface.accent : textPrimary}
                 />
@@ -352,7 +352,7 @@ export const SharePreviewScreen: React.FC = () => {
                   <Rect x="0" y="0" width="100%" height="100%" fill="url(#resultShareBg)" rx="26" />
                 </Svg>
                 <View style={styles.primaryRow} pointerEvents="none">
-                  <Icon name="share-social" size={16} color="#FFFFFF" />
+                  <AppIcon name="share" size={16} color="#FFFFFF" />
                   <Text style={styles.primaryText}>分享作品</Text>
                 </View>
               </View>
@@ -388,7 +388,7 @@ export const SharePreviewScreen: React.FC = () => {
                 </Svg>
                 <View style={styles.primaryRow} pointerEvents="none">
                   <Text style={styles.primaryText}>生成作品</Text>
-                  <Icon name="arrow-forward" size={16} color="#FFFFFF" />
+                  <AppIcon name="chevron_right" size={16} color="#FFFFFF" />
                 </View>
               </View>
             </PressableScale>
@@ -484,7 +484,7 @@ const LayoutThumb: React.FC<{
         </View>
         {selected ? (
           <View style={styles.layoutThumbCheck}>
-            <Icon name="checkmark" size={11} color="#FFFFFF" />
+            <AppIcon name="check" size={11} color="#FFFFFF" />
           </View>
         ) : null}
       </View>

@@ -24,14 +24,29 @@ import captureBreathGlow from '../../assets/coreui/capture_breath_glow.png';
 /**
  * YuJianPrimaryCaptureButton —— 共享品牌拍摄入口（Camera_Button.md 冻结视觉）。
  *
- * 层次（由外到内）：
- *  1. breath_glow：淡金呼吸环（scale 1→1.015，5000ms）
- *  2. base：白色实心核心 + 细 MorningGold 描边 + 深蓝灰相机图形（冻结 PNG）
- *  3. gold_rim：金环弧段持续绕环旋转（~2.8s/圈，产品确认常转）
+ * 使用 Empty Home V2.2 冻结 raster 母版（runtime_manifest 登记 SHA256）：
+ *  1. breath_glow：暖金呼吸光晕（alpha 随呼吸周期起伏，5000ms）
+ *  2. base：白核 + 深藏青相机图形 + 暖金外环（冻结 PNG，含金属渐变高光）
+ *  3. gold_rim：亮金弧段扫光（9000ms 周期：首延 3000ms → 1400ms 内从
+ *     -110° 扫 360°，alpha = sin(π·progress) 淡入淡出，YuJianMotion 冻结值）
+ *
+ * 尺寸换算：base 母版 208px 中按钮圆盘约占 0.87（其余为光晕余量），
+ * 故图层渲染直径 = size × 208/184 ≈ 1.13 × size，与 Android 参考实现
+ * （visualSize 200 / touch 208）对齐。
  *
  * 共享原则：Empty Home / Normal Home / 主拍摄入口统一使用本组件，
- * 禁止页面各自复制近似版本（NormalHomeCameraButton 等属于系统分叉）。
+ * 禁止页面各自复制近似版本。
  */
+
+/** base 图层直径相对视觉直径的放大比（208 母版 / ~184 圆盘） */
+const BITMAP_SCALE = 208 / 184;
+
+/**
+ * 金弧贴合校正：gold_rim 母版的弧段轨道半径 ~96px，而 base 金环带中心
+ * ~85px（80–90）。弧段按此比例以中心收缩后精确骑在金环带上旋转，
+ * 否则弧段悬浮于金环外侧，视觉上与按钮脱节（不匀称）。
+ */
+const RIM_FIT_SCALE = 85 / 96.5;
 
 interface YuJianPrimaryCaptureButtonProps {
   onPress: () => void;
@@ -55,61 +70,88 @@ export const YuJianPrimaryCaptureButton: React.FC<YuJianPrimaryCaptureButtonProp
   const { reduceMotion } = useTheme();
   const animate = motionEnabled && !disabled && !reduceMotion;
 
-  /* 呼吸：~5000ms，max scale 1.015（仅微弱呼吸，不明显缩放） */
+  /* ── 呼吸：5000ms，scale 1→1.015→1；光晕 alpha 同步起伏 ────── */
   const breathScale = useRef(new Animated.Value(1)).current;
+  const glowAlpha = useRef(new Animated.Value(0.5)).current;
   useEffect(() => {
     if (!animate) {
       breathScale.setValue(1);
+      glowAlpha.setValue(0.4);
       return;
     }
     const { durationMs, maxScale } = coreMotion.emptyHome.cameraBreath;
     const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathScale, {
-          toValue: maxScale,
-          duration: durationMs / 2,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(breathScale, {
-          toValue: 1,
-          duration: durationMs / 2,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(breathScale, {
+            toValue: maxScale,
+            duration: durationMs / 2,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(breathScale, {
+            toValue: 1,
+            duration: durationMs / 2,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(glowAlpha, {
+            toValue: 0.85,
+            duration: durationMs / 2,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAlpha, {
+            toValue: 0.35,
+            duration: durationMs / 2,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [animate, breathScale]);
+  }, [animate, breathScale, glowAlpha]);
 
-  /* 金环：持续绕环旋转（产品确认改为常转；原冻结合同为 9s 间隔扫光）。
-     周期取扫光时长的 2 倍（~2.8s/圈）：保持"活的"品牌感又不至于像加载动画。 */
-  const rimRotate = useRef(new Animated.Value(0)).current;
+  /* ── 金弧扫光：9000ms 周期 = 首延 3000ms + 扫 1400ms + 静默 4600ms。
+     progress 0→1 期间从 -110° 扫过 360°，alpha = sin(π·progress) 淡入淡出
+     （YuJianMotion.captureRimSweepSpec 冻结曲线）。 */
+  const sweepProgress = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!animate) {
-      rimRotate.setValue(0);
+      sweepProgress.setValue(0);
       return;
     }
-    rimRotate.setValue(0);
+    const { firstDelayMs, sweepMs, repeatIntervalMs } = coreMotion.emptyHome.cameraGoldRim;
     const loop = Animated.loop(
-      Animated.timing(rimRotate, {
-        toValue: 1,
-        duration: coreMotion.emptyHome.cameraGoldRim.sweepMs * 2,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
+      Animated.sequence([
+        Animated.delay(firstDelayMs),
+        Animated.timing(sweepProgress, {
+          toValue: 1,
+          duration: sweepMs,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.delay(Math.max(0, repeatIntervalMs - firstDelayMs - sweepMs)),
+      ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [animate, rimRotate]);
+  }, [animate, sweepProgress]);
 
-  const rimAngle = rimRotate.interpolate({
+  const sweepAngle = sweepProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+    outputRange: ['-110deg', '250deg'],
+  });
+  const sweepAlpha = sweepProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, 1, 0],
   });
 
-  /* 轻按压反馈 */
+  /* ── 轻按压反馈 ─────────────────────────────────────────────── */
   const pressScale = useRef(new Animated.Value(1)).current;
   const handlePressIn = useCallback(() => {
     Animated.timing(pressScale, {
@@ -128,22 +170,18 @@ export const YuJianPrimaryCaptureButton: React.FC<YuJianPrimaryCaptureButtonProp
     }).start();
   }, [pressScale]);
 
-  const glowSize = Math.round(size * 1.16);
+  const bitmapSize = Math.round(size * BITMAP_SCALE);
+  const containerSize = bitmapSize;
   const hitSlop = Math.max(0, Math.round((CAPTURE_TOUCH_SIZE - size) / 2));
 
   return (
     <Animated.View
-      style={[styles.container, { width: glowSize, height: glowSize, transform: [{ scale: breathScale }] }, style]}
+      style={[styles.container, { width: containerSize, height: containerSize, transform: [{ scale: breathScale }] }, style]}
     >
-      {/* 淡金呼吸环 */}
-      <Image
+      {/* 暖金呼吸光晕（alpha 随呼吸周期起伏） */}
+      <Animated.Image
         source={captureBreathGlow}
-        style={{
-          position: 'absolute',
-          width: glowSize,
-          height: glowSize,
-          opacity: animate ? 0.85 : 0.6,
-        } as ImageStyle}
+        style={[StyleSheet.absoluteFill, { width: bitmapSize, height: bitmapSize, opacity: animate ? glowAlpha : 0.4 }] as ImageStyle}
       />
       <Animated.View style={[styles.pressLayer, { transform: [{ scale: pressScale }] }]}>
         <Pressable
@@ -154,18 +192,27 @@ export const YuJianPrimaryCaptureButton: React.FC<YuJianPrimaryCaptureButtonProp
           hitSlop={{ top: hitSlop, bottom: hitSlop, left: hitSlop, right: hitSlop }}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
-          style={styles.hitbox}
+          style={[styles.hitbox, disabled && styles.disabled]}
         >
-          {/* 白色核心 + 金色细描边 + 深蓝灰相机图形（冻结 base） */}
-          <Image source={captureBase} style={{ width: size, height: size } as ImageStyle} />
-          {/* 金环弧段扫光 */}
+          {/* 白核 + 深藏青相机图形 + 暖金外环（冻结 base 母版） */}
+          <Image
+            source={captureBase}
+            style={{ width: bitmapSize, height: bitmapSize } as ImageStyle}
+          />
+          {/* 亮金弧段扫光（-110° 起，扫 360°，sin 淡入淡出；
+              RIM_FIT_SCALE 使弧段轨道贴合金环带） */}
           {animate && (
             <Animated.Image
               source={captureGoldRim}
               style={[
                 styles.rimSweep,
-                { width: size, height: size, transform: [{ rotate: rimAngle }] },
-              ] as StyleProp<ImageStyle>}
+                {
+                  width: bitmapSize,
+                  height: bitmapSize,
+                  opacity: sweepAlpha,
+                  transform: [{ rotate: sweepAngle }, { scale: RIM_FIT_SCALE }],
+                },
+              ] as ImageStyle}
             />
           )}
         </Pressable>
@@ -189,6 +236,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   } as ViewStyle,
+  disabled: { opacity: 0.55 } as ViewStyle,
   rimSweep: {
     ...StyleSheet.absoluteFillObject,
   } as ImageStyle,

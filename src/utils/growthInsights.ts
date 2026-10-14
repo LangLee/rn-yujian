@@ -1,3 +1,4 @@
+import type { AppIconName } from '../components/icons/AppIcon';
 import { RemoteCatch } from '../types/models';
 import { CatchMemoryData } from '../services/catchMemoryService';
 import { ShareRangeKey, ShareSnapshotFish } from '../services/shareWorkService';
@@ -285,7 +286,7 @@ export interface GrowthEvent {
   details: string[];
   location: string | null;
   imageUri: string | null;
-  iconName: string;
+  iconName: AppIconName;
 }
 
 export interface GrowthMonthGroup {
@@ -327,7 +328,7 @@ export function buildGrowthEvents(items: CatchWithMemory[]): GrowthEvent[] {
         details: [size ?? '鱼鉴新增 1 种鱼'],
         location,
         imageUri,
-        iconName: 'fish-outline',
+        iconName: 'species',
       });
     }
 
@@ -344,7 +345,7 @@ export function buildGrowthEvents(items: CatchWithMemory[]): GrowthEvent[] {
           details: ['刷新了个人最大鱼获记录', `上一次最大：${maxWeight}kg`],
           location,
           imageUri,
-          iconName: 'trending-up-outline',
+          iconName: 'weight',
         });
       }
       if (maxWeight == null || weight > maxWeight) {
@@ -364,7 +365,7 @@ export function buildGrowthEvents(items: CatchWithMemory[]): GrowthEvent[] {
         details: [`从第一条开始，已记录 ${reached} 次鱼获。`],
         location: null,
         imageUri: null,
-        iconName: 'stats-chart-outline',
+        iconName: 'chart',
       });
     }
 
@@ -406,7 +407,7 @@ function flushStreak(
       details: [`${formatDot(first)} - ${formatDot(last)}`],
       location: null,
       imageUri: null,
-      iconName: 'calendar-outline',
+      iconName: 'date',
     });
   }
   streakDays.length = 0;

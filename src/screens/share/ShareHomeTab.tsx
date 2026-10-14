@@ -3,7 +3,7 @@ import { ScrollView, Share, StyleSheet, Text, TextStyle, View, ViewStyle } from 
 import Svg, { Defs, LinearGradient as SvgGradient, Rect, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../../components/icons/AppIcon';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -186,13 +186,13 @@ export const ShareHomeTab: React.FC = () => {
         {/* AI 推荐模板 */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
-            <Icon name="sparkles" size={17} color={GOLD} />
+            <AppIcon name="sparkles" size={17} color={GOLD} />
             <Text style={[styles.sectionTitle, { color: textPrimary }]}>AI推荐模板</Text>
           </View>
           <PressableScale onPress={() => startCreate({})} scaleTo={0.96}>
             <View style={styles.sectionLink}>
               <Text style={[styles.sectionLinkText, { color: textSecondary }]}>查看全部</Text>
-              <Icon name="chevron-forward" size={14} color={textSecondary} />
+              <AppIcon name="chevron_right" size={14} color={textSecondary} />
             </View>
           </PressableScale>
         </View>
@@ -276,7 +276,7 @@ export const ShareHomeTab: React.FC = () => {
                 <Text style={[styles.sectionLinkText, { color: textSecondary }]}>
                   {expanded ? '收起' : '查看全部'}
                 </Text>
-                <Icon name={expanded ? 'chevron-up' : 'chevron-forward'} size={14} color={textSecondary} />
+                <AppIcon name={expanded ? 'expand_less' : 'chevron_right'} size={14} color={textSecondary} />
               </View>
             </PressableScale>
           ) : null}
@@ -325,7 +325,7 @@ export const ShareHomeTab: React.FC = () => {
         {menuWork ? (
           <>
             <SheetAction
-              icon="eye-outline"
+              icon="visibility"
               label="查看作品"
               onPress={() => {
                 const work = menuWork;
@@ -334,7 +334,7 @@ export const ShareHomeTab: React.FC = () => {
               }}
             />
             <SheetAction
-              icon="share-social-outline"
+              icon="share"
               label="系统分享"
               onPress={() => {
                 const work = menuWork;
@@ -343,7 +343,7 @@ export const ShareHomeTab: React.FC = () => {
               }}
             />
             <SheetAction
-              icon="trash-outline"
+              icon="trash"
               label="删除作品"
               danger
               onPress={() => {
@@ -390,7 +390,7 @@ const GoldPill: React.FC<{ label: string; onPress: () => void }> = ({ label, onP
       </Svg>
       <View style={styles.goldPillRow} pointerEvents="none">
         <Text style={styles.goldPillText}>{label}</Text>
-        <Icon name="arrow-forward" size={14} color="#FFFFFF" />
+        <AppIcon name="chevron_right" size={14} color="#FFFFFF" />
       </View>
     </View>
   </PressableScale>
@@ -447,12 +447,12 @@ const FeatureCard: React.FC<{
           <View style={styles.badgeRow}>
             {badgeEvent ? (
               <View style={styles.badgeEvent}>
-                <Icon name="sparkles" size={11} color={GOLD_DEEP_TEXT} />
+                <AppIcon name="sparkles" size={11} color={GOLD_DEEP_TEXT} />
                 <Text style={styles.badgeEventText}>{badgeEvent}</Text>
               </View>
             ) : null}
             <View style={styles.badgeAI}>
-              <Icon name="thumbs-up" size={11} color="#FFFFFF" />
+              <AppIcon name="sparkles" size={11} color="#FFFFFF" />
               <Text style={styles.badgeAIText}>AI 推荐</Text>
             </View>
           </View>
@@ -481,7 +481,7 @@ const FeatureCard: React.FC<{
             </View>
             <View style={styles.featureCta}>
               <Text style={styles.featureCtaText}>查看回忆</Text>
-              <Icon name="arrow-forward" size={13} color="#FFFFFF" />
+              <AppIcon name="chevron_right" size={13} color="#FFFFFF" />
             </View>
           </View>
         </View>
@@ -527,12 +527,12 @@ const SideCard: React.FC<{
         <View style={styles.sideContent}>
           <View style={styles.badgeRow}>
             <View style={styles.badgeAI}>
-              <Icon name="thumbs-up" size={10} color="#FFFFFF" />
+              <AppIcon name="sparkles" size={10} color="#FFFFFF" />
               <Text style={styles.badgeAIText}>AI 推荐</Text>
             </View>
             {badgeEvent ? (
               <View style={styles.badgeEvent}>
-                <Icon name="sparkles" size={10} color={GOLD_DEEP_TEXT} />
+                <AppIcon name="sparkles" size={10} color={GOLD_DEEP_TEXT} />
                 <Text style={styles.badgeEventText}>{badgeEvent}</Text>
               </View>
             ) : null}
@@ -565,7 +565,7 @@ const SideCard: React.FC<{
           </View>
           <View style={[styles.featureCta, styles.sideCta]}>
             <Text style={styles.featureCtaText}>查看回忆</Text>
-            <Icon name="arrow-forward" size={12} color="#FFFFFF" />
+            <AppIcon name="chevron_right" size={12} color="#FFFFFF" />
           </View>
         </View>
       </View>
@@ -615,7 +615,7 @@ const WorkRow: React.FC<{
         </View>
         <View style={styles.workRight}>
           <PressableScale onPress={onMenu} scaleTo={0.9} hitSlop={8}>
-            <Icon name="ellipsis-horizontal" size={18} color={profile.surface.textSecondary} />
+            <AppIcon name="more" size={18} color={profile.surface.textSecondary} />
           </PressableScale>
           <Text style={[styles.workDate, { color: profile.surface.textSecondary }]}>{created}</Text>
         </View>
@@ -625,7 +625,7 @@ const WorkRow: React.FC<{
 };
 
 const SheetAction: React.FC<{
-  icon: string;
+  icon: AppIconName;
   label: string;
   danger?: boolean;
   onPress: () => void;
@@ -634,7 +634,7 @@ const SheetAction: React.FC<{
   return (
     <PressableScale onPress={onPress} scaleTo={0.98}>
       <View style={styles.sheetAction}>
-        <Icon
+        <AppIcon
           name={icon}
           size={19}
           color={danger ? palette.qualityInvalid : profile.surface.textPrimary}

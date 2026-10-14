@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppIcon, AppIconName } from './icons/AppIcon';
 import { fs } from '../constants/tokens';
 import { coreColors } from '../constants/coreUi';
 
@@ -94,7 +94,7 @@ function BackButton({ onPress, color }: { onPress: () => void; color: string }) 
       accessibilityRole="button"
       accessibilityLabel="返回"
       style={styles.hit}>
-      <Ionicons name="chevron-back" size={HEADER_ICON} color={tone} />
+      <AppIcon name="back" size={HEADER_ICON} color={tone} />
     </Pressable>
   );
 }
@@ -106,7 +106,7 @@ export function HeaderIconButton({
   color,
   disabled,
 }: {
-  name: string;
+  name: AppIconName;
   onPress?: () => void;
   color?: string;
   disabled?: boolean;
@@ -126,7 +126,7 @@ export function HeaderIconButton({
       accessibilityRole="button"
       accessibilityLabel={name}
       style={styles.hit}>
-      <Ionicons name={name} size={HEADER_ACTION_ICON} color={tone} />
+      <AppIcon name={name} size={HEADER_ACTION_ICON} color={tone} />
     </Pressable>
   );
 }

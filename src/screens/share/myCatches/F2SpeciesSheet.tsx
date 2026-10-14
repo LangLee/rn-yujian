@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TextStyle, View, ViewStyle } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../../../components/icons/AppIcon';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { PressableScale } from '../../../components/ui/PressableScale';
 import { coreColors } from '../../../constants/coreUi';
@@ -52,7 +52,7 @@ export const F2SpeciesSheet: React.FC<{
       title="选择鱼种"
     >
       <View style={styles.searchWrap}>
-        <Icon name="search-outline" size={16} color={coreColors.mistBlueGray} />
+        <AppIcon name="search" size={16} color={coreColors.mistBlueGray} />
         <TextInput
           style={styles.searchInput}
           value={query}
@@ -70,7 +70,7 @@ export const F2SpeciesSheet: React.FC<{
                 <Text style={[styles.rowText, checked && styles.rowTextChecked]}>{item.name}</Text>
                 <View style={[styles.box, checked && styles.boxChecked]}>
                   {checked ? (
-                    <Icon name="checkmark" size={14} color="#FFFFFF" />
+                    <AppIcon name="check" size={14} color="#FFFFFF" />
                   ) : null}
                 </View>
               </View>

@@ -7,7 +7,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../icons/AppIcon';
 import { coreColors } from '../../constants/coreUi';
 import { fs, spacing } from '../../constants/tokens';
 import { PressableScale } from './PressableScale';
@@ -50,8 +50,8 @@ export const RowDivider: React.FC<{ indent?: number }> = ({ indent = 0 }) => (
 );
 
 interface SettingsRowProps {
-  /** Ionicons 名称 */
-  icon?: string;
+  /** 图标语义名（icon_library_v0_1） */
+  icon?: AppIconName;
   tint?: RowIconTint;
   label: string;
   /** 行内说明（仅必要处克制使用） */
@@ -98,7 +98,7 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({
     <View style={styles.row}>
       {icon ? (
         <View style={[styles.iconTile, { backgroundColor: tintSpec.bg }]}>
-          <Icon name={icon} size={19} color={tintSpec.fg} />
+          <AppIcon name={icon} size={19} color={tintSpec.fg} />
         </View>
       ) : null}
       <View style={styles.labelBlock}>
@@ -131,8 +131,8 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({
           accessibilityLabel={`${label}开关`}
         />
       ) : hideChevron ? null : (
-        <Icon
-          name="chevron-forward"
+        <AppIcon
+          name="chevron_right"
           size={16}
           color={disabled ? 'rgba(116,136,151,0.4)' : 'rgba(11,45,75,0.38)'}
         />

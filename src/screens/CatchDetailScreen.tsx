@@ -7,8 +7,10 @@ import {
   Easing,
   Image,
   ImageStyle,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,7 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../components/icons/AppIcon';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import {
@@ -70,9 +72,17 @@ const UNKNOWN = '未知鱼种';
 
 /** 记忆卡内边距（冻结稿 ~44px@941） */
 const CARD_PAD = 18;
-/** 3 列方格宽：屏宽 - 页边距 - 卡片内边距 - 两列间隙 */
-const GRID_CELL_WIDTH =
-  (Dimensions.get('window').width - PAGE_MARGIN * 2 - CARD_PAD * 2 - spacing.sm * 2) / 3;
+/** 玻璃面板描边宽（styles.panel borderWidth），方格宽度需一并扣除，否则第三列会被挤换行 */
+const PANEL_BORDER = 1;
+/** 3 列方格宽：屏宽 - 页边距 - 卡片内边距 - 卡片描边 - 两列间隙 */
+const GRID_CELL_WIDTH = Math.floor(
+  (Dimensions.get('window').width -
+    PAGE_MARGIN * 2 -
+    CARD_PAD * 2 -
+    PANEL_BORDER * 2 -
+    spacing.sm * 2) /
+    3,
+);
 /** Hero 宽高比（冻结稿 ~830×580） */
 const HERO_ASPECT = 1.42;
 
@@ -370,6 +380,55 @@ export const CatchDetailScreen: React.FC = () => {
   const [pickingSpecies, setPickingSpecies] = useState(false);
   const [pickingLocation, setPickingLocation] = useState(false);
   const [voiceHint, setVoiceHint] = useState(false);
+
+  /* 感言输入框键盘避让：KAV 把 Sheet 抬到键盘上方后表单区收缩，感言是
+     最后一段字段——键盘弹出/聚焦感言时把滚动区推到底，输入框保持可见 */
+  const storyInputRef = useRef<TextInput>(null);
+  const editScrollRef = useRef<ScrollView>(null);
+  const editScrollMetrics = useRef({ contentH: 0, viewH: 0 });
+  const kbOpenRef = useRef(false);
+  const storyScrollDoneRef = useRef(false);
+
+  const scrollStoryIntoView = useCallback(() => {
+    const { contentH, viewH } = editScrollMetrics.current;
+    const maxOffset = Math.max(0, contentH - viewH);
+    if (maxOffset > 0) {
+      editScrollRef.current?.scrollTo({ y: maxOffset, animated: true });
+    }
+  }, []);
+
+  const storyFocused = useCallback(
+    () =>
+      Boolean(
+        storyInputRef.current &&
+          TextInput.State.currentlyFocusedInput() === storyInputRef.current
+      ),
+    []
+  );
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => {
+      kbOpenRef.current = true;
+      storyScrollDoneRef.current = false;
+      /* KAV 的收缩布局在键盘事件后下一帧生效：双 rAF 跨过重排再量 */
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (!storyScrollDoneRef.current && storyFocused()) {
+            storyScrollDoneRef.current = true;
+            scrollStoryIntoView();
+          }
+        })
+      );
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      kbOpenRef.current = false;
+      storyScrollDoneRef.current = false;
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [scrollStoryIntoView, storyFocused]);
 
   const editDirty = useMemo(
     () => JSON.stringify(editDraft) !== editSnapshot.current,
@@ -682,9 +741,15 @@ export const CatchDetailScreen: React.FC = () => {
     : `${photoCount} 张照片 · ${videoCount} 段视频`;
   const memoryEmpty = !loadingMemory && mediaList.length === 0;
 
+  /** 鱼获记忆生成入口暂时屏蔽，恢复时改回 true 即可 */
+  const MEMORY_GENERATION_ENABLED = false;
+
   /** 生成模块：真实记录 + 已登录 + 未 READY 时展示（READY 由 Flip 承接）。 */
   const showGenerationModule =
-    Boolean(catchId) && Boolean(session) && bside.status !== 'READY';
+    MEMORY_GENERATION_ENABLED &&
+    Boolean(catchId) &&
+    Boolean(session) &&
+    bside.status !== 'READY';
 
   const bsideResolvedUrl = bside.uri ? catchService.resolveUrl(bside.uri) : null;
 
@@ -693,6 +758,9 @@ export const CatchDetailScreen: React.FC = () => {
       key={`${item.uri}-${index}`}
       onPress={() => setViewer({ open: true, index })}
       scaleTo={0.97}
+      accessibilityLabel={
+        item.kind === 'video' ? `查看记忆视频 ${index + 1}` : `查看记忆照片 ${index + 1}`
+      }
     >
       <View style={styles.gridCell} pointerEvents="none">
         {item.kind === 'video' ? (
@@ -706,7 +774,7 @@ export const CatchDetailScreen: React.FC = () => {
             <View style={styles.videoShade} />
             <View style={styles.videoPlayWrap}>
               <View style={styles.videoPlayCircle}>
-                <Icon name="play" size={15} color="#FFFFFF" />
+                <AppIcon name="play" size={15} color="#FFFFFF" />
               </View>
             </View>
             {item.durationSec ? (
@@ -748,7 +816,7 @@ export const CatchDetailScreen: React.FC = () => {
   /** A 面媒体缺失 / 加载失败：同一几何内的中性兜底（页面状态规范 §3）。 */
   const heroMediaFallback = (
     <View style={styles.heroFallback}>
-      <Icon name="image-outline" size={26} color={coreColors.mistBlueGray} />
+      <AppIcon name="image_missing" size={26} color={coreColors.mistBlueGray} />
       <Text style={styles.heroFallbackText}>照片暂不可用</Text>
     </View>
   );
@@ -765,7 +833,7 @@ export const CatchDetailScreen: React.FC = () => {
           <>
             {displaySpeciesKey && displaySpeciesKey !== 'unknown' ? (
               <HeaderIconButton
-                name="book-outline"
+                name="fish_guide"
                 onPress={() =>
                   navigation.navigate('Species', { key: displaySpeciesKey })
                 }
@@ -773,7 +841,7 @@ export const CatchDetailScreen: React.FC = () => {
               />
             ) : null}
             <HeaderIconButton
-              name="share-outline"
+              name="share"
               onPress={() =>
                 navigation.navigate('ShareCreate', {
                   presetCatchId: remoteCatch.id,
@@ -893,7 +961,7 @@ export const CatchDetailScreen: React.FC = () => {
                 accessibilityLabel="翻面"
               >
                 <View style={styles.flipChip}>
-                  <Icon name="copy-outline" size={16} color="#FFFFFF" />
+                  <AppIcon name="flip" size={16} color="#FFFFFF" />
                 </View>
               </PressableScale>
             ) : null}
@@ -916,7 +984,7 @@ export const CatchDetailScreen: React.FC = () => {
               >
                 <View style={styles.editPill}>
                   <Text style={styles.editPillText}>编辑</Text>
-                  <Icon name="chevron-forward" size={13} color="#FFFFFF" />
+                  <AppIcon name="chevron_right" size={13} color="#FFFFFF" />
                 </View>
               </PressableScale>
             </View>
@@ -935,7 +1003,7 @@ export const CatchDetailScreen: React.FC = () => {
               style={styles.headIconHit}
               accessibilityLabel="编辑这次鱼获"
             >
-              <Icon name="pencil" size={16} color={textSecondary} />
+              <AppIcon name="edit" size={16} color={textSecondary} />
             </PressableScale>
           </View>
           {loadingMemory ? (
@@ -983,7 +1051,7 @@ export const CatchDetailScreen: React.FC = () => {
                 style={styles.memoryActionHit}
               >
                 <View style={styles.memoryAction}>
-                  <Icon name="images-outline" size={15} color={textSecondary} />
+                  <AppIcon name="gallery" size={15} color={textSecondary} />
                   <Text style={[styles.memoryActionText, { color: textPrimary }]}>
                     添加照片/视频
                   </Text>
@@ -995,7 +1063,7 @@ export const CatchDetailScreen: React.FC = () => {
                 style={styles.memoryActionHit}
               >
                 <View style={styles.memoryAction}>
-                  <Icon name="camera-outline" size={15} color={textSecondary} />
+                  <AppIcon name="camera" size={15} color={textSecondary} />
                   <Text style={[styles.memoryActionText, { color: textPrimary }]}>
                     继续拍照
                   </Text>
@@ -1007,7 +1075,7 @@ export const CatchDetailScreen: React.FC = () => {
                 style={styles.memoryActionHit}
               >
                 <View style={styles.memoryAction}>
-                  <Icon name="videocam-outline" size={15} color={textSecondary} />
+                  <AppIcon name="video" size={15} color={textSecondary} />
                   <Text style={[styles.memoryActionText, { color: textPrimary }]}>
                     录制视频
                   </Text>
@@ -1050,7 +1118,7 @@ export const CatchDetailScreen: React.FC = () => {
                     style={styles.genButtonHit}
                   >
                     <View style={styles.genButton}>
-                      <Icon name="refresh" size={15} color={textPrimary} />
+                      <AppIcon name="retry_refresh" size={15} color={textPrimary} />
                       <Text style={[styles.genButtonText, { color: textPrimary }]}>
                         重新生成
                       </Text>
@@ -1068,7 +1136,7 @@ export const CatchDetailScreen: React.FC = () => {
                     style={styles.genButtonHit}
                   >
                     <View style={styles.genButton}>
-                      <Icon name="sparkles-outline" size={15} color={textPrimary} />
+                      <AppIcon name="sparkles" size={15} color={textPrimary} />
                       <Text style={[styles.genButtonText, { color: textPrimary }]}>
                         生成鱼获记忆
                       </Text>
@@ -1097,6 +1165,9 @@ export const CatchDetailScreen: React.FC = () => {
         statusBarTranslucent
         onRequestClose={closeEditSheet}
       >
+        {/* 键盘避让：MainActivity edge-to-edge 后弹窗不再随键盘 resize
+            （statusBarTranslucent 的 Modal 尤甚），双平台统一 KAV padding
+            把 Sheet 整体抬到键盘上方；感言聚焦后由上方键盘监听滚进可视区 */}
         <KeyboardAvoidingView style={styles.editFill} behavior="padding">
           {/* 遮罩压暗底层详情页（冻结稿 ~38%）；点击交由关闭确认把关 */}
           <TouchableWithoutFeedback onPress={closeEditSheet}>
@@ -1124,13 +1195,31 @@ export const CatchDetailScreen: React.FC = () => {
                 style={styles.editCloseHit}
                 accessibilityLabel="关闭编辑"
               >
-                <Icon name="close" size={20} color={textSecondary} />
+                <AppIcon name="close" size={20} color={textSecondary} />
               </PressableScale>
             </View>
 
-            {/* 表单内容直接排布（共享 BottomSheet 同模式）：
-                maxHeight 包裹容器内的 flex:1 ScrollView 会退化成 0 高导致字段不可见 */}
-            <View style={styles.editBody}>
+            {/* 表单可滚动：键盘弹出（KAV 收缩可视高度）或小屏字段超高时滚动可达。
+                不用 flex:1 ScrollView——maxHeight 容器内会退化成 0 高导致字段不可见；
+                flexShrink:1 让 ScrollView 随内容自适应、父容器触顶时收缩出滚动区 */}
+            <ScrollView
+              ref={editScrollRef}
+              style={styles.editBodyScroll}
+              contentContainerStyle={styles.editBody}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              onLayout={(e) => {
+                editScrollMetrics.current.viewH = e.nativeEvent.layout.height;
+                /* KAV 抬升引发的重排回调：聚焦感言时滚进可视区（补键盘事件时序兜底） */
+                if (kbOpenRef.current && !storyScrollDoneRef.current && storyFocused()) {
+                  storyScrollDoneRef.current = true;
+                  scrollStoryIntoView();
+                }
+              }}
+              onContentSizeChange={(_w, h) => {
+                editScrollMetrics.current.contentH = h;
+              }}
+            >
               {/* 基础信息 · 鱼种 */}
               <PressableScale
                 onPress={() => void pickSpeciesForEdit()}
@@ -1140,7 +1229,7 @@ export const CatchDetailScreen: React.FC = () => {
                   style={[styles.fieldCard, styles.fieldRowCard]}
                   pointerEvents="none"
                 >
-                  <Icon name="fish-outline" size={17} color={coreColors.morningGold} />
+                  <AppIcon name="species" size={17} color={coreColors.morningGold} />
                   <Text style={[styles.fieldLabel, { color: textHint }]}>
                     鱼种
                   </Text>
@@ -1150,8 +1239,8 @@ export const CatchDetailScreen: React.FC = () => {
                   >
                     {editDraft.speciesName || '选择鱼种'}
                   </Text>
-                  <Icon
-                    name="chevron-forward"
+                  <AppIcon
+                    name="chevron_right"
                     size={15}
                     color={coreColors.mistBlueGray}
                   />
@@ -1162,8 +1251,8 @@ export const CatchDetailScreen: React.FC = () => {
               <View style={styles.measurePair}>
                 <View style={[styles.fieldCard, styles.measureCard]}>
                   <View style={styles.measureHead}>
-                    <Icon
-                      name="resize-outline"
+                    <AppIcon
+                      name="length"
                       size={15}
                       color={coreColors.morningGold}
                     />
@@ -1195,8 +1284,8 @@ export const CatchDetailScreen: React.FC = () => {
                 </View>
                 <View style={[styles.fieldCard, styles.measureCard]}>
                   <View style={styles.measureHead}>
-                    <Icon
-                      name="scale-outline"
+                    <AppIcon
+                      name="weight"
                       size={15}
                       color={coreColors.morningGold}
                     />
@@ -1242,8 +1331,8 @@ export const CatchDetailScreen: React.FC = () => {
                   style={[styles.fieldCard, styles.fieldRowCard]}
                   pointerEvents="none"
                 >
-                  <Icon
-                    name="location-outline"
+                  <AppIcon
+                    name="location"
                     size={17}
                     color={coreColors.morningGold}
                   />
@@ -1256,8 +1345,8 @@ export const CatchDetailScreen: React.FC = () => {
                   >
                     {editDraft.location || '选择钓点'}
                   </Text>
-                  <Icon
-                    name="chevron-forward"
+                  <AppIcon
+                    name="chevron_right"
                     size={15}
                     color={coreColors.mistBlueGray}
                   />
@@ -1277,18 +1366,26 @@ export const CatchDetailScreen: React.FC = () => {
                   >
                     {/* 行容器需自带：PressableScale 内层 Animated.View 默认纵向排列 */}
                     <View style={styles.voiceHit}>
-                      <Icon name="mic" size={14} color="#2F6FD0" />
+                      <AppIcon name="voice" size={14} color="#2F6FD0" />
                       <Text style={styles.voiceLabel}>语音录入</Text>
                     </View>
                   </PressableScale>
                 </View>
                 <View style={styles.storyBox}>
                   <TextInput
+                    ref={storyInputRef}
                     style={[styles.storyInput, { color: textPrimary }]}
                     value={editDraft.story}
                     onChangeText={(value) =>
                       setEditDraft((d) => ({ ...d, story: value }))
                     }
+                    onFocus={() => {
+                      /* 键盘已开（不会再触发 keyboardDidShow）：聚焦即滚进可视区 */
+                      if (kbOpenRef.current) {
+                        storyScrollDoneRef.current = true;
+                        requestAnimationFrame(() => scrollStoryIntoView());
+                      }
+                    }}
                     placeholder="记录这一刻的感受…"
                     placeholderTextColor={coreColors.mistBlueGray}
                     multiline
@@ -1301,7 +1398,7 @@ export const CatchDetailScreen: React.FC = () => {
                   </Text>
                 ) : null}
               </View>
-            </View>
+            </ScrollView>
 
             <View style={styles.editActions}>
               <PressableScale
@@ -1741,6 +1838,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
+  } as ViewStyle,
+  /** 表单滚动容器：内容自适应高度，Sheet 被 maxHeight/键盘压缩时收缩出滚动区 */
+  editBodyScroll: {
+    flexShrink: 1,
   } as ViewStyle,
   editBody: {
     paddingHorizontal: CARD_PAD + 2,

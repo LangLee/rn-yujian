@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   BackHandler,
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -11,49 +12,42 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
-import { StackNavigationProp } from '../../navigation/types';
-import { fs, font, spacing } from '../../constants/tokens';
+import { AppIcon } from '../../components/icons/AppIcon';
+import { CatchHubTab, StackNavigationProp } from '../../navigation/types';
+import { fs, spacing } from '../../constants/tokens';
 import { coreColors } from '../../constants/coreUi';
 import { MorningLakeScene } from '../../components/coreui';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { MyCatchesTab } from './MyCatchesTab';
-import { ShareHomeTab } from './ShareHomeTab';
-import { GrowthTab } from './GrowthTab';
-
-export type CatchHubTab = 'catches' | 'share' | 'growth';
 
 type CatchHubNavigationProp = StackNavigationProp;
-type CatchHubRoute = RouteProp<{ MyCatches: { tab?: CatchHubTab } | undefined }, 'MyCatches'>;
-
-const TABS: { key: CatchHubTab; label: string }[] = [
-  { key: 'catches', label: '我的鱼获' },
-  { key: 'share', label: '鱼获分享' },
-  { key: 'growth', label: '成长历程' },
-];
+type CatchHubRoute = RouteProp<
+  { MyCatches: { tab?: CatchHubTab; speciesQuery?: string } | undefined },
+  'MyCatches'
+>;
 
 /**
- * 我的鱼获 Hub（P20 容器 + My Catches V2 头部合同）：
- * - 常规：`← 我的鱼获 [Search] [Filter]`（Search/Filter 仅我的鱼获 Tab 出现）；
+ * 我的鱼获 Hub（My Catches V2 容器 + 头部合同）：
+ * - 常规：`← 我的鱼获 [Search] [Filter]`；
  * - Search Mode：`← [搜索鱼种、地点或日期] 取消`，键盘自动打开，标题让位（Search Spec §2）；
  * - Filter Action：展开/收起 F1；任一非默认筛选生效时显示低权重状态提示点（F1 Spec §5）。
- * 三个 Tab 常驻挂载保留各自浏览状态，切换只做显隐。
+ * 分享 / 成长模块当前隐藏，仅保留鱼获列表；tab 参数保留类型兼容、不再分流。
  */
 export const CatchHubScreen: React.FC = () => {
   const navigation = useNavigation<CatchHubNavigationProp>();
   const route = useRoute<CatchHubRoute>();
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<CatchHubTab>(route.params?.tab ?? 'catches');
 
-  /* 我的鱼获 Tab 的搜索 / 筛选头部状态（ lifted 供头部与 Tab 共享） */
+  /* 搜索 / 筛选头部状态（lifted 供头部与列表共享） */
   const [searchMode, setSearchMode] = useState(false);
-  const [query, setQuery] = useState('');
+  /** 鱼种详情「我的{鱼种}」进入：预置鱼种筛选（Species Detail §7.3） */
+  const [query, setQuery] = useState(route.params?.speciesQuery ?? '');
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterActive, setFilterActive] = useState(false);
 
   useEffect(() => {
-    if (route.params?.tab) {
-      setTab(route.params.tab);
+    if (typeof route.params?.speciesQuery === 'string') {
+      setQuery(route.params.speciesQuery);
     }
   }, [route.params]);
 
@@ -61,19 +55,22 @@ export const CatchHubScreen: React.FC = () => {
     // 取消：退出 Search Mode、清 query、关键盘；Filter 条件保留（Search Spec §11）
     setSearchMode(false);
     setQuery('');
+    Keyboard.dismiss();
   }, []);
 
-  /* Android Back：Search Mode 下先退出搜索再返回（Search Spec §14） */
+  /* Android Back：第一次收键盘，再次退出 Search Mode（Search Spec §14） */
   useEffect(() => {
     if (!searchMode) return;
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (Keyboard.isVisible()) {
+        Keyboard.dismiss();
+        return true;
+      }
       exitSearch();
       return true;
     });
     return () => handler.remove();
   }, [searchMode, exitSearch]);
-
-  const showSearchHeader = searchMode && tab === 'catches';
 
   const renderBack = () => (
     /* Icon Action V1 / NAVIGATION：44dp 目标 + 22dp glyph，无缩放按压 */
@@ -83,13 +80,14 @@ export const CatchHubScreen: React.FC = () => {
       accessibilityRole="button"
       accessibilityLabel="返回"
     >
-      <Icon name="chevron-back" size={22} color={coreColors.deepLakeBlue} />
+      <AppIcon name="back" size={22} color={coreColors.deepLakeBlue} />
     </Pressable>
   );
 
   return (
     <View style={styles.screen}>
-      <MorningLakeScene level="data" />
+      {/* v2 列表页：不盖全屏白纱，场景直接呈现；白蒙版只保留在鱼获卡片上 */}
+      <MorningLakeScene level="data" salience={1} />
 
       {/* 顶栏：常规 = 返回 + 标题 + Search/Filter；Search Mode = 返回 + 搜索框 + 取消 */}
       <View
@@ -99,11 +97,11 @@ export const CatchHubScreen: React.FC = () => {
         ]}
       >
         {renderBack()}
-        {showSearchHeader ? (
+        {searchMode ? (
           <>
-            {/* Search Bar 视觉合同：44dp / radius 14 / Mist Glass / 1dp 湖灰边 / 15sp */}
+            {/* Search Bar 视觉合同：44dp / radius 14 / Mist Glass / 1dp 湖灰边（聚焦叠极轻 Lake Blue）/ 15sp */}
             <View style={headerStyles.searchBar}>
-              <Icon name="search" size={19} color={coreColors.deepLakeBlue} />
+              <AppIcon name="search" size={19} color={coreColors.deepLakeBlue} />
               <TextInput
                 style={headerStyles.searchInput}
                 value={query}
@@ -116,12 +114,13 @@ export const CatchHubScreen: React.FC = () => {
               />
               {query.length > 0 ? (
                 <PressableScale
+                  /* × 仅清 query，保持 Search Mode 与键盘（Search Spec §11） */
                   onPress={() => setQuery('')}
                   scaleTo={0.9}
                   style={headerStyles.clearHit}
                   accessibilityLabel="清除搜索词"
                 >
-                  <Icon name="close-circle" size={18} color={coreColors.mistBlueGray} />
+                  <AppIcon name="clear_field" size={18} color={coreColors.mistBlueGray} />
                 </PressableScale>
               ) : null}
             </View>
@@ -134,115 +133,55 @@ export const CatchHubScreen: React.FC = () => {
             <View style={headerStyles.titleBlock}>
               <Text style={headerStyles.title}>我的鱼获</Text>
             </View>
-            {tab === 'catches' ? (
-              <View style={headerStyles.actions}>
-                <PressableScale
-                  onPress={() => {
-                    setSearchMode(true);
-                    setFilterOpen(false);
-                  }}
-                  scaleTo={0.9}
-                  style={headerStyles.hit}
-                  accessibilityLabel="搜索"
-                >
-                  <Icon name="search" size={21} color={coreColors.deepLakeBlue} />
-                </PressableScale>
-                <PressableScale
-                  onPress={() => setFilterOpen((value) => !value)}
-                  scaleTo={0.9}
-                  style={headerStyles.hit}
-                  accessibilityLabel="筛选"
-                >
-                  <Icon
-                    name="funnel-outline"
-                    size={21}
-                    color={
-                      filterOpen || filterActive
-                        ? coreColors.deepLakeBlue
-                        : coreColors.lakeBlue
-                    }
-                  />
-                  {/* 非默认筛选生效：低权重状态提示点（面板未展开时显示） */}
-                  {filterActive && !filterOpen ? <View style={headerStyles.filterDot} /> : null}
-                </PressableScale>
-              </View>
-            ) : (
-              <View style={headerStyles.actionsPlaceholder} />
-            )}
+            <View style={headerStyles.actions}>
+              <PressableScale
+                onPress={() => {
+                  setSearchMode(true);
+                  setFilterOpen(false);
+                }}
+                scaleTo={0.9}
+                style={headerStyles.hit}
+                accessibilityLabel="搜索"
+              >
+                <AppIcon name="search" size={21} color={coreColors.deepLakeBlue} />
+              </PressableScale>
+              <PressableScale
+                onPress={() => setFilterOpen((value) => !value)}
+                scaleTo={0.9}
+                style={headerStyles.hit}
+                accessibilityLabel="筛选"
+              >
+                <AppIcon
+                  name="filter"
+                  size={21}
+                  color={
+                    filterOpen || filterActive
+                      ? coreColors.deepLakeBlue
+                      : coreColors.lakeBlue
+                  }
+                />
+                {/* 非默认筛选生效：低权重状态提示点（面板未展开时显示） */}
+                {filterActive && !filterOpen ? <View style={headerStyles.filterDot} /> : null}
+              </PressableScale>
+            </View>
           </>
         )}
       </View>
 
-      {/* 三段式切换（Search Mode 保持可用，便于结果与分享/成长互切） */}
-      <View
-        style={[
-          styles.segmentBar,
-          {
-            marginTop: spacing.md,
-            backgroundColor: 'rgba(255,255,255,0.60)',
-            borderColor: 'rgba(255,255,255,0.55)',
-          },
-        ]}
-      >
-        {TABS.map((item) => {
-          const active = tab === item.key;
-          return (
-            <PressableScale
-              key={item.key}
-              onPress={() => setTab(item.key)}
-              scaleTo={0.96}
-              style={styles.segmentHit}
-            >
-              <View style={styles.segment}>
-                {/* Android：backgroundColor 在 transparent ↔ 色值间切换会重建背景 drawable 丢圆角，
-                    改为常驻圆角背景层并用 opacity 显隐（opacity 变化不重建 drawable） */}
-                <View
-                  style={[
-                    styles.segmentPill,
-                    {
-                      backgroundColor: '#FFFFFF',
-                      opacity: active ? 1 : 0,
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.segmentText,
-                    { color: active ? coreColors.deepLakeBlue : coreColors.lakeBlue },
-                    active && styles.segmentTextActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-                {active ? <View style={styles.segmentUnderline} /> : null}
-              </View>
-            </PressableScale>
-          );
-        })}
-      </View>
-
-      {/* Tab 内容（常驻挂载，保留各自滚动与筛选状态） */}
+      {/* 鱼获列表（My Catches V2：摘要 → F1 → Timeline → 相机入口） */}
       <View style={styles.body}>
-        <View style={[styles.tabPane, tab !== 'catches' && styles.tabPaneHidden]}>
-          <MyCatchesTab
-            searchMode={searchMode}
-            query={query}
-            onQueryChange={setQuery}
-            onEditFilterFromSearch={() => {
-              // 点击 Filter Summary：返回原页面并展开 F1，Search query 保留（§12）
-              setSearchMode(false);
-              setFilterOpen(true);
-            }}
-            filterOpen={filterOpen}
-            onFilterActiveChange={setFilterActive}
-          />
-        </View>
-        <View style={[styles.tabPane, tab !== 'share' && styles.tabPaneHidden]}>
-          <ShareHomeTab />
-        </View>
-        <View style={[styles.tabPane, tab !== 'growth' && styles.tabPaneHidden]}>
-          <GrowthTab />
-        </View>
+        <MyCatchesTab
+          searchMode={searchMode}
+          query={query}
+          onQueryChange={setQuery}
+          onEditFilterFromSearch={() => {
+            // 点击 Filter Summary：返回原页面并展开 F1，Search query 保留（§12）
+            setSearchMode(false);
+            setFilterOpen(true);
+          }}
+          filterOpen={filterOpen}
+          onFilterActiveChange={setFilterActive}
+        />
       </View>
     </View>
   );
@@ -279,10 +218,6 @@ const headerStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
   } as ViewStyle,
-  actionsPlaceholder: {
-    minWidth: 40,
-    minHeight: 40,
-  } as ViewStyle,
   /* Search Mode */
   searchBar: {
     flex: 1,
@@ -293,7 +228,8 @@ const headerStyles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(116,136,151,0.22)',
+    /* Search Mode 常驻聚焦：1dp 湖灰底 + 极轻 Lake Blue 聚焦环（Search Spec §3） */
+    borderColor: 'rgba(77,158,161,0.35)',
     paddingHorizontal: 12,
     marginHorizontal: spacing.xs,
   } as ViewStyle,
@@ -334,47 +270,8 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   } as ViewStyle,
-  segmentBar: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.page,
-    borderRadius: 26,
-    borderWidth: 1,
-    padding: 4,
-  } as ViewStyle,
-  segmentHit: {
-    flex: 1,
-  } as ViewStyle,
-  segment: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 9,
-  } as ViewStyle,
-  segmentPill: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 22,
-  } as ViewStyle,
-  segmentText: {
-    fontSize: fs(15),
-    fontWeight: '500',
-  } as TextStyle,
-  segmentTextActive: {
-    fontWeight: '700',
-  } as TextStyle,
-  segmentUnderline: {
-    width: 18,
-    height: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: coreColors.morningGold,
-    marginTop: 3,
-  } as ViewStyle,
   body: {
     flex: 1,
-    marginTop: spacing.lg,
-  } as ViewStyle,
-  tabPane: {
-    flex: 1,
-  } as ViewStyle,
-  tabPaneHidden: {
-    display: 'none',
+    marginTop: spacing.xs,
   } as ViewStyle,
 });

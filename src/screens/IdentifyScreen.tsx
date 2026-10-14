@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { RouteProp } from '@react-navigation/native';
 import { useRecognition } from '../contexts/RecognitionContext';
@@ -444,7 +444,9 @@ export const IdentifyScreen: React.FC = () => {
   const fallbackToManualRuler = useCallback((reason?: string) => {
     setRulerMode('manual');
     if (reason === 'engine_not_installed') {
-      setError('AR 引擎未安装，已切换手动量尺');
+      setError('当前系统未提供 AR 引擎，已切换手动量尺');
+    } else if (reason === 'engine_too_old') {
+      setError('AR 引擎版本过旧，可在系统更新后重试；已切换手动量尺');
     } else if (reason === 'unsupported_device') {
       setError('此设备不支持 AR 量尺，已切换手动量尺');
     } else if (reason) {
@@ -510,9 +512,9 @@ export const IdentifyScreen: React.FC = () => {
               ) : (
                 <View style={[styles.statusDot, statusError && styles.statusDotError]}>
                   {statusMark === 'check' ? (
-                    <Icon name="checkmark" size={10} color="#FFFFFF" />
+                    <AppIcon name="check" size={10} color="#FFFFFF" />
                   ) : statusMark === 'close' ? (
-                    <Icon name="close" size={9} color="#FFFFFF" />
+                    <AppIcon name="close" size={9} color="#FFFFFF" />
                   ) : (
                     <Text style={styles.statusWarnMark}>!</Text>
                   )}
@@ -550,7 +552,7 @@ export const IdentifyScreen: React.FC = () => {
                   {locating ? (
                     <ActivityIndicator size="small" color="#EAD9AE" />
                   ) : (
-                    <Icon name="location-outline" size={12} color="#EAD9AE" />
+                    <AppIcon name="location" size={12} color="#EAD9AE" />
                   )}
                   <Text style={styles.locPillText} numberOfLines={1}>
                     {spotLocation
@@ -562,7 +564,7 @@ export const IdentifyScreen: React.FC = () => {
                           : '未定位 · 点击选择钓点'}
                   </Text>
                   {spotLocation && privacy.manualLocationEdit ? (
-                    <Icon name="chevron-forward" size={11} color="rgba(251,253,252,0.7)" />
+                    <AppIcon name="chevron_right" size={11} color="rgba(251,253,252,0.7)" />
                   ) : null}
                 </View>
               </PressableScale>
@@ -622,7 +624,7 @@ export const IdentifyScreen: React.FC = () => {
           accessibilityRole="button"
         >
           <View style={styles.albumBtn}>
-            <Icon name="images-outline" size={22} color="#F6FAF8" />
+            <AppIcon name="gallery" size={22} color="#F6FAF8" />
           </View>
         </PressableScale>
       </View>

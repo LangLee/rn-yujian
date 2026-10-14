@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, View, ViewStyle, StyleProp } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../icons/AppIcon';
 import { motion } from '../../constants/tokens';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -9,8 +9,8 @@ export interface GlassIconButtonProps {
   onPress: () => void;
   /** 按钮直径（玻璃圆外圈），默认 88 */
   size?: number;
-  /** Ionicons 图标名，默认 camera-outline */
-  icon?: string;
+  /** 图标语义名（icon_library_v0_1），默认 camera */
+  icon?: AppIconName;
   /** 自定义图标节点（优先级高于 icon） */
   iconNode?: React.ReactNode;
   /** 是否禁用 */
@@ -43,7 +43,7 @@ export interface GlassIconButtonProps {
 export const GlassIconButton: React.FC<GlassIconButtonProps> = ({
   onPress,
   size = 88,
-  icon = 'camera-outline',
+  icon = 'camera',
   iconNode,
   disabled,
   breath = true,
@@ -185,7 +185,7 @@ export const GlassIconButton: React.FC<GlassIconButtonProps> = ({
               ]}
             >
               {iconNode ?? (
-                <Icon
+                <AppIcon
                   name={icon}
                   size={size * 0.33}
                   color={iconColor}

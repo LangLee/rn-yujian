@@ -1,7 +1,8 @@
 /**
  * 量尺测长链路测试：
  * 拍照页量得的长度随 SelectedImageMeta.measuredLengthCm 进入识别流程，
- * 识别结果页（P04）应自动填入长度输入框并给出提示，用户修改后提示退场。
+ * 识别结果页（P04）长度行自动填入并展示 值+单位 与提示，用户在输入
+ * Sheet 中修改并完成后提示退场。
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -133,23 +134,27 @@ describe('量尺测长 → 识别结果自动填入', () => {
     mockImageState = { ...mockImage };
   });
 
-  test('measuredLengthCm 存在时，长度行输入自动填入（保留 1 位小数）并显示提示', async () => {
+  test('measuredLengthCm 存在时，长度行自动填入（保留 1 位小数、展示单位）并显示提示', async () => {
     render(<TestApp />);
 
     expect(await screen.findByText('草鱼')).toBeTruthy();
-    // 32.56 → 四舍五入到 32.6（行输入卡内联输入框的值，无单位）
-    expect(screen.getByDisplayValue('32.6')).toBeTruthy();
+    // 32.56 → 四舍五入到 32.6；行内展示 值+单位（cm）
+    expect(screen.getByText('32.6 cm')).toBeTruthy();
     expect(screen.getByText('已填入量尺测量结果 32.6 cm，可手动修改')).toBeTruthy();
   });
 
-  test('用户在行输入中手动改长度后，自动填入提示消失', async () => {
+  test('用户在输入 Sheet 中手动改长度并完成后，自动填入提示消失、行内更新为新值', async () => {
     render(<TestApp />);
 
     expect(await screen.findByText('草鱼')).toBeTruthy();
-    const input = await screen.findByLabelText('长度输入框');
+    // 整行点按弹数值输入 Sheet
+    fireEvent.press(screen.getByLabelText('长度字段，点按输入长度'));
+    const input = await screen.findByLabelText('鱼获长度输入框，单位cm');
     expect(input.props.value).toBe('32.6');
     fireEvent.changeText(input, '40');
-    expect(screen.getByDisplayValue('40')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: '完成' }));
+    // 提交后行内展示新值 + 单位，自动填入提示退场
+    expect(screen.getByText('40 cm')).toBeTruthy();
     expect(screen.queryByText('已填入量尺测量结果 32.6 cm，可手动修改')).toBeNull();
   });
 

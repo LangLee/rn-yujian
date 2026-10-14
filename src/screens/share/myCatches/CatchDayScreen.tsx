@@ -8,6 +8,7 @@ import { catchMemoryService, CatchMemoryData } from '../../../services/catchMemo
 import { coreColors, PAGE_MARGIN } from '../../../constants/coreUi';
 import { fs, spacing } from '../../../constants/tokens';
 import { ScreenHeader } from '../../../components';
+import { AppIcon } from '../../../components/icons/AppIcon';
 import { MorningLakeScene } from '../../../components/coreui';
 import {
   buildEntries,
@@ -72,16 +73,24 @@ export const CatchDayScreen: React.FC = () => {
     ? `${first.month}月${first.day}日${first.year !== new Date().getFullYear() ? ` · ${first.year}` : ''}`
     : '当天鱼获';
   const summary = day?.summary ?? '';
+  const weekday = day?.weekday ?? '';
 
   return (
     <View style={styles.screen}>
-      <MorningLakeScene level="data" />
+      {/* 与列表页一致：不盖全屏白纱，白蒙版只在鱼获卡片上 */}
+      <MorningLakeScene level="data" salience={1} />
       <ScreenHeader title={title} onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        {summary ? <Text style={styles.summary}>{summary}</Text> : null}
+        <View style={styles.summaryRow}>
+          <AppIcon name="location" size={12} color={coreColors.mistBlueGray} />
+          <Text style={styles.summary} numberOfLines={1}>
+            {weekday ? `${weekday} · ` : ''}
+            {summary}
+          </Text>
+        </View>
         {entries.map((entry) => (
           <View key={entry.catch.id} style={styles.cardWrap}>
             <FishRecordRowCard
@@ -112,10 +121,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: PAGE_MARGIN,
     paddingTop: spacing.sm,
   } as ViewStyle,
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: spacing.md,
+    minHeight: 18,
+  } as ViewStyle,
   summary: {
+    flexShrink: 1,
     fontSize: fs(12),
     color: coreColors.mistBlueGray,
-    marginBottom: spacing.md,
   } as TextStyle,
   cardWrap: {
     marginBottom: 10,

@@ -194,8 +194,8 @@ export const coreMotion = {
         [4600, 0],
       ] as [number, number][],
     },
-    /** 涟漪：仅 1 个，scale 1→1.22，alpha .30→0，3200ms */
-    ripple: { durationMs: 3200, scaleFrom: 1, scaleTo: 1.22, alphaFrom: 0.3, alphaTo: 0 },
+    /** 涟漪：仅 1 个，scale 1→1.22，3200ms（alphaFrom 依产品调优 0.3→0.42 提亮） */
+    ripple: { durationMs: 3200, scaleFrom: 1, scaleTo: 1.22, alphaFrom: 0.42, alphaTo: 0 },
     /** 云：约 0.2 参考px/s，基线周期 ~60s */
     cloud: { speedRefPxPerS: 0.2, baselineCycleMs: 60000 },
     /** 晨光粒子：4800ms，max alpha ≤0.18，6-12 粒 */
@@ -232,7 +232,7 @@ export const emptyHomeAnchors = {
   bobber: { x: 518, y: 1084, w: 24, h: 122, waterContactY: 1168 },
   ripple: { x: 411, y: 1127, w: 238, h: 82, centerX: 530, centerY: 1168 },
   rod: { x: 0, y: 950, w: 450, h: 365 },
-  line: { x: 400, y: 950, w: 170, h: 250 },
+  /** 鱼线为矢量松弛曲线（见 MorningLakeScene），起点=竿尖像素 (399,23)+rod 锚点 */
   cameraCenter: { xNorm: 0.5, yNorm: 0.8354 },
 } as const;
 

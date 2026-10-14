@@ -10,7 +10,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../../navigation/types';
 import { useCatchArchive } from '../../contexts/CatchContext';
 import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryService';
@@ -19,6 +19,8 @@ import { font, fs, spacing } from '../../constants/tokens';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { YuJianPrimaryCaptureButton } from '../../components/coreui';
 import {
+  ActiveCondition,
+  ActiveConditionKey,
   CatchEntry,
   DayGroup,
   EMPTY_FILTER,
@@ -27,11 +29,13 @@ import {
   groupByMonthAndDay,
   isFilterActive,
   activeConditionCount,
+  activeConditions,
   matchFilter,
   matchSearch,
   resolveEmptyKind,
   resolveGrowthMarks,
   sortNewestFirst,
+  withoutCondition,
 } from '../../utils/myCatchesTimeline';
 import { FishRecordRowCard } from './myCatches/FishRecordRowCard';
 import { F1FilterPanel } from './myCatches/F1FilterPanel';
@@ -41,6 +45,8 @@ type MyCatchesTabNavigationProp = StackNavigationProp<RootStackParamList, 'MyCat
 /** 初始加载最近 3 个月，滚动到历史边界再加载更早（Timeline Scroll Spec §6） */
 const INITIAL_MONTH_WINDOW = 3;
 const MONTH_PAGE_SIZE = 3;
+/** 搜索防抖（Search Spec §16：150–250ms，用户感知即时） */
+const SEARCH_DEBOUNCE_MS = 200;
 /** 最近搜索最多保存 6 个（Search Spec §6） */
 const RECENT_SEARCH_KEY = '@yujian/recent_catch_search';
 const RECENT_SEARCH_MAX = 6;
@@ -64,10 +70,15 @@ type Row =
   | { kind: 'expand'; dayKey: string; hidden: number; total: number }
   | { kind: 'collapse'; dayKey: string };
 
-/** 时间线轨道几何：竖线中心 x（相对内容左缘）与日期栏后的内容缩进 */
-const RAIL_CENTER_X = 6;
-/** 日期栏（rail + 间距 + 23 SEP）之后的内容统一缩进 */
-const CONTENT_INSET = 72;
+/**
+ * 时间线轨道几何（my_catches_v2 冻结稿 @941px）：
+ * 日期栏（大日期 + SEP + 星期）在页边距与轨道之间；轨道中心 ≈ 屏宽 18%，
+ * 卡片列左缘 ≈ 屏宽 21%（轨道右侧 ~12dp）。相对内容左缘取整为 48 / 60。
+ */
+const RAIL_INSET = 48;
+const CARD_INSET = 60;
+/** 轨道线色（设计稿 #BCC3CE 灰蓝） */
+const RAIL_COLOR = 'rgba(184,198,206,0.85)';
 
 /**
  * 我的鱼获 Tab · My Catches V2（Chronological Archive，FROZEN）。
@@ -136,15 +147,22 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
   const entries = useMemo(() => buildEntries(catches, memories), [catches, memories]);
   const marks = useMemo(() => resolveGrowthMarks(entries), [entries]);
 
+  /* 搜索防抖：头部即时显示输入，时间线按防抖后的 query 重算（Search Spec §16） */
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   const filtered = useMemo(() => {
     const now = new Date();
     return sortNewestFirst(
       entries.filter(
         (entry) =>
-          matchSearch(entry, query, marks) && matchFilter(entry, filter, marks, now),
+          matchSearch(entry, debouncedQuery, marks) && matchFilter(entry, filter, marks, now),
       ),
     );
-  }, [entries, query, filter, marks]);
+  }, [entries, debouncedQuery, filter, marks]);
 
   const allMonths = useMemo(() => groupByMonthAndDay(filtered), [filtered]);
   const months = useMemo(() => allMonths.slice(0, monthWindow), [allMonths, monthWindow]);
@@ -158,13 +176,13 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
     loading,
     hasError: !!error,
     rawCount: catches.length,
-    query,
+    query: debouncedQuery,
     filterActive,
     resultCount: filtered.length,
   });
 
   /* 搜索/筛选条件变化：折叠态复位、回到结果顶部（Timeline Scroll Spec §7） */
-  const conditionKey = `${query}|${JSON.stringify(filter)}`;
+  const conditionKey = `${debouncedQuery}|${JSON.stringify(filter)}`;
   const lastConditionRef = useRef(conditionKey);
   useEffect(() => {
     if (query.trim()) {
@@ -174,7 +192,7 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
     lastConditionRef.current = conditionKey;
     setExpandedDays(new Set());
     setMonthWindow(INITIAL_MONTH_WINDOW);
-    queryHadResultsRef.current = filtered.length > 0 && query.trim().length > 0;
+    queryHadResultsRef.current = filtered.length > 0 && debouncedQuery.trim().length > 0;
     requestAnimationFrame(() => {
       listRef.current?.scrollToLocation({
         sectionIndex: 0,
@@ -187,6 +205,16 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
     // filtered 依赖 conditionKey 派生，避免重复触发
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conditionKey]);
+
+  /* 点击 Hub 头部 Search / Filter：列表滚回顶部（F1 面板 / 最近搜索位于 ListHeader，滚到首行会看不到）；收起时不打断阅读位置 */
+  useEffect(() => {
+    if (!searchMode && !filterOpen) return;
+    requestAnimationFrame(() => {
+      listRef.current
+        ?.getScrollResponder()
+        ?.scrollTo({ x: 0, y: 0, animated: true });
+    });
+  }, [searchMode, filterOpen]);
 
   /* ---------- 最近搜索（仅在有效结果时写入） ---------- */
 
@@ -353,15 +381,41 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
     [filtered],
   );
 
+  const visibleDays = useMemo(
+    () =>
+      new Set(
+        filtered.map((entry) =>
+          entry.date ? `${entry.year}-${entry.month}-${entry.day}` : 'unknown',
+        ),
+      ).size,
+    [filtered],
+  );
+
+  const speciesNameOf = useCallback(
+    (key: string) => speciesStats.find((item) => item.key === key)?.name ?? key,
+    [speciesStats],
+  );
+
+  /** 维度级已选条件（Filter Spec V2 §4 compact removable summary / B4 摘要卡） */
+  const conditions = useMemo(
+    () => activeConditions(filter, speciesNameOf),
+    [filter, speciesNameOf],
+  );
+
+  const removeCondition = useCallback(
+    (key: ActiveConditionKey) => setFilter((prev) => withoutCondition(prev, key)),
+    [],
+  );
+
   const listHeader = (
     <View>
-      {/* 档案摘要（Search Focused 阶段隐藏 / 降权） */}
+      {/* 档案摘要（Search Focused 阶段隐藏 / 降权；冻结稿：N 次鱼获 · M 种鱼 · D 记录天数） */}
       {!searchMode ? (
         <View style={styles.summaryRow}>
           <Text style={styles.summaryText}>
             {catches.length === 0
               ? '时间档案'
-              : `${filtered.length} 次鱼获 · ${visibleSpecies} 种鱼`}
+              : `${filtered.length} 次鱼获 · ${visibleSpecies} 种鱼 · ${visibleDays} 记录天数`}
           </Text>
           {query.trim() ? (
             <PressableScale
@@ -377,16 +431,17 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
         </View>
       ) : query.trim() ? (
         <View style={styles.searchMetaWrap}>
+          {/* B4 · Search + Filter：低权重摘要卡，点击返回原页面并展开 F1（query 保留） */}
+          {filterActive && conditions.length > 0 ? (
+            <FilterSummaryCard
+              count={activeConditionCount(filter)}
+              summary={conditions.map((item) => item.label).join(' · ')}
+              onPress={onEditFilterFromSearch}
+            />
+          ) : null}
           <Text style={styles.searchMetaText}>
             {filtered.length > 0 ? `${filtered.length} 次鱼获` : ''}
           </Text>
-          {filterActive ? (
-            <PressableScale onPress={onEditFilterFromSearch} scaleTo={0.97}>
-              <Text style={styles.filterSummaryText}>
-                筛选中 · {activeConditionCount(filter)}个条件 ›
-              </Text>
-            </PressableScale>
-          ) : null}
         </View>
       ) : (
         <RecentSearchBlock
@@ -398,6 +453,15 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
           }}
         />
       )}
+
+      {/* Filter Spec V2 §4：已选条件 compact removable summary + 清空（F1 收起时显示） */}
+      {!searchMode && !filterOpen && conditions.length > 0 ? (
+        <ConditionSummaryRow
+          conditions={conditions}
+          onRemove={removeCondition}
+          onClearAll={() => setFilter(EMPTY_FILTER)}
+        />
+      ) : null}
 
       {/* F1 · 顶部内联筛选面板：Header/Summary 之下、Timeline 之上，展开时推动 Timeline（F1 Spec §2/§6） */}
       {filterOpen && !searchMode ? (
@@ -507,7 +571,7 @@ function monthLabelOf(key: string): string {
 // 子组件
 // ---------------------------------------------------------------------------
 
-/** 月份章节头（Sticky）：衬线加粗 + 近实底玻璃 */
+/** 月份章节头（Sticky）：衬线加粗，直接浮在场景上，不加白色底 */
 const MonthHeader: React.FC<{ label: string }> = ({ label }) => (
   <View style={monthStyles.wrap}>
     <Text style={monthStyles.label}>{label}</Text>
@@ -516,95 +580,130 @@ const MonthHeader: React.FC<{ label: string }> = ({ label }) => (
 
 const monthStyles = StyleSheet.create({
   wrap: {
-    /* 透明：直接透出 MorningLakeScene 的雾面玻璃层，不叠加白色块 */
     backgroundColor: 'transparent',
-    paddingVertical: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+    marginBottom: 2,
   } as ViewStyle,
   label: {
     fontFamily: font.serif,
-    fontSize: fs(22),
+    fontSize: fs(18),
     fontWeight: '700',
     color: coreColors.deepLakeBlue,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   } as TextStyle,
 });
 
-/** 日期节点：轨道行（竖线+圆点+大日期）+ 摘要行（与卡片列对齐） */
+/**
+ * 日期节点（my_catches_v2 冻结稿）：
+ * - 大衬线日期 + 月份缩写 + 星期 叠放在轨道左侧日期栏（绝对定位下段与首卡并排）；
+ * - 轨道圆点（Morning Gold）与日期行垂直居中；
+ * - 当日摘要（📍 地点 · N条鱼获 · M种鱼）与日期同行，对齐卡片列。
+ */
 const DayNode: React.FC<{ day: DayGroup; firstOfMonth: boolean }> = ({ day, firstOfMonth }) => (
   <View style={dayStyles.wrap}>
     <View style={[dayStyles.railLine, firstOfMonth && dayStyles.railLineFirst]} />
-    <View style={dayStyles.dateRow}>
-      <View style={dayStyles.rail}>
-        <View style={dayStyles.dot} />
-      </View>
-      <View style={dayStyles.dateBlock}>
+    <View style={dayStyles.dot} />
+    <View style={dayStyles.mainRow}>
+      <View style={dayStyles.dateCol}>
         <Text style={dayStyles.dayNumber}>{day.dayLabel}</Text>
-        <Text style={dayStyles.monthAbbr}>{day.monthLabel}</Text>
+      </View>
+      <View style={dayStyles.summaryRow}>
+        <AppIcon name="location" size={12} color={coreColors.mistBlueGray} />
+        <Text style={dayStyles.summary} numberOfLines={1}>
+          {day.summary}
+        </Text>
       </View>
     </View>
-    <Text style={dayStyles.summary} numberOfLines={1}>
-      {day.summary}
-    </Text>
+    {day.monthLabel || day.weekday ? (
+      <View style={dayStyles.subBlock}>
+        <Text style={dayStyles.monthAbbr}>{day.monthLabel}</Text>
+        <Text style={dayStyles.weekday}>{day.weekday}</Text>
+      </View>
+    ) : null}
   </View>
 );
 
+/** 日期数字行高（summaryRow 同高，与圆点对齐的基准） */
+const DAY_LINE_HEIGHT = 34;
+
 const dayStyles = StyleSheet.create({
   wrap: {
-    paddingVertical: 8,
+    position: 'relative',
+    marginTop: 10,
+    marginBottom: 6,
   } as ViewStyle,
-  /* 竖线贯穿日期节点并连接上一组尾卡与下一组首卡 */
+  /* 竖线向上衔接上一组尾卡（卡片底距 + 组间距 ~20dp，负值覆盖并重叠） */
   railLine: {
     position: 'absolute',
-    left: RAIL_CENTER_X - 0.5,
-    top: -18,
-    bottom: -10,
+    left: RAIL_INSET - 0.5,
+    top: -24,
+    bottom: -6,
     width: 1,
-    backgroundColor: 'rgba(184,198,206,0.85)',
+    backgroundColor: RAIL_COLOR,
   } as ViewStyle,
-  /* 每月首个日期节点：竖线不越过月份标题 */
+  /* 每月首个日期节点：竖线自圆点起，不越过月份标题 */
   railLineFirst: {
-    top: 8,
+    top: DAY_LINE_HEIGHT / 2 - 4,
   } as ViewStyle,
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  } as ViewStyle,
-  rail: {
-    width: RAIL_CENTER_X * 2,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as ViewStyle,
+  /* 轨道圆点：Morning Gold，与日期数字行垂直居中 */
   dot: {
+    position: 'absolute',
+    left: RAIL_INSET - 3.5,
+    top: DAY_LINE_HEIGHT / 2 - 3.5,
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: coreColors.deepLakeBlue,
+    backgroundColor: coreColors.morningGold,
   } as ViewStyle,
-  dateBlock: {
+  mainRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    marginLeft: 8,
-    minWidth: 46,
-    gap: 4,
+    alignItems: 'flex-start',
+  } as ViewStyle,
+  /* 日期栏：整列在轨道左侧居中（设计稿数字 + SEP + 星期同轴） */
+  dateCol: {
+    width: RAIL_INSET,
+    alignItems: 'center',
   } as ViewStyle,
   dayNumber: {
     fontFamily: font.serif,
-    fontSize: fs(21),
+    fontSize: fs(26),
+    lineHeight: fs(DAY_LINE_HEIGHT),
     fontWeight: '700',
     color: coreColors.deepLakeBlue,
   } as TextStyle,
+  /* 当日摘要：与日期数字同行，起点对齐卡片列 */
+  summaryRow: {
+    flex: 1,
+    height: fs(DAY_LINE_HEIGHT),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: CARD_INSET - RAIL_INSET,
+    paddingRight: 2,
+  } as ViewStyle,
+  summary: {
+    fontSize: fs(12),
+    color: coreColors.mistBlueGray,
+    flexShrink: 1,
+  } as TextStyle,
+  /* 日期栏下段（SEP + 星期）：绝对定位，只占日期栏宽，与首卡并排 */
+  subBlock: {
+    position: 'absolute',
+    left: 0,
+    top: fs(DAY_LINE_HEIGHT) + 4,
+    width: RAIL_INSET,
+    alignItems: 'center',
+  } as ViewStyle,
   monthAbbr: {
     fontSize: fs(11),
     fontWeight: '600',
-    letterSpacing: 1,
+    letterSpacing: 2,
     color: coreColors.mistBlueGray,
   } as TextStyle,
-  summary: {
-    marginLeft: CONTENT_INSET,
-    marginTop: 3,
-    marginBottom: 4,
-    fontSize: fs(12),
+  weekday: {
+    marginTop: 2,
+    fontSize: fs(11),
     color: coreColors.mistBlueGray,
   } as TextStyle,
 });
@@ -616,10 +715,12 @@ const ExpandRow: React.FC<{
   onPress: () => void;
 }> = ({ label, chevron, onPress }) => (
   <View style={expandStyles.wrap}>
+    {/* 轨道延续：日期组内部家具行仍处于轨道右侧 */}
+    <View style={expandStyles.rail} />
     <PressableScale onPress={onPress} scaleTo={0.97} style={expandStyles.hit}>
       <Text style={expandStyles.text}>{label}</Text>
-      <Icon
-        name={chevron === 'down' ? 'chevron-down' : chevron === 'up' ? 'chevron-up' : 'chevron-forward'}
+      <AppIcon
+        name={chevron === 'down' ? 'expand_more' : chevron === 'up' ? 'expand_less' : 'chevron_right'}
         size={13}
         color={coreColors.mistBlueGray}
       />
@@ -629,8 +730,18 @@ const ExpandRow: React.FC<{
 
 const expandStyles = StyleSheet.create({
   wrap: {
-    marginLeft: CONTENT_INSET,
+    position: 'relative',
+    marginLeft: CARD_INSET,
     paddingVertical: 4,
+  } as ViewStyle,
+  rail: {
+    position: 'absolute',
+    left: RAIL_INSET - CARD_INSET - 0.5,
+    /* 上探 12：跨过卡片间距 10 与尾卡竖线段（止于卡底 +2）重叠，避免断口 */
+    top: -12,
+    bottom: -4,
+    width: 1,
+    backgroundColor: RAIL_COLOR,
   } as ViewStyle,
   hit: {
     flexDirection: 'row',
@@ -714,6 +825,146 @@ const recentStyles = StyleSheet.create({
   chipText: {
     fontSize: fs(13),
     color: coreColors.lakeBlue,
+  } as TextStyle,
+});
+
+/**
+ * B4 · Search + Filter 低权重筛选摘要卡（frozen B4 PNG）：
+ * 雾白玻璃卡 + 漏斗图标徽标 + 「筛选中 · N个条件」/ 条件行 + ›。
+ * 点击：返回原页面并展开 F1，Search query 保留（Search Spec §12）。
+ */
+const FilterSummaryCard: React.FC<{
+  count: number;
+  summary: string;
+  onPress: () => void;
+}> = ({ count, summary, onPress }) => (
+  <PressableScale
+    onPress={onPress}
+    scaleTo={0.98}
+    style={summaryCardStyles.wrap}
+    accessibilityLabel="编辑筛选"
+    accessibilityRole="button"
+  >
+    <View style={summaryCardStyles.iconBadge}>
+      <AppIcon name="filter" size={16} color="#3D8A8D" />
+    </View>
+    <View style={summaryCardStyles.textWrap}>
+      <Text style={summaryCardStyles.title}>筛选中 · {count}个条件</Text>
+      <Text style={summaryCardStyles.summary} numberOfLines={1}>
+        {summary}
+      </Text>
+    </View>
+    <Text style={summaryCardStyles.chevron}>›</Text>
+  </PressableScale>
+);
+
+const summaryCardStyles = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minHeight: 56,
+    marginBottom: 8,
+    alignSelf: 'stretch',
+  } as ViewStyle,
+  iconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(77,158,161,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as ViewStyle,
+  textWrap: {
+    flex: 1,
+    gap: 2,
+  } as ViewStyle,
+  title: {
+    fontSize: fs(13),
+    fontWeight: '600',
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+  summary: {
+    fontSize: fs(12),
+    color: coreColors.mistBlueGray,
+  } as TextStyle,
+  chevron: {
+    fontSize: fs(20),
+    fontWeight: '400',
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+});
+
+/**
+ * Filter Spec V2 §4 · 已选条件 compact removable summary：
+ * 每个维度一枚可移除 chip（× 即时清除该维度），尾部保留「清空」全清入口。
+ */
+const ConditionSummaryRow: React.FC<{
+  conditions: ActiveCondition[];
+  onRemove: (key: ActiveConditionKey) => void;
+  onClearAll: () => void;
+}> = ({ conditions, onRemove, onClearAll }) => (
+  <View style={conditionStyles.wrap}>
+    {conditions.map((item) => (
+      <PressableScale
+        key={item.key}
+        onPress={() => onRemove(item.key)}
+        scaleTo={0.95}
+        style={conditionStyles.chip}
+        accessibilityLabel={`移除筛选条件 ${item.label}`}
+        accessibilityRole="button"
+      >
+        <Text style={conditionStyles.chipText} numberOfLines={1}>
+          {item.label}
+        </Text>
+        <AppIcon name="clear_field" size={12} color={coreColors.mistBlueGray} />
+      </PressableScale>
+    ))}
+    <PressableScale onPress={onClearAll} scaleTo={0.95} style={conditionStyles.clearHit}>
+      <Text style={conditionStyles.clear}>清空</Text>
+    </PressableScale>
+  </View>
+);
+
+const conditionStyles = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 2,
+  } as ViewStyle,
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 32,
+    borderRadius: 16,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+    maxWidth: 180,
+  } as ViewStyle,
+  chipText: {
+    fontSize: fs(12),
+    color: coreColors.lakeBlue,
+  } as TextStyle,
+  clearHit: {
+    paddingVertical: 6,
+    paddingLeft: 4,
+  } as ViewStyle,
+  clear: {
+    fontSize: fs(12),
+    color: coreColors.mistBlueGray,
   } as TextStyle,
 });
 
@@ -832,9 +1083,7 @@ const styles = StyleSheet.create({
     color: coreColors.lakeBlue,
   } as TextStyle,
   searchMetaWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
+    /* B2/B4：摘要卡在上、结果计数在下（frozen：低权重单行，不铺满 chips） */
     paddingVertical: 2,
     minHeight: 24,
   } as ViewStyle,
@@ -843,29 +1092,25 @@ const styles = StyleSheet.create({
     color: coreColors.lakeBlue,
     fontWeight: '500',
   } as TextStyle,
-  filterSummaryText: {
-    fontSize: fs(12),
-    color: coreColors.mistBlueGray,
-  } as TextStyle,
   cardWrap: {
-    marginLeft: CONTENT_INSET,
-    marginBottom: 10,
+    marginLeft: CARD_INSET,
+    marginBottom: 8,
   } as ViewStyle,
   /** 卡片区左侧的时间线竖线段（连接日期节点，贯穿日期组） */
   cardRailLine: {
     position: 'absolute',
-    left: RAIL_CENTER_X - CONTENT_INSET - 0.5,
+    left: RAIL_INSET - CARD_INSET - 0.5,
     top: -5,
     width: 1,
-    backgroundColor: 'rgba(184,198,206,0.85)',
+    backgroundColor: RAIL_COLOR,
   } as ViewStyle,
   /** 贯通段：跨过卡片间距延续到下一行 */
   cardRailThrough: {
-    bottom: -10,
+    bottom: -8,
   } as ViewStyle,
   /** 组尾段：止于尾卡底 */
   cardRailEnd: {
-    bottom: 0,
+    bottom: 2,
   } as ViewStyle,
   stateCard: {
     alignItems: 'center',

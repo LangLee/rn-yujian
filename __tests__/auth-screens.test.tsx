@@ -2,12 +2,14 @@
  * 登录 / 注册 V2 冒烟与背景层回归：
  * - 页面渲染冻结文案层级（标题/副标题/字段/CTA）；
  * - 背景层（Morning_Lake_Master_V1 湖景 + 草丛）必须存在于页面中；
- * - 回归：KAV/ScrollView 等普通流容器不得携带不透明背景色，
+ * - 回归：ScrollView 等普通流容器不得携带不透明背景色，
  *   否则会作为绝对定位背景层的后渲染兄弟节点整屏盖住湖景
  *   （AuthV2Shell 曾出现的「登录页看不到背景图」缺陷）。
+ * - 键盘避让：KeyboardAvoidingScrollView（iOS 原生 automaticallyAdjustKeyboardInsets；
+ *   Android edge-to-edge 下手动键盘内边距 + 聚焦框滚动），输入框不被键盘遮挡。
  */
 import React from 'react';
-import { Image, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { Image, Platform, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { render, screen } from '@testing-library/react-native';
 
@@ -71,15 +73,18 @@ describe('登录页 Login V2.1', () => {
     expect(view.UNSAFE_queryAllByType(Image).length).toBeGreaterThanOrEqual(1);
   });
 
-  test('回归：KAV / ScrollView 不得携带背景色盖住绝对定位背景层', async () => {
+  test('回归：滚动容器不得携带背景色盖住绝对定位背景层', async () => {
     const view = render(
       <TestApp>
         <LoginScreen />
       </TestApp>,
     );
     await screen.findByText('欢迎回来');
-    assertTransparent(view.UNSAFE_getByType(KeyboardAvoidingView));
     assertTransparent(view.UNSAFE_getByType(ScrollView));
+    /* 键盘避让：iOS 由 ScrollView 原生 inset 调整 + 聚焦滚动处理 */
+    expect(view.UNSAFE_getByType(ScrollView).props.automaticallyAdjustKeyboardInsets).toBe(
+      Platform.OS === 'ios',
+    );
   });
 });
 
@@ -100,6 +105,6 @@ describe('注册页 Register V2', () => {
     expect(screen.getByText('去登录')).toBeTruthy();
 
     expect(view.UNSAFE_queryAllByType(Image).length).toBeGreaterThanOrEqual(1);
-    assertTransparent(view.UNSAFE_getByType(KeyboardAvoidingView));
+    assertTransparent(view.UNSAFE_getByType(ScrollView));
   });
 });

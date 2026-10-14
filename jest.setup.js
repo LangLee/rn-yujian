@@ -20,8 +20,9 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
 
-// Mock react-native-vector-icons
-jest.mock('react-native-vector-icons/Ionicons', () => 'Icon');
+// 图标组件 AppIcon 与湖景/直尺等 SVG 视觉层共用 react-native-svg，
+// jest 下走真实 JS 实现（原生视图经下方 requireNativeComponent 兜底桩化），
+// 因此这里不 mock react-native-svg。
 
 // Mock @shopify/react-native-skia（依赖 CanvasKit/RNSkiaModule 原生，jest 下不可用；
 // 仅 ScanEffect 视觉动效使用，桩化为不渲染的空组件即可）
@@ -100,6 +101,7 @@ jest.mock('react-native-reanimated', () => {
       View: require('react-native').View,
     },
     useSharedValue: (initial) => ({ value: initial }),
+    useFrameCallback: () => {},
     useDerivedValue: (fn) => ({ value: fn?.() ?? null }),
     useAnimatedProps: () => ({}),
     useAnimatedStyle: () => ({}),

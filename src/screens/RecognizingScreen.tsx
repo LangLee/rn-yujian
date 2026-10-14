@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, StyleSheet, View, ViewStyle } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Ionicons from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { useRecognition } from '../contexts/RecognitionContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -69,6 +69,11 @@ export const RecognizingScreen: React.FC = () => {
   // 退场转场期间 IdentifyScreen 重挂载会 reset 清空 image，
   // 用挂载瞬间的照片冻结本屏展示，避免结果转场时照片先闪没。
   const [photoUri] = useState(() => toFileUri(image?.filePath));
+  /* 相册选图与屏幕比例不一致：完整居中展示（contain，不改比例）；
+     相机流保持铺满（cover）。同样在挂载瞬间冻结。 */
+  const [photoFit] = useState<'cover' | 'contain'>(() =>
+    image?.source === 'gallery' ? 'contain' : 'cover',
+  );
 
   const startedAt = useMemo(() => Date.now(), []);
 
@@ -175,6 +180,7 @@ export const RecognizingScreen: React.FC = () => {
       <AIAmbientField
         phase={phase}
         photoUri={photoUri}
+        photoFit={photoFit}
         resolveOpacity={resolveOpacity}
         frozen={resolveStarted}
       />
@@ -186,7 +192,7 @@ export const RecognizingScreen: React.FC = () => {
           accessibilityLabel="返回"
           style={[styles.back, { top: insets.top + 8 }]}
         >
-          <Ionicons name="chevron-back" size={26} color="rgba(255,255,255,0.95)" />
+          <AppIcon name="back" size={26} color="rgba(255,255,255,0.95)" />
         </PressableScale>
 
         {/* RecognitionStatusCard：中下位置（冻结稿 58%-75% 高度带）。

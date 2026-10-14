@@ -1,5 +1,6 @@
 /**
- * AR 自动量尺层测试（全屏浮层形态）：平面检测 → 点鱼头 → 点鱼尾 → 自动长度 → 「用 X cm」上抛；
+ * AR 自动量尺层测试（全屏浮层形态）：平面检测 → 按下鱼头锚定 → 拖动实时画线
+ * → 松手确认 → 自动长度 → 「用 X cm」上抛；拖动未命中平面白线仍可见；
  * 以及会话失败回落手动量尺、关闭按钮。
  * 原生视图与 hitTest 均 mock（requireNativeComponent 已在 setup 兜底为 View）。
  */
@@ -53,11 +54,11 @@ describe('ARMeasureLayer AR 自动量尺', () => {
     jest.clearAllMocks();
   });
 
-  test('扫平面 → 点鱼头 → 点鱼尾 → 显示 AR 实测长度，「用 X cm」上抛', async () => {
-    // 第一点 (0,0,0) 米；第二点 (0.3,0,0) 米 → 30 cm
+  test('扫平面 → 按下鱼头锚定 → 拖动实时画线 → 松手确认 → 「用 X cm」上抛', async () => {
+    // 第一点 (0,0,0) 米；其后 (0.3,0,0) 米 → 30 cm
     mockHitTest
       .mockResolvedValueOnce({ x: 0, y: 0, z: 0, plane: true })
-      .mockResolvedValueOnce({ x: 0.3, y: 0, z: 0, plane: true });
+      .mockResolvedValue({ x: 0.3, y: 0, z: 0, plane: true });
 
     const { onMeasured } = await renderLayer();
 
@@ -67,17 +68,32 @@ describe('ARMeasureLayer AR 自动量尺', () => {
 
     // 平面就绪
     fireEvent(screen.getByTestId('ar-measure-view'), 'planeDetected', { nativeEvent: {} });
-    expect(screen.getByText('点击鱼头，再点击鱼尾')).toBeTruthy();
+    expect(screen.getByText('按住鱼头，拖到鱼尾松手')).toBeTruthy();
 
-    // 点鱼头
-    fireEvent(screen.getByTestId('ar-touch-layer'), 'responderRelease', {
+    // 按下鱼头 → hitTest 锚定，进入 measuring
+    fireEvent(screen.getByTestId('ar-touch-layer'), 'responderGrant', {
       nativeEvent: { pageX: 100, pageY: 400 },
     });
     await flush();
     expect(mockHitTest).toHaveBeenCalledWith(100, 400);
-    expect(screen.getByText('拖动预览长度，点击鱼尾确认')).toBeTruthy();
+    expect(screen.getByText('拖动实时预览，松手确认长度')).toBeTruthy();
 
-    // 点鱼尾 → 30.0 cm
+    // 未拖动的轻点松手：只放锚点，不确认鱼尾
+    fireEvent(screen.getByTestId('ar-touch-layer'), 'responderRelease', {
+      nativeEvent: { pageX: 100, pageY: 400 },
+    });
+    await flush();
+    expect(screen.getByText('拖动实时预览，松手确认长度')).toBeTruthy();
+
+    // 拖动：hitTest 尚未返回时白线已实时可见（数值待测）
+    fireEvent(screen.getByTestId('ar-touch-layer'), 'responderMove', {
+      nativeEvent: { pageX: 300, pageY: 400 },
+    });
+    expect(screen.getByText('实时测量中')).toBeTruthy();
+    await flush();
+    expect(screen.getAllByText('30.0 cm').length).toBeGreaterThanOrEqual(1);
+
+    // 松手确认 → 30.0 cm
     fireEvent(screen.getByTestId('ar-touch-layer'), 'responderRelease', {
       nativeEvent: { pageX: 300, pageY: 400 },
     });
@@ -91,18 +107,43 @@ describe('ARMeasureLayer AR 自动量尺', () => {
     expect(reported).toBeCloseTo(30, 5);
   });
 
-  test('点击未命中平面时提示并不前进', async () => {
+  test('拖动预览 hitTest 未命中平面，白线仍实时可见', async () => {
+    mockHitTest
+      .mockResolvedValueOnce({ x: 0, y: 0, z: 0, plane: true }) // 锚定鱼头
+      .mockResolvedValue(null); // 拖动全程未命中
+
+    await renderLayer();
+    fireEvent(screen.getByTestId('ar-measure-view'), 'planeDetected', { nativeEvent: {} });
+
+    fireEvent(screen.getByTestId('ar-touch-layer'), 'responderGrant', {
+      nativeEvent: { pageX: 100, pageY: 400 },
+    });
+    await flush();
+
+    fireEvent(screen.getByTestId('ar-touch-layer'), 'responderMove', {
+      nativeEvent: { pageX: 320, pageY: 460 },
+    });
+    await flush();
+
+    // 白线在画（线体 View + 标签可见），数值保持待测，未进入完成态
+    expect(screen.getByTestId('measure-line-body')).toBeTruthy();
+    expect(screen.getByText('实时测量中')).toBeTruthy();
+    expect(screen.getByText('-- cm')).toBeTruthy();
+    expect(screen.getByText('拖动实时预览，松手确认长度')).toBeTruthy();
+  });
+
+  test('按下未命中平面时提示并不前进', async () => {
     mockHitTest.mockResolvedValue(null);
     await renderLayer();
 
     fireEvent(screen.getByTestId('ar-measure-view'), 'planeDetected', { nativeEvent: {} });
-    fireEvent(screen.getByTestId('ar-touch-layer'), 'responderRelease', {
+    fireEvent(screen.getByTestId('ar-touch-layer'), 'responderGrant', {
       nativeEvent: { pageX: 100, pageY: 400 },
     });
     await flush();
     expect(screen.getByText('没对准平面，再点一次')).toBeTruthy();
     // 仍在 ready 阶段
-    expect(screen.getByText('点击鱼头，再点击鱼尾')).toBeTruthy();
+    expect(screen.getByText('按住鱼头，拖到鱼尾松手')).toBeTruthy();
   });
 
   test('会话失败 → onFallbackManual 带原因', async () => {

@@ -75,13 +75,13 @@ export const AccountSecurityScreen: React.FC = () => {
         {/* 安全导航：修改密码 / 数据与隐私 */}
         <SettingsCard style={styles.group}>
           <SettingsRow
-            icon="key-outline"
+            icon="lock"
             tint="blue"
             label="修改密码"
             onPress={() => navigation.navigate('ChangePassword')}
           />
           <SettingsRow
-            icon="shield-outline"
+            icon="lock"
             tint="teal"
             label="数据与隐私"
             onPress={() => navigation.navigate('DataPrivacy')}
@@ -91,7 +91,7 @@ export const AccountSecurityScreen: React.FC = () => {
         {/* 退出当前账号：低强调危险文本行（非注销，非大主按钮） */}
         <SettingsCard style={styles.group}>
           <SettingsRow
-            icon="log-out-outline"
+            icon="logout"
             tint="red"
             label={loggingOut ? '正在退出…' : '退出当前账号'}
             danger

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../../../components/icons/AppIcon';
 import { PressableScale } from '../../../components/ui/PressableScale';
 import { coreColors } from '../../../constants/coreUi';
 import { fs } from '../../../constants/tokens';
@@ -18,7 +18,7 @@ import { F3TimeSheet, F4SizeSheet } from './F3F4CustomSheets';
  *
  * 四维固定顺序：鱼种 → 时间 → 尺寸 → 特殊记录；地点不进入 V1。
  * Chip 点击即时生效（无 应用/完成 CTA）；「重置」无条件时降权且位置不跳动。
- * 视觉：Mist 轻 Surface、圆角 ~24、chip 高 ~36（触控 ≥44）；默认低对比 Mist Gray、
+ * 视觉：Mist 轻 Surface、圆角 ~24、chip 高 ~40（触控 ≥44）；默认低对比 Mist Gray、
  * 选中轻 Lake Teal Surface + Deep Teal 文字。
  */
 
@@ -308,7 +308,7 @@ const Chip: React.FC<{
   <PressableScale onPress={onPress} scaleTo={0.95} style={styles.chipHit}>
     <View style={[styles.chip, selected && styles.chipSelected]}>
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-      {arrow ? <Icon name="chevron-forward" size={12} color={coreColors.mistBlueGray} /> : null}
+      {arrow ? <AppIcon name="chevron_right" size={12} color={coreColors.mistBlueGray} /> : null}
     </View>
   </PressableScale>
 );
@@ -406,8 +406,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    height: 36,
-    borderRadius: 18,
+    /* F1 Spec §6：Chip 高约 40dp（触控 ≥44 由 chipHit 承担） */
+    height: 40,
+    borderRadius: 20,
     paddingHorizontal: 14,
     backgroundColor: 'rgba(233,240,243,0.72)',
   } as ViewStyle,

@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.google.ar.core.ArCoreApk
+import com.yujian.ai.ar.ARDeviceCompat
 import com.yujian.ai.ar.ARMeasureView
 import com.yujian.ai.ar.HuaweiARController
 
@@ -52,7 +53,13 @@ class ARMeasureModule(reactContext: ReactApplicationContext) :
         } catch (e: Exception) {
             null
         }
-        if (huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_INSTALLED) {
+        // 新鸿蒙（NEXT / 新出厂 4.2+）不再提供 Android 版 AR Engine 服务，
+        // checkAvailability 可能误报 SUPPORTED_INSTALLED：以 isAREngineApkReady
+        // 实际服务状态双确认，矛盾时视为不可用，由 JS 直接回落手动量尺。
+        val huaweiServiceReady = HuaweiARController.isReady(reactApplicationContext)
+        if (huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_INSTALLED &&
+            huaweiServiceReady
+        ) {
             promise.resolve("supported:huawei")
             return
         }
@@ -64,9 +71,12 @@ class ARMeasureModule(reactContext: ReactApplicationContext) :
             promise.resolve("installable:arcore")
             return
         }
-        if (huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_NOT_INSTALLED ||
-            huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_APK_TOO_OLD
-        ) {
+        // HarmonyOS NEXT（5+）上 Android 版服务装不上，引导安装只会失败，直接跳过
+        val huaweiInstallable = !ARDeviceCompat.shouldBlockHuaweiArInstall() && (
+            huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_NOT_INSTALLED ||
+                huaweiAvailability == com.huawei.hiar.AREnginesApk.ARAvailability.SUPPORTED_APK_TOO_OLD
+            )
+        if (huaweiInstallable) {
             promise.resolve("installable:huawei")
             return
         }
@@ -93,6 +103,12 @@ class ARMeasureModule(reactContext: ReactApplicationContext) :
         }
         try {
             if (engine == "huawei") {
+                // HarmonyOS NEXT（5+）上 Android 版 AR Engine 服务不可安装：短路，
+                // 让 JS 立即回落手动量尺，避免无效的应用市场跳转
+                if (ARDeviceCompat.shouldBlockHuaweiArInstall()) {
+                    promise.resolve(false)
+                    return
+                }
                 val result = com.huawei.hiar.AREnginesApk.requestInstall(activity, true)
                 promise.resolve(result == com.huawei.hiar.AREnginesApk.ARInstallStatus.INSTALLED)
             } else {

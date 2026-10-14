@@ -14,7 +14,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from './icons/AppIcon';
 import { fs, motion, radius, spacing } from '../constants/tokens';
 import { palette } from '../constants/colors';
 import { RemoteImage } from './RemoteImage';
@@ -95,7 +95,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
         <View style={styles.topBar}>
           <View style={styles.circleButtonWrap}>
             <IconButton
-              icon="chevron-back"
+              icon="back"
               size={40}
               iconSize={20}
               iconColor="#FFFFFF"
@@ -109,7 +109,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
           {canRemove ? (
             <View style={styles.circleButtonWrap}>
               <IconButton
-                icon="ellipsis-horizontal"
+                icon="more"
                 size={40}
                 iconSize={18}
                 iconColor="#FFFFFF"
@@ -145,7 +145,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
                   />
                   <View style={styles.videoScrim} />
                   <View style={styles.videoBadge}>
-                    <Icon name="play" size={34} color="#FFFFFF" />
+                    <AppIcon name="play" size={34} color="#FFFFFF" />
                     {item.durationSec ? (
                       <Text style={styles.videoDuration}>
                         {formatMediaDuration(item.durationSec)}
@@ -217,7 +217,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: spacing.xl + 24,
+    paddingTop: spacing.md + 24,
+    paddingBottom: spacing.md,
     paddingHorizontal: spacing.md,
   },
   circleButtonWrap: {

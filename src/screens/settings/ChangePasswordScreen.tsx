@@ -1,9 +1,6 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../../navigation/types';
 import { accountService, changePasswordErrorMessage } from '../../services/accountService';
 import { coreColors } from '../../constants/coreUi';
@@ -27,6 +24,10 @@ import {
   LakeContentBackdrop,
   accountPageContentTop,
 } from '../../components/coreui/LakeContentBackdrop';
+import {
+  KeyboardAvoidingScrollView,
+  useEnsureInputVisible,
+} from '../../components/ui/KeyboardAvoidingScrollView';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { ScreenHeader } from '../../components';
 
@@ -48,6 +49,9 @@ export const ChangePasswordScreen: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [visible, setVisible] = useState({ current: false, next: false, confirm: false });
+  /* 回车键焦点流转：当前密码 next → 新密码 next → 确认 done → 保存 */
+  const nextRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -91,19 +95,18 @@ export const ChangePasswordScreen: React.FC = () => {
       <LakeContentBackdrop />
       <ScreenHeader title="修改密码" onBack={() => navigation.goBack()} />
 
-      <KeyboardAvoidingView
+      {/* 键盘避让：iOS 原生 automaticallyAdjustKeyboardInsets 补 contentInset
+          并滚动聚焦框；Android edge-to-edge 下 KeyboardAvoidingScrollView
+          手动补键盘内边距并滚动聚焦框（adjustResize 已不缩窗） */}
+      <KeyboardAvoidingScrollView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: accountPageContentTop(insets.top, windowH), paddingBottom: 48 + insets.bottom },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={[
-            styles.content,
-            { paddingTop: accountPageContentTop(insets.top, windowH), paddingBottom: 48 + insets.bottom },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           <View style={styles.formCard}>
             <PasswordField
               label="当前密码"
@@ -114,15 +117,20 @@ export const ChangePasswordScreen: React.FC = () => {
                 setVisible((state) => ({ ...state, current: !state.current }))
               }
               returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => nextRef.current?.focus()}
             />
             <View style={styles.rowDivider} />
             <PasswordField
               label="新密码"
+              inputRef={nextRef}
               value={newPassword}
               onChangeText={setNewPassword}
               visible={visible.next}
               onToggleVisibility={() => setVisible((state) => ({ ...state, next: !state.next }))}
               returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => confirmRef.current?.focus()}
               supportingText="新密码至少 6 位"
             />
             <View style={styles.rowDivider} />
@@ -134,6 +142,7 @@ export const ChangePasswordScreen: React.FC = () => {
               onToggleVisibility={() =>
                 setVisible((state) => ({ ...state, confirm: !state.confirm }))
               }
+              inputRef={confirmRef}
               returnKeyType="done"
               errorText={fieldError}
               onSubmitEditing={() => void handleSave()}
@@ -158,8 +167,7 @@ export const ChangePasswordScreen: React.FC = () => {
             loading={saving}
             style={styles.saveButton}
           />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingScrollView>
     </View>
   );
 };
@@ -175,6 +183,10 @@ const PasswordField: React.FC<{
   supportingText?: string;
   errorText?: string | null;
   onSubmitEditing?: () => void;
+  /** 暴露内部 TextInput（回车键流转焦点用） */
+  inputRef?: React.RefObject<TextInput | null>;
+  /** 回车只触发 onSubmitEditing 不失焦（next 键跳下一栏时避免键盘闪缩） */
+  blurOnSubmit?: boolean;
 }> = ({
   label,
   value,
@@ -185,11 +197,17 @@ const PasswordField: React.FC<{
   supportingText,
   errorText,
   onSubmitEditing,
-}) => (
+  inputRef,
+  blurOnSubmit,
+}) => {
+  /* Android 键盘已开时回车跳下一栏不触发键盘事件：聚焦时主动请求滚动 */
+  const ensureInputVisible = useEnsureInputVisible();
+  return (
   <View style={styles.fieldBlock}>
     <View style={styles.fieldRow}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
+        ref={inputRef}
         style={styles.fieldInput}
         value={value}
         onChangeText={onChangeText}
@@ -199,6 +217,12 @@ const PasswordField: React.FC<{
         maxLength={PASSWORD_MAX_LENGTH}
         returnKeyType={returnKeyType}
         onSubmitEditing={onSubmitEditing}
+        blurOnSubmit={blurOnSubmit}
+        onFocus={() =>
+          requestAnimationFrame(() =>
+            ensureInputVisible(TextInput.State.currentlyFocusedInput()),
+          )
+        }
         selectionColor={coreColors.morningGold}
         accessibilityLabel={label}
       />
@@ -208,8 +232,8 @@ const PasswordField: React.FC<{
         accessibilityRole="button"
         accessibilityLabel={visible ? `隐藏${label}` : `显示${label}`}
       >
-        <Icon
-          name={visible ? 'eye-outline' : 'eye-off-outline'}
+        <AppIcon
+          name={visible ? 'visibility' : 'visibility_off'}
           size={19}
           color="rgba(11,45,75,0.62)"
         />
@@ -221,7 +245,8 @@ const PasswordField: React.FC<{
       <Text style={styles.supporting}>{supportingText}</Text>
     ) : null}
   </View>
-);
+  );
+};
 
 const styles = StyleSheet.create({
   screen: {

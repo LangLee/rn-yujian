@@ -5,6 +5,7 @@ import {
   Easing,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextStyle,
@@ -94,10 +95,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         <TouchableWithoutFeedback onPress={onClose}>
           <Animated.View style={[styles.scrim, { opacity: scrimOpacity }]} />
         </TouchableWithoutFeedback>
-        {/* 键盘避让：Sheet 内含输入框（昵称、量尺校准等）时整体上抬到键盘上方；
-            Android 若弹窗窗口已随键盘 resize，遮挡量为 0 自动不动作（KAV 只补差值） */}
+        {/* 键盘避让：Sheet 内含输入框（昵称、量尺校准等）时整体上抬到键盘上方。
+            Android 弹窗窗口已随键盘 resize（RN Modal 强制 ADJUST_RESIZE），KAV 再叠
+            padding 会双重补偿且收起后可能残留底部空隙，故仅 iOS 启用 */}
         <KeyboardAvoidingView
-          behavior="padding"
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.avoid}
           pointerEvents="box-none"
         >

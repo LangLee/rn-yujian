@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from './icons/AppIcon';
 import { fs } from '../constants/tokens';
 
 interface ErrorBoundaryProps {
@@ -58,7 +58,7 @@ export class ErrorBoundary extends Component<
       return (
         <View style={styles.container}>
           <View style={styles.iconContainer}>
-            <Icon name="alert-circle" size={64} color="#ef4444" />
+            <AppIcon name="warning" size={64} color="#ef4444" />
           </View>
           
           <Text style={styles.title}>Oops! Something went wrong</Text>
@@ -79,7 +79,7 @@ export class ErrorBoundary extends Component<
             onPress={this.resetError}
             activeOpacity={0.8}
           >
-            <Icon name="refresh" size={20} color="#FFFFFF" />
+            <AppIcon name="retry_refresh" size={20} color="#FFFFFF" />
             <Text style={styles.buttonText}>Try Again</Text>
           </TouchableOpacity>
         </View>

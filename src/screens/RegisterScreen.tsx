@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextStyle } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, TextStyle } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +28,9 @@ export const RegisterScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState({ username: false, password: false, nickname: false });
+  /* 回车键焦点流转：账号 next → 密码 next → 昵称 done → 提交 */
+  const passwordRef = useRef<TextInput>(null);
+  const nicknameRef = useRef<TextInput>(null);
 
   /* 错误时机：输入期间不打扰；失焦/提交后显示，合法即清除 */
   const usernameError = touched.username ? validateUsername(username) : null;
@@ -62,7 +65,7 @@ export const RegisterScreen: React.FC = () => {
     <AuthV2Shell title="创建账号" subtitle="用一个账号，留住你的钓鱼轨迹">
       <AuthV2Field
         label="账号"
-        icon="person-outline"
+        icon="person"
         value={username}
         onChangeText={(text) => setUsername(text.slice(0, 32))}
         onBlur={() => setTouched((t) => ({ ...t, username: true }))}
@@ -72,10 +75,13 @@ export const RegisterScreen: React.FC = () => {
         maxLength={32}
         autoCapitalize="none"
         returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => passwordRef.current?.focus()}
       />
       <AuthV2Field
         label="密码"
-        icon="lock-closed-outline"
+        icon="lock"
+        inputRef={passwordRef}
         value={password}
         onChangeText={(text) => setPassword(text.slice(0, 128))}
         onBlur={() => setTouched((t) => ({ ...t, password: true }))}
@@ -86,10 +92,13 @@ export const RegisterScreen: React.FC = () => {
         onToggleVisibility={() => setPasswordVisible((value) => !value)}
         errorText={passwordError}
         returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => nicknameRef.current?.focus()}
       />
       <AuthV2Field
         label="昵称"
-        icon="happy-outline"
+        icon="person"
+        inputRef={nicknameRef}
         value={nickname}
         /* 安全上限远高于 20 码点业务上限，不替代可见校验 */
         onChangeText={(text) => setNickname(text.slice(0, 100))}
@@ -126,7 +135,8 @@ export const RegisterScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   primaryButton: {
-    marginTop: 8,
+    /* 冻结稿：末栏输入框底 → 主按钮 ≈ 1.4% 屏高 */
+    marginTop: 14,
   } as TextStyle,
   switchHit: {
     flexDirection: 'row',

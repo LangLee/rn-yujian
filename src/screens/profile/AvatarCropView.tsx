@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../../components/icons/AppIcon';
 import { coreColors } from '../../constants/coreUi';
 import { fs, spacing } from '../../constants/tokens';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
@@ -199,7 +199,7 @@ export const AvatarCropView: React.FC<AvatarCropViewProps> = ({
       {/* 顶栏：返回 + 标题「调整头像」 */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <PressableScale onPress={onCancel} style={styles.backHit} accessibilityLabel="返回">
-          <Icon name="chevron-back" size={24} color="#FFFFFF" />
+          <AppIcon name="back" size={24} color="#FFFFFF" />
         </PressableScale>
         <Text style={styles.title}>调整头像</Text>
         <View style={styles.backHit} />

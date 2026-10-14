@@ -265,7 +265,9 @@ export function resolveMediaUrl(path?: string | null): string | null {
   if (!value) {
     return null;
   }
-  if (value.startsWith('https://') || value.startsWith('http://')) {
+  // 已带协议的 URI 原样返回：http(s) 远程地址、file:///content:// 本地文件。
+  // file:// 若走下方拼接会变成「API域名/file://...」导致媒体查看器加载失败落白色占位。
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) {
     return value;
   }
   const root = apiBaseUrl().replace(/\/+$/, '');

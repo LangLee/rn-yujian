@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../icons/AppIcon';
 import { PressableScale } from './PressableScale';
 
 interface IconButtonProps {
-  icon: string;
+  icon: AppIconName;
   size?: number;
   iconSize?: number;
   iconColor?: string;
@@ -35,7 +35,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
         { width: size, height: size, borderRadius: size / 2, backgroundColor },
       ]}
     >
-      <Icon name={icon} size={iconSize} color={iconColor} />
+      <AppIcon name={icon} size={iconSize} color={iconColor} />
     </View>
   </PressableScale>
 );

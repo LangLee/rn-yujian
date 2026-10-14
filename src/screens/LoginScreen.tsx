@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextStyle } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, TextStyle } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +26,8 @@ export const LoginScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forgotNote, setForgotNote] = useState(false);
+  /* 回车键焦点流转：账号 next → 密码 done → 提交 */
+  const passwordRef = useRef<TextInput>(null);
 
   const canSubmit = !loading && username.trim().length > 0 && password.length > 0;
 
@@ -50,17 +52,20 @@ export const LoginScreen: React.FC = () => {
     <AuthV2Shell title="欢迎回来" subtitle="继续记录你的每一次渔获">
       <AuthV2Field
         label="账号"
-        icon="person-outline"
+        icon="person"
         value={username}
         onChangeText={(text) => setUsername(text.slice(0, 32))}
         placeholder="请输入账号"
         maxLength={32}
         autoCapitalize="none"
         returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => passwordRef.current?.focus()}
       />
       <AuthV2Field
         label="密码"
-        icon="lock-closed-outline"
+        icon="lock"
+        inputRef={passwordRef}
         value={password}
         onChangeText={(text) => setPassword(text.slice(0, 128))}
         placeholder="请输入密码"

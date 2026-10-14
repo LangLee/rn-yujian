@@ -22,7 +22,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../icons/AppIcon';
 import { PressableScale } from '../ui/PressableScale';
 import { RemoteImage } from '../RemoteImage';
 import { FishGlyph } from '../ui/FishGlyph';
@@ -410,8 +410,9 @@ export const ResultCandidateRow: React.FC<ResultCandidateRowProps> = ({
 
 /* ────────────────────────────────────────────────────────────────────────────
  * ResultFieldRows —— 行输入卡（关键帧 05/06/07：纵向三行）
- * 深蓝图标 + 衬线标签 + 右对齐值 + ›；长度/重量为内联数字输入（行输入），
- * 地点整行触达开编辑 Sheet；行间 1dp 低对比细分割线；无单位、无金色。
+ * 深蓝图标 + 衬线标签 + 右对齐值 + ›；三行整行触达：长度/重量弹数值输入
+ * Sheet（输入框内带单位，提交后行内展示值+单位），地点开地点编辑 Sheet；
+ * 行间 1dp 低对比细分割线；无金色。
  * ──────────────────────────────────────────────────────────────────────────── */
 export interface FieldRowsValues {
   lengthText: string;
@@ -421,10 +422,8 @@ export interface FieldRowsValues {
 }
 
 interface ResultFieldRowsProps extends FieldRowsValues {
-  onLengthChange: (text: string) => void;
-  onWeightChange: (text: string) => void;
-  onLengthBlur: () => void;
-  onWeightBlur: () => void;
+  onEditLength: () => void;
+  onEditWeight: () => void;
   onEditLocation: () => void;
 }
 
@@ -433,48 +432,48 @@ export const ResultFieldRows: React.FC<ResultFieldRowsProps> = ({
   weightText,
   locationLabel,
   locating,
-  onLengthChange,
-  onWeightChange,
-  onLengthBlur,
-  onWeightBlur,
+  onEditLength,
+  onEditWeight,
   onEditLocation,
 }) => {
-  const numericInput = (
-    value: string,
-    onChange: (t: string) => void,
-    onBlur: () => void,
-    a11y: string
-  ) => (
-    <TextInput
-      style={styles.fieldInput}
-      value={value}
-      onChangeText={onChange}
-      onEndEditing={onBlur}
-      onBlur={onBlur}
-      placeholder="请输入"
-      placeholderTextColor={ROW_PLACEHOLDER}
-      keyboardType="decimal-pad"
-      maxLength={8}
-      returnKeyType="done"
-      accessibilityLabel={a11y}
-    />
-  );
+  /** 值+单位（空值显示占位）；单位作为值的后缀展示，不入值 */
+  const measureValue = (text: string, unit: string) =>
+    text ? (
+      <Text style={styles.fieldValue} numberOfLines={1}>
+        {text}
+        <Text style={styles.fieldUnit}>{` ${unit}`}</Text>
+      </Text>
+    ) : (
+      <Text style={[styles.fieldValue, styles.fieldBlank]} numberOfLines={1}>
+        请输入
+      </Text>
+    );
 
   return (
     <View style={styles.fieldCard}>
-      <View style={styles.fieldRow}>
-        <Icon name="code-slash-outline" size={19} color={ROW_NAVY} />
+      <Pressable
+        style={styles.fieldRow}
+        onPress={onEditLength}
+        accessibilityLabel="长度字段，点按输入长度"
+        accessibilityRole="button"
+      >
+        <AppIcon name="length" size={19} color={ROW_NAVY} />
         <Text style={styles.fieldLabel}>长度</Text>
-        {numericInput(lengthText, onLengthChange, onLengthBlur, '长度输入框')}
-        <Icon name="chevron-forward" size={15} color={ROW_PLACEHOLDER} />
-      </View>
+        {measureValue(lengthText, 'cm')}
+        <AppIcon name="chevron_right" size={15} color={ROW_PLACEHOLDER} />
+      </Pressable>
       <View style={styles.fieldDivider} />
-      <View style={styles.fieldRow}>
-        <Icon name="scale-outline" size={19} color={ROW_NAVY} />
+      <Pressable
+        style={styles.fieldRow}
+        onPress={onEditWeight}
+        accessibilityLabel="重量字段，点按输入重量"
+        accessibilityRole="button"
+      >
+        <AppIcon name="weight" size={19} color={ROW_NAVY} />
         <Text style={styles.fieldLabel}>重量</Text>
-        {numericInput(weightText, onWeightChange, onWeightBlur, '重量输入框')}
-        <Icon name="chevron-forward" size={15} color={ROW_PLACEHOLDER} />
-      </View>
+        {measureValue(weightText, 'kg')}
+        <AppIcon name="chevron_right" size={15} color={ROW_PLACEHOLDER} />
+      </Pressable>
       <View style={styles.fieldDivider} />
       <Pressable
         style={styles.fieldRow}
@@ -482,7 +481,7 @@ export const ResultFieldRows: React.FC<ResultFieldRowsProps> = ({
         accessibilityLabel="地点字段，点按选择地点"
         accessibilityRole="button"
       >
-        <Icon name="location-outline" size={19} color={ROW_NAVY} />
+        <AppIcon name="location" size={19} color={ROW_NAVY} />
         <Text style={styles.fieldLabel}>地点</Text>
         <Text
           style={[
@@ -493,7 +492,7 @@ export const ResultFieldRows: React.FC<ResultFieldRowsProps> = ({
         >
           {locating ? '正在获取位置…' : locationLabel ?? '请输入'}
         </Text>
-        <Icon name="chevron-forward" size={15} color={ROW_PLACEHOLDER} />
+        <AppIcon name="chevron_right" size={15} color={ROW_PLACEHOLDER} />
       </Pressable>
     </View>
   );
@@ -512,7 +511,7 @@ export const ResultNoteCard: React.FC<{
       <Text style={styles.noteTitle}>写下这次鱼获的故事</Text>
       {/* 语音能力未接入：按冻结稿保留纯视觉胶囊位，不提供空操作控件 */}
       <View style={styles.micPill}>
-        <Icon name="mic-outline" size={12} color={NOTE_LABEL} />
+        <AppIcon name="voice" size={12} color={NOTE_LABEL} />
         <Text style={styles.micPillText}>语音录入</Text>
       </View>
     </View>
@@ -552,8 +551,9 @@ const SheetShell: React.FC<{
       statusBarTranslucent
     >
       <Pressable style={styles.sheetScrim} onPress={onClose}>
-        {/* 键盘避让：搜索框聚焦时整个 Sheet 上抬到键盘上方；
-            Android 若弹窗窗口已随键盘 resize，遮挡量为 0 自动不动作（KAV 只补差值） */}
+        {/* 键盘避让：搜索/数值输入框聚焦时整个 Sheet 上抬到键盘上方。
+            edge-to-edge 后（statusBarTranslucent）Modal 弹窗不随键盘
+            resize，Android 同样由 KAV padding 抬升，iOS 保持原行为 */}
         <KeyboardAvoidingView
           behavior="padding"
           style={styles.sheetAvoid}
@@ -679,7 +679,7 @@ export const ResultLocationSheet: React.FC<{
       accessibilityLabel={`${item.name}，${item.detail}`}
       accessibilityRole="button"
     >
-      <Icon name="location-outline" size={16} color={TEAL} />
+      <AppIcon name="location" size={16} color={TEAL} />
       <View style={styles.placeTexts}>
         <Text style={styles.placeName} numberOfLines={1}>
           {item.name}
@@ -697,7 +697,7 @@ export const ResultLocationSheet: React.FC<{
     <SheetShell visible={visible} onClose={onClose}>
       <Text style={styles.sheetTitle}>鱼获地点</Text>
       <View style={styles.searchField}>
-        <Icon name="search" size={15} color={TEXT_MUTED} />
+        <AppIcon name="search" size={15} color={TEXT_MUTED} />
         <TextInput
           style={styles.searchInput}
           value={query}
@@ -715,7 +715,7 @@ export const ResultLocationSheet: React.FC<{
             accessibilityLabel="清除搜索词"
             accessibilityRole="button"
           >
-            <Icon name="close" size={15} color={TEXT_MUTED} />
+            <AppIcon name="close" size={15} color={TEXT_MUTED} />
           </Pressable>
         ) : null}
       </View>
@@ -727,7 +727,7 @@ export const ResultLocationSheet: React.FC<{
           accessibilityLabel="使用当前位置"
           accessibilityRole="button"
         >
-          <Icon name="locate" size={17} color={TEAL} />
+          <AppIcon name="location" size={17} color={TEAL} />
           <Text style={styles.currentText}>使用当前位置</Text>
           {state === 'locating' ? (
             <ActivityIndicator size="small" color={TEAL} />
@@ -799,6 +799,138 @@ export const ResultLocationSheet: React.FC<{
 function hapticLight() {
   // 触感由页面层统一管理；此处保持无操作避免引入循环依赖
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * ResultMeasureSheet —— 长度/重量数值输入 Sheet（Metadata Edit Flow V1）
+ * 输入框内右侧固定单位（cm/kg，单位不入值）；空值=清除；非法非空值行内
+ * 提示并禁用完成（元数据可选，不弹错打断）；提交后行内展示值+单位。
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** 行文本校验（与保存契约一致）：长度 0.1-999.9（≤1 位小数）/ 重量 0.01-999.99（≤2 位小数） */
+export function isValidMeasureText(
+  kind: 'length' | 'weight',
+  text: string
+): boolean {
+  const t = text.trim();
+  if (!t) {
+    return false;
+  }
+  const n = Number(t);
+  if (!Number.isFinite(n)) {
+    return false;
+  }
+  const dec = t.includes('.') ? t.split('.')[1].length : 0;
+  return kind === 'length'
+    ? n >= 0.1 && n <= 999.9 && dec <= 1
+    : n >= 0.01 && n <= 999.99 && dec <= 2;
+}
+
+/** decimal-pad 可能带出逗号/多个小数点：只留数字与首个小数点 */
+function sanitizeMeasureText(t: string): string {
+  const s = t.replace(/[^0-9.]/g, '');
+  const dot = s.indexOf('.');
+  return dot < 0
+    ? s
+    : `${s.slice(0, dot + 1)}${s.slice(dot + 1).replace(/\./g, '')}`;
+}
+
+const MEASURE_META: Record<
+  'length' | 'weight',
+  { title: string; unit: string; hint: string; error: string }
+> = {
+  length: {
+    title: '鱼获长度',
+    unit: 'cm',
+    hint: '范围 0.1 – 999.9 cm，最多 1 位小数',
+    error: '请输入 0.1 – 999.9 之间的数值，最多 1 位小数',
+  },
+  weight: {
+    title: '鱼获重量',
+    unit: 'kg',
+    hint: '范围 0.01 – 999.99 kg，最多 2 位小数',
+    error: '请输入 0.01 – 999.99 之间的数值，最多 2 位小数',
+  },
+};
+
+export const ResultMeasureSheet: React.FC<{
+  visible: boolean;
+  kind: 'length' | 'weight';
+  value: string;
+  onClose: () => void;
+  /** 仅回传合法值或空串（清除）；非法非空值由 Sheet 内提示拦截 */
+  onCommit: (text: string) => void;
+}> = ({ visible, kind, value, onClose, onCommit }) => {
+  const meta = MEASURE_META[kind];
+  const [draft, setDraft] = useState('');
+  useEffect(() => {
+    if (visible) {
+      setDraft(value);
+    }
+  }, [visible, value]);
+  const trimmed = draft.trim();
+  const invalid = Boolean(trimmed) && !isValidMeasureText(kind, trimmed);
+  const commit = () => {
+    if (invalid) {
+      return;
+    }
+    onCommit(trimmed);
+    onClose();
+  };
+  return (
+    <SheetShell visible={visible} onClose={onClose}>
+      <Text style={styles.sheetTitle}>{meta.title}</Text>
+      <View style={styles.measureBox}>
+        <TextInput
+          style={styles.measureInput}
+          value={draft}
+          onChangeText={(t) => setDraft(sanitizeMeasureText(t))}
+          keyboardType="decimal-pad"
+          maxLength={8}
+          autoFocus
+          placeholder="0"
+          placeholderTextColor={ROW_PLACEHOLDER}
+          returnKeyType="done"
+          onSubmitEditing={commit}
+          accessibilityLabel={`${meta.title}输入框，单位${meta.unit}`}
+        />
+        <Text style={styles.measureUnit}>{meta.unit}</Text>
+      </View>
+      <Text style={invalid ? styles.measureError : styles.measureHint}>
+        {invalid ? meta.error : meta.hint}
+      </Text>
+      <View style={styles.sheetActions}>
+        {value ? (
+          <Pressable
+            onPress={() => {
+              onCommit('');
+              onClose();
+            }}
+            style={styles.sheetTextAction}
+            accessibilityRole="button"
+            accessibilityLabel="清除数值"
+          >
+            <Text style={styles.sheetTextMuted}>清除</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.sheetTextAction} />
+        )}
+        {invalid ? (
+          <View style={styles.sheetTextAction}>
+            <Text style={styles.sheetTextDisabled}>完成</Text>
+          </View>
+        ) : (
+          <Pressable
+            onPress={commit}
+            style={styles.sheetTextAction}
+            accessibilityRole="button"
+          >
+            <Text style={styles.sheetTextNormal}>完成</Text>
+          </Pressable>
+        )}
+      </View>
+    </SheetShell>
+  );
+};
 
 const styles = StyleSheet.create({
   /* Hero */
@@ -879,16 +1011,6 @@ const styles = StyleSheet.create({
     color: ROW_NAVY,
     letterSpacing: 1,
   } as TextStyle,
-  fieldInput: {
-    flex: 1,
-    textAlign: 'right',
-    fontSize: fs(15),
-    lineHeight: fs(20),
-    fontWeight: '600',
-    color: ROW_NAVY,
-    paddingVertical: 0,
-    includeFontPadding: false,
-  } as TextStyle,
   fieldValue: {
     flex: 1,
     textAlign: 'right',
@@ -900,6 +1022,13 @@ const styles = StyleSheet.create({
   fieldBlank: {
     color: ROW_PLACEHOLDER,
     fontWeight: '400',
+  } as TextStyle,
+  /* 行内值的单位后缀（提交后展示；单位不入值） */
+  fieldUnit: {
+    fontSize: fs(12),
+    fontWeight: '500',
+    color: NOTE_LABEL,
+    letterSpacing: 0.5,
   } as TextStyle,
   /* 感言卡（关键帧 05） */
   noteCard: {
@@ -1017,6 +1146,56 @@ const styles = StyleSheet.create({
     color: TEAL,
     fontWeight: '600',
     letterSpacing: 2,
+  } as TextStyle,
+  /* 非法非空值时完成禁用（保持动作位布局稳定） */
+  sheetTextDisabled: {
+    fontSize: fs(15),
+    color: ROW_PLACEHOLDER,
+    fontWeight: '600',
+    letterSpacing: 2,
+  } as TextStyle,
+  /* 长度/重量数值输入 Sheet：实底输入框 + 框内固定单位 */
+  measureBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 58,
+    marginTop: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: HAIRLINE,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+  } as ViewStyle,
+  measureInput: {
+    minWidth: 140,
+    textAlign: 'center',
+    fontSize: fs(22),
+    fontWeight: '600',
+    color: TEXT_PRIMARY,
+    paddingVertical: 0,
+    includeFontPadding: false,
+  } as TextStyle,
+  measureUnit: {
+    fontSize: fs(15),
+    fontWeight: '600',
+    color: NOTE_LABEL,
+    letterSpacing: 1,
+  } as TextStyle,
+  measureHint: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontSize: fs(12),
+    color: TEXT_MUTED,
+    letterSpacing: 0.5,
+  } as TextStyle,
+  measureError: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontSize: fs(12),
+    color: palette.qualityInvalid,
+    letterSpacing: 0.5,
   } as TextStyle,
   /* 地点 */
   searchField: {

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../components/icons/AppIcon';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import LottieView from 'lottie-react-native';
 import type { AnimationObject } from 'lottie-react-native';
@@ -39,8 +39,10 @@ import { homeFeedback } from '../services/homeFeedback';
 import { RemoteImage } from '../components/RemoteImage';
 import { PressableScale } from '../components/ui/PressableScale';
 import { CardCarousel } from '../components/ui/CardCarousel';
+import { ProfileAvatar } from '../components/ui/ProfileAvatar';
 import { MorningLakeScene, YuJianPrimaryCaptureButton } from '../components/coreui';
 import cameraFlash from '../assets/home/animation/camera_flash.json';
+import emptyHeroTitle from '../assets/coreui/empty_hero_title.png';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 /** 居中大卡宽度：设计稿主卡约占屏宽 74%，两侧卡片露出更多形成层次 */
@@ -184,8 +186,14 @@ export const HomeScreen: React.FC = () => {
     <View style={[styles.root, contentHidden && { backgroundColor: coreColors.lakeWhite }]}>
       <View style={[styles.flex, contentHidden && styles.hiddenContent]}>
       {/* 环境层（Core UI V1）：同一个清晨湖畔世界。
-          空首页环境参与叙事（钓竿/鱼漂/涟漪/晨光）；有数据时退为干净场景。 */}
-      <MorningLakeScene level="hero" fishing={isEmptyHome} atmosphere={isEmptyHome} />
+          空首页用 Sunrise Hero 源参与叙事（钓竿/鱼线/鱼漂/涟漪/晨光）；
+          有数据时换共享晨雾湖母版（treatment_contract：normal home 禁日出源）。 */}
+      <MorningLakeScene
+        level="hero"
+        variant={isEmptyHome ? 'sunrise' : 'lake'}
+        fishing={isEmptyHome}
+        atmosphere={isEmptyHome}
+      />
 
       {/* 拍照闪白（camera_flash.json，覆盖全屏） */}
       {!reduceMotion && (
@@ -207,9 +215,7 @@ export const HomeScreen: React.FC = () => {
           nicknameEntry={
             <Animated.View style={{ transform: [{ scale: profileScale }] }}>
               <PressableScale onPress={openProfile} scaleTo={0.94} style={styles.avatarHit}>
-                <View style={styles.avatar}>
-                  <AvatarFace avatar={avatar} />
-                </View>
+                <ProfileAvatar size={AVATAR_SIZE} avatarUrl={avatar} />
               </PressableScale>
             </Animated.View>
           }
@@ -239,12 +245,10 @@ export const HomeScreen: React.FC = () => {
               <Text style={styles.brand}>渔见</Text>
             </PressableScale>
 
-            {/* 头像入口（玻璃圆钮 + 已设头像或默认人像） */}
+            {/* 头像入口（共享 ProfileAvatar：已设头像或默认人像合同图形） */}
             <Animated.View style={{ transform: [{ scale: profileScale }] }}>
               <PressableScale onPress={openProfile} scaleTo={0.94} style={styles.avatarHit}>
-                <View style={styles.avatar}>
-                  <AvatarFace avatar={avatar} />
-                </View>
+                <ProfileAvatar size={AVATAR_SIZE} avatarUrl={avatar} />
               </PressableScale>
             </Animated.View>
           </View>
@@ -276,7 +280,7 @@ export const HomeScreen: React.FC = () => {
             >
               <View style={styles.seeAllRow}>
                 <Text style={styles.seeAllText}>全部</Text>
-                <Icon name="chevron-forward" size={15} color={coreColors.deepLakeBlue} />
+                <AppIcon name="chevron_right" size={15} color={coreColors.deepLakeBlue} />
               </View>
             </PressableScale>
           </View>
@@ -335,7 +339,7 @@ export const HomeScreen: React.FC = () => {
           <PressableScale onPress={handleOpenAlbum} scaleTo={0.94} style={styles.albumEntry}>
             <View style={styles.albumRow}>
               <View style={styles.albumIcon}>
-                <Icon name="images-outline" size={15} color="rgba(255,255,255,0.92)" />
+                <AppIcon name="gallery" size={15} color="rgba(255,255,255,0.92)" />
               </View>
               <Text style={styles.albumText}>从相册选择</Text>
             </View>
@@ -346,19 +350,6 @@ export const HomeScreen: React.FC = () => {
     </View>
   );
 };
-
-/* ─── 头像入口内容：已设置头像显示照片，否则默认人像图标 ──────────────────── */
-
-const AvatarFace: React.FC<{ avatar: string | null }> = ({ avatar }) =>
-  avatar ? (
-    <RemoteImage
-      url={avatar}
-      style={styles.avatarPhoto}
-      placeholder={<Icon name="person-outline" size={19} color="#30485A" />}
-    />
-  ) : (
-    <Icon name="person-outline" size={19} color="#30485A" />
-  );
 
 /* ─── Empty Home V2 布局 ──────────────────────────────────────────────────── */
 
@@ -396,21 +387,22 @@ const EmptyHomeLayout: React.FC<{
             <View style={styles.loginRow}>
               <Text style={styles.loginText}>登录</Text>
               <View style={styles.loginChevron}>
-                <Icon name="chevron-forward" size={14} color={coreColors.deepLakeBlue} />
+                <AppIcon name="chevron_right" size={14} color={coreColors.deepLakeBlue} />
               </View>
             </View>
           </PressableScale>
         )}
       </Animated.View>
 
-      {/* 情绪 Hero 文案（anchor: x 4.6% / y 11.7%，冻结稿两行） */}
-      <Animated.View style={[styles.emptyHero, styles.pageInset, { opacity: enter }]}>
-        <Text style={styles.emptyHeroLine}>现在，轮到你</Text>
-        <View>
-          <Text style={styles.emptyHeroLine}>记录第一条鱼。</Text>
-          {/* 金色笔锋下划线（SoftGold 弱高光，Gold 仅用于品牌/重要时刻） */}
-          <View style={styles.heroSwash} />
-        </View>
+      {/* 情绪 Hero：Empty Home V2.2 冻结 raster 母版（hero_asset_contract：
+          625×311 @1080 参考画布，含书法墨色 #123048 与金色笔锋，FIT 等比） */}
+      <Animated.View style={[styles.emptyHero, { opacity: enter }]}>
+        <Image
+          source={emptyHeroTitle}
+          style={styles.emptyHeroArt}
+          accessibilityRole="image"
+          accessibilityLabel="现在，轮到你记录第一条鱼。"
+        />
       </Animated.View>
     </View>
   );
@@ -577,10 +569,15 @@ const CatchCard: React.FC<{
 
 /* ─── 样式 ───────────────────────────────────────────────────────────────── */
 
-/** 头像玻璃表面（GLASS_B：white 0.60） */
-/* 默认头像合同 profile_avatar_v1：外盘 #6BFFFFFF / 描边 #9EFFFFFF / 人像 #30485A */
-const AVATAR_GLASS_FILL = 'rgba(255,255,255,0.42)';
-const AVATAR_GLASS_BORDER = 'rgba(255,255,255,0.62)';
+/** 头像入口尺寸（ProfileAvatar：外盘+人像为合同矢量，真实头像同尺寸圆形填充） */
+const AVATAR_SIZE = 42;
+
+/** 统计文字白色柔光晕：亮背景上不可见，暗背景（晨雾湖树影）上保证分离度 */
+const STAT_TEXT_HALO: TextStyle = {
+  textShadowColor: 'rgba(255,255,255,0.9)',
+  textShadowRadius: 7,
+  textShadowOffset: { width: 0, height: 0 },
+};
 
 const styles = StyleSheet.create({
   root: { flex: 1 } as ViewStyle,
@@ -613,23 +610,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
     color: coreColors.lakeBlue,
   } as TextStyle,
-  avatarHit: { borderRadius: 21 } as ViewStyle,
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: AVATAR_GLASS_BORDER,
-    backgroundColor: AVATAR_GLASS_FILL,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  } as ViewStyle,
-  avatarPhoto: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 20,
-  } as ImageStyle,
+  /** 头像触感热区（圆角与 ProfileAvatar 同径） */
+  avatarHit: { borderRadius: AVATAR_SIZE / 2 } as ViewStyle,
 
   // 统计区（设计稿：直接落在背景上，无容器）
   statBar: {
@@ -641,6 +623,7 @@ const styles = StyleSheet.create({
   statDivider: { width: 1, height: 34, backgroundColor: 'rgba(11,45,75,0.10)' } as ViewStyle,
   statCell: { flex: 1, alignItems: 'center' } as ViewStyle,
   statValue: {
+    ...STAT_TEXT_HALO,
     fontFamily: font.serif,
     fontSize: fs(coreType.uiL),
     fontWeight: '600',
@@ -649,12 +632,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: coreColors.deepLakeBlue,
   } as TextStyle,
+  /** 标签：裸背景上用正文色 lakeBlue（mistBlueGray 对比不足） */
   statLabel: {
+    ...STAT_TEXT_HALO,
     fontSize: fs(coreType.uiXS),
     letterSpacing: 2.5,
     marginTop: 3,
     textAlign: 'center',
-    color: coreColors.mistBlueGray,
+    color: coreColors.lakeBlue,
   } as TextStyle,
 
   // 最近鱼获：区块标题 + 全部 ›（同一行）
@@ -713,33 +698,23 @@ const styles = StyleSheet.create({
     color: coreColors.deepLakeBlue,
     letterSpacing: 1,
   } as TextStyle,
-  /** 图标盒：高度与文字行高一致 + 上移 1dp 光学校正（Ionicons 字形在盒内偏下） */
+  /** 图标盒：高度与文字行高一致（AppIcon 24 单位母版垂直居中，无需光学校正） */
   loginChevron: {
     height: fs(coreType.uiS) * 1.3,
     justifyContent: 'center',
     alignItems: 'center',
     // transform: [{ translateY: -1 }],
   } as ViewStyle,
+  /** Hero 母版位置（hero_asset_contract：bbox x50/y224 620×310 @1080×1920，
+      换算为屏宽比例等比放置；625×311 含可见墨迹外溢，FIT 保持完整笔形） */
   emptyHero: {
     marginTop: SCREEN_HEIGHT * 0.045,
-    gap: 2,
   } as ViewStyle,
-  emptyHeroLine: {
-    fontFamily: font.serif,
-    fontSize: fs(coreType.displayXL),
-    fontWeight: '700',
-    lineHeight: fs(coreType.displayXL) * 1.42,
-    letterSpacing: 2,
-    color: coreColors.deepLakeBlue,
-  } as TextStyle,
-  heroSwash: {
-    marginTop: -fs(6),
-    width: Math.round(SCREEN_WIDTH * 0.34),
-    height: fs(7),
-    borderRadius: 999,
-    backgroundColor: coreColors.softGold,
-    opacity: 0.62,
-  } as ViewStyle,
+  emptyHeroArt: {
+    width: Math.round(SCREEN_WIDTH * (625 / 1080)),
+    height: Math.round(SCREEN_WIDTH * (625 / 1080) * (311 / 625)),
+    marginLeft: Math.round(SCREEN_WIDTH * (50 / 1080)),
+  } as ImageStyle,
 
   // 轮播
   carousel: {
@@ -843,7 +818,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   } as ViewStyle,
-  /** 图标盒：高度与文字行高一致 + 上移 1dp 光学校正（Ionicons 字形在盒内偏下） */
+  /** 图标盒：高度与文字行高一致（AppIcon 24 单位母版垂直居中，无需光学校正） */
   albumIcon: {
     height: fs(coreType.uiS) * 1.35,
     justifyContent: 'center',

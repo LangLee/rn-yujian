@@ -8,9 +8,6 @@ import React, {
 import {
   Animated,
   Easing,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   useWindowDimensions,
   StyleSheet,
   Text,
@@ -24,7 +21,7 @@ import {
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import type { RouteProp } from '@react-navigation/native';
 import { useRecognition } from '../contexts/RecognitionContext';
@@ -48,6 +45,7 @@ import {
   mergeGuideItems,
 } from '../services/fishKnowledgeService';
 import { PressableScale } from '../components/ui/PressableScale';
+import { KeyboardAvoidingScrollView } from '../components/ui';
 import { ScreenHeader } from '../components';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { MorningLakeScene } from '../components/coreui';
@@ -57,6 +55,7 @@ import {
   ResultFieldRows,
   ResultHeroViewport,
   ResultLocationSheet,
+  ResultMeasureSheet,
   ResultNoteCard,
   CandidateItem,
 } from '../components/result/ResultKit';
@@ -82,7 +81,7 @@ type ResultState = 'high' | 'medium' | 'low';
 /**
  * P04 识别结果（Recognition Result 冻结设计包 V1 + 关键帧 05-09 逐像素还原）：
  * 高置信度 = Hero(主体优先) → 鱼种身份行(30sp + 修改鱼种›) → 行输入卡
- * (长度/重量/地点 内联输入+›) → 感言卡(写下这次鱼获的故事+语音胶囊+0/300)
+ * (长度/重量/地点 整行点按弹 Sheet 输入+›；值展示带单位) → 感言卡(写下这次鱼获的故事+语音胶囊+0/300)
  * → 双 CTA(继续记忆·相册图标 / 保存本次鱼获·金描边)。
  * 中置信度 = 一行确认提示 + 横向候选卡(Top-1 模型建议·弱青边；选中 2dp 青) +
  * 都不是？选择其他鱼种 ›；记录区常驻，选定鱼种前保存禁用。
@@ -113,8 +112,10 @@ export const RecognitionResultScreen: React.FC = () => {
   const [slowSaving, setSlowSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  /** 地点编辑 Sheet（长度/重量为行内联输入，无需 Sheet） */
-  const [sheet, setSheet] = useState<'location' | null>(null);
+  /** 行编辑 Sheet（长度/重量/地点整行点按弹出，编辑永不离开结果页） */
+  const [sheet, setSheet] = useState<'length' | 'weight' | 'location' | null>(
+    null
+  );
 
   const prediction = result?.prediction ?? null;
 
@@ -129,30 +130,7 @@ export const RecognitionResultScreen: React.FC = () => {
     }
   }, [measuredCm]);
 
-  // 行输入离焦校验：长度 0.1-999.9（1 位小数）/ 重量 0.01-999.99（2 位小数）；
-  // 非法非空值直接清空（元数据可选，不弹错打断）
-  const commitLengthBlur = useCallback(() => {
-    const t = lengthText.trim();
-    if (!t) {
-      return;
-    }
-    const n = Number(t);
-    const dec = t.includes('.') ? t.split('.')[1].length : 0;
-    if (!Number.isFinite(n) || n < 0.1 || n > 999.9 || dec > 1) {
-      setLengthText('');
-    }
-  }, [lengthText]);
-  const commitWeightBlur = useCallback(() => {
-    const t = weightText.trim();
-    if (!t) {
-      return;
-    }
-    const n = Number(t);
-    const dec = t.includes('.') ? t.split('.')[1].length : 0;
-    if (!Number.isFinite(n) || n < 0.01 || n > 999.99 || dec > 2) {
-      setWeightText('');
-    }
-  }, [weightText]);
+  // 长度/重量校验移入 ResultMeasureSheet（非法非空值 Sheet 内提示并禁用完成）
 
   // 拍照页带入的钓点（自动定位 / 手动选点）：自动填入地点字段
   const carriedLocation = image?.location ?? null;
@@ -518,22 +496,19 @@ export const RecognitionResultScreen: React.FC = () => {
         titleColor={textPrimary}
         backColor={textPrimary}
       />
-      {/* 键盘避让：长度/重量行输入 / 感言卡聚焦时收缩滚动区并把聚焦输入滚进可视区；
-          Android 由 adjustResize 缩窗处理，这里仅 iOS 生效避免双重位移 */}
-      <KeyboardAvoidingView
+      {/* 键盘避让：长度/重量/地点已改由 Sheet 内输入（Sheet 自带 KAV），此处
+          只需处理感言卡聚焦——KeyboardAvoidingScrollView 统一双平台：iOS 用原生
+          keyboard insets 滚聚焦框进可视区，Android edge-to-edge 下手动补键盘
+          内边距并把聚焦框滚到键盘上方 */}
+      <KeyboardAvoidingScrollView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: 32 + insets.bottom },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: 32 + insets.bottom },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-          showsVerticalScrollIndicator={false}
-        >
           {/* Hero（Hero Media Contract：主体优先裁剪；外框 320×248dp@360 规范） */}
           <Animated.View
             style={{ opacity: heroOpacity, transform: [{ scale: heroScale }] }}
@@ -575,8 +550,8 @@ export const RecognitionResultScreen: React.FC = () => {
               >
                 <View style={styles.editLink} pointerEvents="none">
                   <Text style={styles.editLinkText}>修改鱼种</Text>
-                  <Icon
-                    name="chevron-forward"
+                  <AppIcon
+                    name="chevron_right"
                     size={14}
                     color="#0F7A78"
                     style={styles.editLinkChevron}
@@ -619,8 +594,8 @@ export const RecognitionResultScreen: React.FC = () => {
                   <Text style={styles.otherSpeciesText}>
                     都不是？选择其他鱼种
                   </Text>
-                  <Icon
-                    name="chevron-forward"
+                  <AppIcon
+                    name="chevron_right"
                     size={13}
                     color={textSecondary}
                   />
@@ -668,13 +643,8 @@ export const RecognitionResultScreen: React.FC = () => {
               lengthText={lengthText}
               weightText={weightText}
               locationLabel={locationText || null}
-              onLengthChange={(t) => {
-                setLengthText(t);
-                setLengthAuto(false);
-              }}
-              onWeightChange={setWeightText}
-              onLengthBlur={commitLengthBlur}
-              onWeightBlur={commitWeightBlur}
+              onEditLength={() => setSheet('length')}
+              onEditWeight={() => setSheet('weight')}
               onEditLocation={() => {
                 if (privacy.manualLocationEdit) {
                   setSheet('location');
@@ -685,8 +655,8 @@ export const RecognitionResultScreen: React.FC = () => {
             {/* 量尺自动填入提示（运行时行为：用户改动后消失） */}
             {lengthAuto && lengthText ? (
               <View style={styles.autoLenRow}>
-                <Icon
-                  name="checkmark-circle"
+                <AppIcon
+                  name="success"
                   size={12}
                   color={coreColors.morningGold}
                 />
@@ -701,8 +671,8 @@ export const RecognitionResultScreen: React.FC = () => {
             {/* 关闭手动修改地点时：仅提示已自动定位 */}
             {!privacy.manualLocationEdit && activeLocation ? (
               <View style={styles.autoLenRow}>
-                <Icon
-                  name="checkmark-circle"
+                <AppIcon
+                  name="success"
                   size={12}
                   color={coreColors.morningGold}
                 />
@@ -747,8 +717,29 @@ export const RecognitionResultScreen: React.FC = () => {
               />
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingScrollView>
+
+      {/* 长度/重量数值输入 Sheet（编辑永不离开结果页；提交后行内展示值+单位） */}
+      <ResultMeasureSheet
+        visible={sheet === 'length'}
+        kind="length"
+        value={lengthText}
+        onClose={() => setSheet(null)}
+        onCommit={(t) => {
+          /* 量尺自动填入提示：仅当用户实际改动值时退场 */
+          if (t !== lengthText) {
+            setLengthAuto(false);
+          }
+          setLengthText(t);
+        }}
+      />
+      <ResultMeasureSheet
+        visible={sheet === 'weight'}
+        kind="weight"
+        value={weightText}
+        onClose={() => setSheet(null)}
+        onCommit={setWeightText}
+      />
 
       {/* 地点编辑 Sheet（编辑永不离开结果页） */}
       {privacy.manualLocationEdit ? (

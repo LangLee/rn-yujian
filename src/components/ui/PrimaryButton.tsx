@@ -11,7 +11,7 @@ import {
   ViewStyle,
   StyleProp,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../icons/AppIcon';
 import { fs } from '../../constants/tokens';
 import { useTheme } from '../../contexts/ThemeContext';
 import { HapticLevel } from '../../utils/haptics';
@@ -56,8 +56,8 @@ interface PrimaryButtonProps {
    */
   variant?: SpecVariant | 'ghost' | 'soft' | 'glass' | 'gold' | 'goldline';
   haptic?: HapticLevel | null;
-  /** 左侧前导图标（Ionicons 名称，18-20dp） */
-  icon?: string;
+  /** 左侧前导图标（icon_library_v0_1 语义名，18-20dp） */
+  icon?: AppIconName;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -213,7 +213,7 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
             <Animated.View style={[styles.labelLayer, { opacity: labelOpacity }]}>
               <View style={styles.labelRow}>
                 {icon ? (
-                  <Icon name={icon} size={18} color={labelColor} style={styles.labelIcon} />
+                  <AppIcon name={icon} size={18} color={labelColor} style={styles.labelIcon} />
                 ) : null}
                 <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
                   {label}
@@ -222,7 +222,7 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
             </Animated.View>
             <Animated.View style={[styles.labelLayer, { opacity: savedOpacity }]}>
               <View style={styles.savedRow}>
-                <Icon name="checkmark" size={16} color={labelColor} />
+                <AppIcon name="check" size={16} color={labelColor} />
                 <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
                   {savedLabel}
                 </Text>

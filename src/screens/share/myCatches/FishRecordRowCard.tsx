@@ -4,22 +4,26 @@ import { RemoteImage } from '../../../components/RemoteImage';
 import { FishIllustration } from '../../../components/FishIllustration';
 import { PressableScale } from '../../../components/ui/PressableScale';
 import { coreColors } from '../../../constants/coreUi';
-import { fs } from '../../../constants/tokens';
+import { font, fs } from '../../../constants/tokens';
 import {
   CatchEntry,
   growthMarkBadgeKind,
   primaryGrowthMarkLabel,
   GrowthMarkInfo,
-  locationOf,
 } from '../../../utils/myCatchesTimeline';
 
 /**
- * FishRecordRowCard V2（My Catches 冻结稿 / List Image Spec V1）：
- * 82×82 1:1 真实现场照片缩略图（radius 14）+ 鱼种 / 长度重量 / 地点日期 +
- * 右上 Growth Mark 徽章（Chevron 左侧，不压照片、不改卡高）。
+ * FishRecordRowCard（my_catches_v2 / List Image Spec V1 / Growth Mark V1）：
+ * 紧凑行卡 —— 白玻璃蒙版只落在卡片上；左侧真实现场照片带纯白衬边（贴册照片），
+ * 信息栈仅保留 鱼种（衬线）+ 长度·重量（地点与日期已在时间线日期节点/当日摘要呈现）；
+ * Growth Mark 徽章收在鱼种行右端（Chevron 左侧，不压照片、不改卡高）。
  */
 
-const THUMB = 82;
+/** 缩略图（List Image Spec V1 1:1 · 14dp 圆角；按压缩节奏取 76dp） */
+const THUMB = 76;
+const THUMB_RADIUS = 14;
+/** 照片纯白衬边（设计稿照片外 ~2dp 白 mat，像贴在卡上的冲印照） */
+const MAT = 2;
 
 /** Growth Mark 徽章三档语义色（Growth Mark Spec V1 §6）：里程碑金 / 首条灰绿 / 尺寸蓝灰 */
 const BADGE_STYLE: Record<
@@ -50,10 +54,8 @@ const badgeStyles = StyleSheet.create({
     paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    /* 卡片右上信息区、Chevron 左侧（Growth Mark Spec §5），不压照片不改卡高 */
-    alignSelf: 'flex-start',
-    marginTop: 3,
-    marginLeft: 4,
+    /* 鱼种行右端、Chevron 左侧（Growth Mark Spec §5），完整展示绝不收缩，空间不足由鱼种名让位 */
+    flexShrink: 0,
   } as ViewStyle,
   text: {
     fontSize: fs(11),
@@ -62,22 +64,14 @@ const badgeStyles = StyleSheet.create({
   } as TextStyle,
 });
 
+/** 长度 · 重量（设计稿格式：`42.6 cm · 1.28 kg`，地点与日期由时间线呈现，不在卡内重复） */
 function measurementLabel(entry: CatchEntry): string | null {
   const parts: string[] = [];
   const length = entry.memory?.lengthCm;
   const weight = entry.memory?.weightKg;
-  if (typeof length === 'number' && length > 0) parts.push(`长 ${length} cm`);
-  if (typeof weight === 'number' && weight > 0) parts.push(`重 ${weight} kg`);
+  if (typeof length === 'number' && length > 0) parts.push(`${length} cm`);
+  if (typeof weight === 'number' && weight > 0) parts.push(`${weight} kg`);
   return parts.length > 0 ? parts.join(' · ') : null;
-}
-
-function cardDateLabel(entry: CatchEntry): string {
-  if (!entry.date) return '';
-  const now = new Date();
-  const sameYear = entry.year === now.getFullYear();
-  return sameYear
-    ? `${entry.month}.${entry.day}`
-    : `${entry.year}.${entry.month}.${entry.day}`;
 }
 
 export const FishRecordRowCard: React.FC<{
@@ -88,50 +82,37 @@ export const FishRecordRowCard: React.FC<{
   const badgeKind = growthMarkBadgeKind(mark);
   const badgeLabel = primaryGrowthMarkLabel(mark, entry.catch.speciesName);
   const measurement = measurementLabel(entry);
-  const location = locationOf(entry);
-  const dateLabel = cardDateLabel(entry);
 
   return (
     <PressableScale onPress={onPress} scaleTo={0.985} style={styles.hit}>
       <View style={styles.card}>
-        {/* 真实现场照片：唯一主来源（List Image Spec V1） */}
-        <View style={styles.thumbWrap}>
+        {/* 真实现场照片：唯一主来源（List Image Spec V1），白衬边贴册式呈现 */}
+        <View style={styles.thumbMat}>
           <RemoteImage
             url={entry.catch.imageUrl}
             style={styles.thumb}
             resizeMode="cover"
-            placeholder={<FishIllustration size={50} bodyColor="rgba(116,151,133,0.62)" />}
+            placeholder={<FishIllustration size={46} bodyColor="rgba(116,151,133,0.62)" />}
           />
         </View>
 
         <View style={styles.info}>
-          <Text style={styles.species} numberOfLines={1}>
-            {entry.catch.speciesName || '确认中的鱼'}
-          </Text>
+          {/* 鱼种行 = 信息区首行；徽章收在行右端（Growth Mark Spec §5），
+              由鱼种名（numberOfLines=1）让位，不影响下方测量行 */}
+          <View style={styles.speciesRow}>
+            <Text style={styles.species} numberOfLines={1}>
+              {entry.catch.speciesName || '确认中的鱼'}
+            </Text>
+            {badgeKind && badgeLabel ? (
+              <GrowthMarkBadge kind={badgeKind} label={badgeLabel} />
+            ) : null}
+          </View>
           {measurement ? (
             <Text style={styles.measurement} numberOfLines={1}>
               {measurement}
             </Text>
           ) : null}
-          <View style={styles.metaRow}>
-            {location ? (
-              <Text style={styles.meta} numberOfLines={1}>
-                {location}
-              </Text>
-            ) : null}
-            {location && dateLabel ? <Text style={styles.metaDot}>·</Text> : null}
-            {dateLabel ? (
-              <Text style={styles.meta} numberOfLines={1}>
-                {dateLabel}
-              </Text>
-            ) : null}
-          </View>
         </View>
-
-        {/* Growth Mark：右上信息区、Chevron 左侧、最多 1 个（Spec §4/§5） */}
-        {badgeKind && badgeLabel ? (
-          <GrowthMarkBadge kind={badgeKind} label={badgeLabel} />
-        ) : null}
 
         <Text style={styles.chevron}>›</Text>
       </View>
@@ -141,65 +122,62 @@ export const FishRecordRowCard: React.FC<{
 
 const styles = StyleSheet.create({
   hit: {
-    borderRadius: 18,
+    borderRadius: THUMB_RADIUS,
   } as ViewStyle,
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: THUMB_RADIUS,
     backgroundColor: 'rgba(255,255,255,0.90)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.65)',
-    padding: 10,
+    padding: 4,
   } as ViewStyle,
-  thumbWrap: {
-    width: THUMB,
-    height: THUMB,
-    borderRadius: 14,
+  /** 纯白衬边 + 照片 = 贴册冲印照（外 16dp 圆角包 14dp 照片圆角） */
+  thumbMat: {
+    width: THUMB + MAT * 2,
+    height: THUMB + MAT * 2,
+    borderRadius: THUMB_RADIUS + MAT,
+    backgroundColor: '#FFFFFF',
+    padding: MAT,
     overflow: 'hidden',
-    backgroundColor: coreColors.lakeWhite,
-    alignItems: 'center',
-    justifyContent: 'center',
   } as ViewStyle,
   thumb: {
     width: THUMB,
     height: THUMB,
+    borderRadius: THUMB_RADIUS,
+    overflow: 'hidden',
   } as ViewStyle,
   info: {
     flex: 1,
-    marginLeft: 14,
-    marginRight: 8,
+    marginLeft: 11,
+    marginRight: 6,
+    justifyContent: 'center',
     gap: 4,
   } as ViewStyle,
-  species: {
-    color: coreColors.deepLakeBlue,
-    fontSize: fs(17),
-    fontWeight: '600',
-  } as TextStyle,
-  measurement: {
-    color: 'rgba(11,45,75,0.82)',
-    fontSize: fs(12),
-  } as TextStyle,
-  metaRow: {
+  speciesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   } as ViewStyle,
-  meta: {
-    color: coreColors.mistBlueGray,
-    fontSize: fs(11),
+  species: {
+    /* 鱼名用衬线（tokens：鱼名/数字使用衬线；设计稿同） */
+    fontFamily: font.serif,
+    color: coreColors.deepLakeBlue,
+    fontSize: fs(16),
+    fontWeight: '700',
     flexShrink: 1,
   } as TextStyle,
-  metaDot: {
-    color: coreColors.mistBlueGray,
-    fontSize: fs(11),
+  measurement: {
+    color: coreColors.lakeBlue,
+    fontSize: fs(12),
   } as TextStyle,
   chevron: {
     color: coreColors.mistBlueGray,
-    fontSize: fs(26),
+    fontSize: fs(24),
     fontWeight: '300',
     marginLeft: 2,
-    minWidth: 18,
+    minWidth: 16,
     textAlign: 'center',
   } as TextStyle,
 });

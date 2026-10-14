@@ -11,7 +11,7 @@ import {
 import Svg, { Defs, LinearGradient as SvgGradient, Rect, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../../components/icons/AppIcon';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -253,7 +253,7 @@ export const ShareCreateScreen: React.FC = () => {
           glassBorder={profile.surface.glassBorder}
         >
           <View style={styles.sectionTitleRow}>
-            <Icon name="fish-outline" size={17} color={textPrimary} />
+            <AppIcon name="species" size={17} color={textPrimary} />
             <Text style={[styles.sectionTitle, { color: textPrimary }]}>选择鱼获范围</Text>
           </View>
           <View style={styles.rangeRow}>
@@ -294,13 +294,13 @@ export const ShareCreateScreen: React.FC = () => {
                     </Text>
                     {key === 'custom' ? (
                       <>
-                        <Icon name="options-outline" size={16} color={active ? GOLD_TEXT : textSecondary} />
+                        <AppIcon name="filter" size={16} color={active ? GOLD_TEXT : textSecondary} />
                         <Text style={[styles.rangeTileCount, { color: textSecondary }]}>自由选择</Text>
                       </>
                     ) : (
                       <>
-                        <Icon
-                          name="fish"
+                        <AppIcon
+                          name="species"
                           size={15}
                           color={active ? GOLD_TEXT : 'rgba(23,59,75,0.45)'}
                         />
@@ -319,13 +319,13 @@ export const ShareCreateScreen: React.FC = () => {
         {/* 选择模板 */}
         <View style={styles.templateHeader}>
           <View style={styles.sectionTitleRow}>
-            <Icon name="sparkles" size={17} color={GOLD} />
+            <AppIcon name="sparkles" size={17} color={GOLD} />
             <Text style={[styles.sectionTitle, { color: textPrimary }]}>选择模板</Text>
           </View>
           <PressableScale onPress={() => setAllTemplateSheet(true)} scaleTo={0.96}>
             <View style={styles.sectionLink}>
               <Text style={[styles.sectionLinkText, { color: textSecondary }]}>查看全部模板</Text>
-              <Icon name="chevron-forward" size={14} color={textSecondary} />
+              <AppIcon name="chevron_right" size={14} color={textSecondary} />
             </View>
           </PressableScale>
         </View>
@@ -372,7 +372,7 @@ export const ShareCreateScreen: React.FC = () => {
                       },
                     ]}
                   >
-                    {active ? <Icon name="checkmark" size={13} color="#FFFFFF" /> : null}
+                    {active ? <AppIcon name="check" size={13} color="#FFFFFF" /> : null}
                   </View>
                 </View>
               </View>
@@ -383,13 +383,13 @@ export const ShareCreateScreen: React.FC = () => {
         {/* 生成内容 */}
         <View style={[styles.contentHeader, styles.contentHeaderGap]}>
           <View style={styles.sectionTitleRow}>
-            <Icon name="settings-outline" size={17} color={textPrimary} />
+            <AppIcon name="edit" size={17} color={textPrimary} />
             <Text style={[styles.sectionTitle, { color: textPrimary }]}>生成内容</Text>
           </View>
         </View>
         <SectionCard glass={profile.surface.glassStrong} glassBorder={profile.surface.glassBorder}>
           <OptionRowWrap
-            icon="fish-outline"
+            icon="species"
             label="代表鱼"
             value={HERO_FISH_OPTIONS[heroFishIndex]}
             textPrimary={textPrimary}
@@ -398,7 +398,7 @@ export const ShareCreateScreen: React.FC = () => {
           />
           <RowDivider />
           <OptionRowWrap
-            icon="stats-chart-outline"
+            icon="filter"
             label="展示方式"
             value={DISPLAY_OPTIONS[displayIndex]}
             textPrimary={textPrimary}
@@ -407,7 +407,7 @@ export const ShareCreateScreen: React.FC = () => {
           />
           <RowDivider />
           <OptionRowWrap
-            icon="location-outline"
+            icon="location"
             label="地点显示"
             value={LOCATION_OPTIONS[locationIndex]}
             textPrimary={textPrimary}
@@ -417,7 +417,7 @@ export const ShareCreateScreen: React.FC = () => {
           <RowDivider />
           <View style={styles.optionRow}>
             <View style={styles.optionLeft}>
-              <Icon name="lock-closed-outline" size={17} color={textPrimary} />
+              <AppIcon name="lock" size={17} color={textPrimary} />
               <Text style={[styles.optionLabel, { color: textPrimary }]}>隐私设置</Text>
             </View>
             <View style={styles.optionRight}>
@@ -461,7 +461,7 @@ export const ShareCreateScreen: React.FC = () => {
             </Svg>
             <View style={styles.ctaRow} pointerEvents="none">
               <Text style={styles.ctaText}>生成预览</Text>
-              <Icon name="arrow-forward" size={17} color="#FFFFFF" />
+              <AppIcon name="chevron_right" size={17} color="#FFFFFF" />
             </View>
           </View>
         </PressableScale>
@@ -471,7 +471,7 @@ export const ShareCreateScreen: React.FC = () => {
 
         {/* 底部品牌 */}
         <View style={styles.brandFooter}>
-          <Icon name="fish-outline" size={15} color={textSecondary} />
+          <AppIcon name="species" size={15} color={textSecondary} />
           <Text style={[styles.brandText, { color: textSecondary }]}>渔见 · 遇见更大的水域</Text>
         </View>
       </ScrollView>
@@ -600,7 +600,7 @@ const SectionCard: React.FC<{
 );
 
 const OptionRowWrap: React.FC<{
-  icon: string;
+  icon: AppIconName;
   label: string;
   value: string;
   textPrimary: string;
@@ -610,14 +610,14 @@ const OptionRowWrap: React.FC<{
   <PressableScale onPress={onPress} scaleTo={0.99}>
     <View style={styles.optionRow}>
       <View style={styles.optionLeft}>
-        <Icon name={icon} size={17} color={textPrimary} />
+        <AppIcon name={icon} size={17} color={textPrimary} />
         <Text style={[styles.optionLabel, { color: textPrimary }]}>{label}</Text>
       </View>
       <View style={styles.optionRight}>
         <Text style={[styles.optionValue, { color: textSecondary }]} numberOfLines={1}>
           {value}
         </Text>
-        <Icon name="chevron-forward" size={14} color={textSecondary} />
+        <AppIcon name="chevron_right" size={14} color={textSecondary} />
       </View>
     </View>
   </PressableScale>

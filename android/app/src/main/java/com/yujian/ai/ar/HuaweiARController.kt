@@ -39,6 +39,7 @@ class HuaweiARController(
 
     private val glView = GLSurfaceView(context)
     private val backgroundRenderer = BackgroundRenderer()
+    @Volatile
     private var session: ARSession? = null
     private var sessionResumed = false
     @Volatile
@@ -108,8 +109,7 @@ class HuaweiARController(
     }
 
     override fun onDetachedFromWindow() {
-        glView.onPause()
-        stopSession()
+        teardownAsync()
     }
 
     override fun onHostVisibilityChanged(visible: Boolean) {
@@ -123,8 +123,23 @@ class HuaweiARController(
     }
 
     override fun release() {
-        glView.onPause()
-        stopSession()
+        teardownAsync()
+    }
+
+    /**
+     * 拆除（卸载浮层 / 脱离窗口）：主线程只摘会话引用（渲染与 hitTest 立即
+     * 失效），glView.onPause（等待 GL 线程）与 session.stop（等待 AR 服务）
+     * 交后台串行线程完成——主线程同步执行曾导致「用 X cm」返回取景页时 ANR。
+     */
+    private fun teardownAsync() {
+        val s = session
+        session = null
+        sessionResumed = false
+        latestFrame = null
+        arHeavyOps.execute {
+            runCatching { glView.onPause() }
+            runCatching { s?.stop() }
+        }
     }
 
     @SuppressLint("SwitchIntDef")
@@ -136,6 +151,12 @@ class HuaweiARController(
 
     private fun startSession() {
         if (session != null) {
+            return
+        }
+        // 双保险：新鸿蒙（NEXT / 新出厂 4.2+）上 checkAvailability 可能误报已就绪，
+        // 构造 ARSession 前以实际服务状态拦截，给出明确回落原因
+        if (!isReady(context)) {
+            postError("engine_not_installed")
             return
         }
         try {
@@ -181,13 +202,6 @@ class HuaweiARController(
 
     private fun pauseSession() {
         runCatching { session?.pause() }
-        sessionResumed = false
-        latestFrame = null
-    }
-
-    private fun stopSession() {
-        runCatching { session?.stop() }
-        session = null
         sessionResumed = false
         latestFrame = null
     }

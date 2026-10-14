@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { usePreferences } from '../contexts/PreferencesContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -412,7 +412,7 @@ export const LocationPickerScreen: React.FC = () => {
           accessibilityLabel="关闭地图选点"
           accessibilityRole="button"
         >
-          <Icon name="close" size={21} color={iconColor} />
+          <AppIcon name="close" size={21} color={iconColor} />
         </PressableScale>
         <Animated.View
           style={[
@@ -435,7 +435,7 @@ export const LocationPickerScreen: React.FC = () => {
         >
           {searchMounted ? (
             <>
-              <Icon name="search" size={18} color={iconColor} />
+              <AppIcon name="search" size={18} color={iconColor} />
               <TextInput
                 style={[styles.searchInput, { color: textPrimary }]}
                 value={query}
@@ -459,7 +459,7 @@ export const LocationPickerScreen: React.FC = () => {
                   accessibilityLabel="清空搜索"
                   accessibilityRole="button"
                 >
-                  <Icon name="close-circle" size={15} color={textSecondary} />
+                  <AppIcon name="clear_field" size={15} color={textSecondary} />
                 </PressableScale>
               ) : (
                 <PressableScale
@@ -469,7 +469,7 @@ export const LocationPickerScreen: React.FC = () => {
                   accessibilityLabel="收起搜索"
                   accessibilityRole="button"
                 >
-                  <Icon name="chevron-down" size={17} color={textSecondary} />
+                  <AppIcon name="expand_more" size={17} color={textSecondary} />
                 </PressableScale>
               )}
             </>
@@ -481,7 +481,7 @@ export const LocationPickerScreen: React.FC = () => {
               accessibilityLabel="搜索地点"
               accessibilityRole="button"
             >
-              <Icon name="search" size={20} color={iconColor} />
+              <AppIcon name="search" size={20} color={iconColor} />
             </PressableScale>
           )}
         </Animated.View>
@@ -503,7 +503,7 @@ export const LocationPickerScreen: React.FC = () => {
           {results.map((item) => (
             <PressableScale key={item.id} onPress={() => applyResult(item)} scaleTo={0.99}>
               <View style={styles.resultRow}>
-                <Icon name="location-outline" size={14} color={GOLD} />
+                <AppIcon name="location" size={14} color={GOLD} />
                 <View style={styles.resultText}>
                   <Text style={[styles.resultName, { color: textPrimary }]} numberOfLines={1}>
                     {item.name}
@@ -527,7 +527,7 @@ export const LocationPickerScreen: React.FC = () => {
           accessibilityLabel="放大地图"
           accessibilityRole="button"
         >
-          <Icon name="add" size={21} color={iconColor} />
+          <AppIcon name="add" size={21} color={iconColor} />
         </PressableScale>
         <PressableScale
           onPress={() => zoomBy(-1)}
@@ -536,7 +536,7 @@ export const LocationPickerScreen: React.FC = () => {
           accessibilityLabel="缩小地图"
           accessibilityRole="button"
         >
-          <Icon name="remove" size={21} color={iconColor} />
+          <AppIcon name="remove" size={21} color={iconColor} />
         </PressableScale>
         <PressableScale
           onPress={() => void locateMe()}
@@ -545,7 +545,7 @@ export const LocationPickerScreen: React.FC = () => {
           accessibilityLabel="回到当前位置"
           accessibilityRole="button"
         >
-          <Icon name="locate" size={19} color={GOLD} />
+          <AppIcon name="location" size={19} color={GOLD} />
         </PressableScale>
       </View>
 
@@ -567,7 +567,7 @@ export const LocationPickerScreen: React.FC = () => {
         ]}
       >
         <View style={styles.previewRow}>
-          <Icon name="location" size={16} color={GOLD} />
+          <AppIcon name="location" size={16} color={GOLD} />
           {resolving ? (
             <ActivityIndicator size="small" color={GOLD} style={styles.previewSpinner} />
           ) : null}

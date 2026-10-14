@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../../components/icons/AppIcon';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useCatchArchive } from '../../contexts/CatchContext';
@@ -193,7 +193,7 @@ export const GrowthTab: React.FC = () => {
                 回顾这一年的收获与变化
               </Text>
             </View>
-            <Icon name="chevron-forward" size={20} color={textSecondary} />
+            <AppIcon name="chevron_right" size={20} color={textSecondary} />
           </View>
         </PressableScale>
       </ScrollView>
@@ -226,7 +226,7 @@ const StatCell: React.FC<{
       <Text style={[styles.statValue, { color: u.textPrimary }]}>{u.value}</Text>
       {onInfo ? (
         <PressableScale onPress={onInfo} scaleTo={0.9} hitSlop={6}>
-          <Icon name="information-circle-outline" size={14} color={u.textSecondary} />
+          <AppIcon name="help" size={14} color={u.textSecondary} />
         </PressableScale>
       ) : null}
     </View>
@@ -254,7 +254,7 @@ const EventRow: React.FC<{
       {/* 节点 + 连线 */}
       <View style={styles.markerColumn}>
         <View style={[styles.markerDot, { backgroundColor: kind.soft }]}>
-          <Icon name={event.iconName} size={13} color={kind.color} />
+          <AppIcon name={event.iconName} size={13} color={kind.color} />
         </View>
         {drawLine ? <View style={styles.markerLine} /> : null}
       </View>
@@ -275,7 +275,7 @@ const EventRow: React.FC<{
             ))}
             {event.location ? (
               <View style={styles.eventLocationRow}>
-                <Icon name="location-outline" size={12} color={textSecondary} />
+                <AppIcon name="location" size={12} color={textSecondary} />
                 <Text style={[styles.eventLocation, { color: textSecondary }]} numberOfLines={1}>
                   {event.location}
                 </Text>
@@ -293,7 +293,7 @@ const EventRow: React.FC<{
             </View>
           ) : (
             <View style={[styles.eventThumb, styles.eventThumbGlyph, { backgroundColor: kind.soft }]}>
-              <Icon name={event.iconName} size={22} color={kind.color} />
+              <AppIcon name={event.iconName} size={22} color={kind.color} />
             </View>
           )}
         </View>

@@ -37,6 +37,7 @@ class ArCoreController(
 
     private val glView = GLSurfaceView(context)
     private val backgroundRenderer = BackgroundRenderer()
+    @Volatile
     private var session: Session? = null
     private var sessionResumed = false
     @Volatile
@@ -111,8 +112,7 @@ class ArCoreController(
     }
 
     override fun onDetachedFromWindow() {
-        glView.onPause()
-        stopSession()
+        teardownAsync()
     }
 
     override fun onHostVisibilityChanged(visible: Boolean) {
@@ -126,8 +126,23 @@ class ArCoreController(
     }
 
     override fun release() {
-        glView.onPause()
-        stopSession()
+        teardownAsync()
+    }
+
+    /**
+     * 拆除（卸载浮层 / 脱离窗口）：主线程只摘会话引用（渲染与 hitTest 立即
+     * 失效），glView.onPause（等待 GL 线程）与 session.close（等待 AR 服务）
+     * 交后台串行线程完成——主线程同步执行曾导致「用 X cm」返回取景页时 ANR。
+     */
+    private fun teardownAsync() {
+        val s = session
+        session = null
+        sessionResumed = false
+        latestFrame = null
+        arHeavyOps.execute {
+            runCatching { glView.onPause() }
+            runCatching { s?.close() }
+        }
     }
 
     @SuppressLint("SwitchIntDef")
@@ -180,13 +195,6 @@ class ArCoreController(
 
     private fun pauseSession() {
         runCatching { session?.pause() }
-        sessionResumed = false
-        latestFrame = null
-    }
-
-    private fun stopSession() {
-        runCatching { session?.close() }
-        session = null
         sessionResumed = false
         latestFrame = null
     }

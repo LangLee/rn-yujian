@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Animated, Dimensions, ScrollView, StyleProp, View, ViewStyle } from 'react-native';
 
 /**
@@ -6,6 +6,12 @@ import { Animated, Dimensions, ScrollView, StyleProp, View, ViewStyle } from 're
  * 首页渔获卡与鱼鉴详情页 Fish Knowledge 卡共用同一套几何与滚动逻辑，
  * 业务方只负责 renderItem（通过 render prop 拿到 scrollX 做插值动画）。
  */
+
+/** 命令式句柄：邻卡点击仅居中（Fish Guide 动效合同 2.4）等场景使用 */
+export interface CardCarouselHandle {
+  /** 平滑滚动到指定卡片并居中（越界自动收敛） */
+  scrollToIndex: (index: number, animated?: boolean) => void;
+}
 
 export interface CardCarouselRenderInfo {
   index: number;
@@ -33,10 +39,14 @@ interface CardCarouselProps {
   sideOpacity?: number;
   /** 缩放补偿位移：侧卡向外推贴住屏幕边缘（0 表示不做补偿） */
   sidePush?: number;
+  /** 初始居中卡片（冷启动定位；返回恢复由屏幕常驻挂载自然承担） */
+  initialIndex?: number;
   onChange?: (index: number) => void;
   renderItem: (info: CardCarouselRenderInfo) => React.ReactNode;
   /** 滚动内容区额外样式（如上边距） */
   contentStyle?: StyleProp<ViewStyle>;
+  /** 命令式句柄（React 19 ref-as-prop） */
+  ref?: React.Ref<CardCarouselHandle>;
 }
 
 export const CardCarousel: React.FC<CardCarouselProps> = ({
@@ -48,16 +58,43 @@ export const CardCarousel: React.FC<CardCarouselProps> = ({
   sideDrop = 22,
   sideOpacity = 0.6,
   sidePush = 0,
+  initialIndex = 0,
   onChange,
   renderItem,
   contentStyle,
+  ref,
 }) => {
   const step = cardWidth + gap;
-  const [activeIndex, setActiveIndex] = useState(0);
+  const clampedInitial = Math.max(0, Math.min(count - 1, initialIndex));
+  const [activeIndex, setActiveIndex] = useState(clampedInitial);
   const scrollX = useRef(new Animated.Value(0)).current;
-  const screenWidth = Dimensions.get('window').width;
+  const scrollViewRef = useRef<ScrollView>(null);  const screenWidth = Dimensions.get('window').width;
   // 首末卡也能居中：内容区两侧留出 (屏宽 - 卡宽) / 2
   const sidePadding = Math.max(0, (screenWidth - cardWidth) / 2);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToIndex: (index: number, animated = true) => {
+        const clamped = Math.max(0, Math.min(count - 1, index));
+        scrollViewRef.current?.scrollTo({ x: clamped * step, animated });
+        setActiveIndex(clamped);
+        onChange?.(clamped);
+      },
+    }),
+    [count, onChange, step],
+  );
+
+  /* 冷启动定位到 initialIndex（Android 不支持 contentOffset 初始渲染） */
+  useEffect(() => {
+    if (clampedInitial > 0) {
+      requestAnimationFrame(() => {
+        scrollViewRef.current?.scrollTo({ x: clampedInitial * step, animated: false });
+      });
+    }
+    // 仅在挂载时执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleMomentumEnd = useCallback(
     (event: { nativeEvent: { contentOffset: { x: number } } }) => {
@@ -75,6 +112,7 @@ export const CardCarousel: React.FC<CardCarouselProps> = ({
 
   return (
     <Animated.ScrollView
+      ref={scrollViewRef}
       horizontal
       snapToInterval={step}
       decelerationRate="fast"

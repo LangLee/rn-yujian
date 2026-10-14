@@ -29,7 +29,7 @@ jest.mock('../src/services/recognitionService', () => ({
   },
 }));
 
-jest.mock('react-native-vector-icons/Ionicons', () => 'Icon');
+// 图标已迁移到 AppIcon(react-native-svg)，jest.setup.js 统一桩化该库
 jest.mock('react-native-image-picker', () => ({
   launchImageLibrary: (_o: unknown, cb: (r: unknown) => void) => cb?.({ assets: [] }),
   launchCamera: (_o: unknown, cb: (r: unknown) => void) => cb?.({ assets: [] }),

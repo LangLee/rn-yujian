@@ -57,13 +57,13 @@ export const AboutScreen: React.FC = () => {
         {/* 法律卡：共用法律文档壳 */}
         <SettingsCard style={styles.legalCard}>
           <SettingsRow
-            icon="document-text-outline"
+            icon="note"
             tint="slate"
             label="用户协议"
             onPress={() => navigation.navigate('LegalDocument', { doc: 'agreement' })}
           />
           <SettingsRow
-            icon="shield-checkmark-outline"
+            icon="lock"
             tint="teal"
             label="隐私政策"
             onPress={() => navigation.navigate('LegalDocument', { doc: 'privacy' })}

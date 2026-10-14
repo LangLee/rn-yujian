@@ -4,10 +4,15 @@ import { NativeModules, Platform } from 'react-native';
  * AR 自动量尺原生模块封装（双引擎：Android GMS 走 ARCore，华为/荣耀 HMS 走 AR Engine；
  * iOS 契约预留，识别链路目前仅 Android）。
  *
+ * 鸿蒙兼容：HarmonyOS NEXT / 新出厂 4.2+ 不再提供 Android 版 AR Engine 服务，
+ * 原生侧以 checkAvailability + isAREngineApkReady 双确认识别该场景并返回
+ * unsupported，此处直接回落手动量尺（不引导安装）；老机型行为不变。
+ *
  * 原生侧文件：
  *   android/.../com/yujian/ai/ar/ARMeasureView.kt        —— 容器：按 engine prop 挂控制器
  *   android/.../com/yujian/ai/ar/ArCoreController.kt     —— ARCore 会话 + GL 背景 + hitTest
  *   android/.../com/yujian/ai/ar/HuaweiARController.kt   —— 华为 AR Engine 同契约实现
+ *   android/.../com/yujian/ai/ar/ARDeviceCompat.kt       —— 鸿蒙系统版本判定
  *   android/.../com/yujian/ai/rn/ARMeasureModule.kt      —— 双引擎探测 / 安装引导 / hitTest 转发
  */
 export type AREngine = 'arcore' | 'huawei';

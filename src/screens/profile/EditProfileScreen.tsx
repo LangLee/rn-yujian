@@ -5,7 +5,6 @@ import {
   ImageStyle,
   PermissionsAndroid,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -28,6 +27,10 @@ import { codePointCount, normalizeNickname, validateNickname } from '../../utils
 import { LakeContentBackdrop } from '../../components/coreui/LakeContentBackdrop';
 import { ProfileAvatar } from '../../components/ui/ProfileAvatar';
 import { BottomSheet } from '../../components/ui/BottomSheet';
+import {
+  KeyboardAvoidingScrollView,
+  useEnsureInputVisible,
+} from '../../components/ui/KeyboardAvoidingScrollView';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { FooterGrass } from '../../components/ui/FooterGrass';
@@ -69,6 +72,8 @@ export const EditProfileScreen: React.FC = () => {
     { kind: 'success' | 'error'; text: string } | null
   >(null);
   const inputRef = useRef<TextInput>(null);
+  /* Android 键盘已开时聚焦昵称栏：主动请求滚动进可视区 */
+  const ensureInputVisible = useEnsureInputVisible();
 
   /* 打开页面时以服务端资料为权威刷新初始值（失败静默保持会话值） */
   useEffect(() => {
@@ -219,7 +224,9 @@ export const EditProfileScreen: React.FC = () => {
       <LakeContentBackdrop />
       <ScreenHeader title="编辑资料" onBack={handleBack} />
 
-      <ScrollView
+      {/* 键盘避让：iOS 原生 automaticallyAdjustKeyboardInsets 滚聚焦框；
+          Android edge-to-edge 下 KeyboardAvoidingScrollView 手动避让 */}
+      <KeyboardAvoidingScrollView
         style={styles.flex}
         contentContainerStyle={[
           styles.content,
@@ -245,7 +252,7 @@ export const EditProfileScreen: React.FC = () => {
                 <ProfileAvatar size={104} avatarUrl={displayAvatar} />
               )}
               <View style={styles.cameraBadge}>
-                <Icon name="camera" size={15} color="#FFFFFF" />
+                <AppIcon name="camera" size={15} color="#FFFFFF" />
               </View>
             </View>
           </PressableScale>
@@ -284,6 +291,11 @@ export const EditProfileScreen: React.FC = () => {
               placeholderTextColor="#9AACB5"
               returnKeyType="done"
               editable={!saving}
+              onFocus={() =>
+                requestAnimationFrame(() =>
+                  ensureInputVisible(TextInput.State.currentlyFocusedInput()),
+                )
+              }
               selectionColor={coreColors.morningGold}
               onSubmitEditing={() => inputRef.current?.blur()}
               accessibilityLabel="昵称"
@@ -295,7 +307,7 @@ export const EditProfileScreen: React.FC = () => {
                 accessibilityRole="button"
                 accessibilityLabel="清空昵称"
               >
-                <Icon name="close-circle" size={18} color="rgba(116,136,151,0.7)" />
+                <AppIcon name="clear_field" size={18} color="rgba(116,136,151,0.7)" />
               </PressableScale>
             ) : null}
           </View>
@@ -328,15 +340,15 @@ export const EditProfileScreen: React.FC = () => {
           loading={saving}
           style={styles.saveButton}
         />
-      </ScrollView>
+      </KeyboardAvoidingScrollView>
 
       {/* 底部水岸草丛（页面前景装饰，不遮挡 CTA） */}
       <FooterGrass height={Math.round(72)} />
 
       {/* 头像来源 Sheet：拍照 / 从相册选择 / 取消 */}
       <BottomSheet visible={sourceSheet} onClose={() => setSourceSheet(false)}>
-        <SourceRow icon="camera-outline" label="拍照" onPress={() => void openCamera()} />
-        <SourceRow icon="images-outline" label="从相册选择" onPress={openPicker} />
+        <SourceRow icon="camera" label="拍照" onPress={() => void openCamera()} />
+        <SourceRow icon="gallery" label="从相册选择" onPress={openPicker} />
         <PrimaryButton
           label="取消"
           variant="secondaryMuted"
@@ -386,14 +398,14 @@ function isSessionExpired(error: unknown): boolean {
   return error instanceof ApiError && (error.statusCode === 401 || error.bizCode === 'A0230');
 }
 
-const SourceRow: React.FC<{ icon: string; label: string; onPress: () => void }> = ({
+const SourceRow: React.FC<{ icon: AppIconName; label: string; onPress: () => void }> = ({
   icon,
   label,
   onPress,
 }) => (
   <PressableScale onPress={onPress} scaleTo={0.99} accessibilityRole="button" accessibilityLabel={label}>
     <View style={styles.sourceRow}>
-      <Icon name={icon} size={20} color={coreColors.lakeBlue} />
+      <AppIcon name={icon} size={20} color={coreColors.lakeBlue} />
       <Text style={styles.sourceLabel}>{label}</Text>
     </View>
   </PressableScale>

@@ -1,130 +1,226 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
-  Linking,
+  Image,
+  ImageStyle,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextStyle,
   View,
   ViewStyle,
-  TextStyle,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StackNavigationProp } from '@react-navigation/stack';
-import Icon from 'react-native-vector-icons/Ionicons';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import { AppIcon } from '../components/icons/AppIcon';
 import {
   fishKnowledgeService,
   localGuideItems,
   toFallbackDetail,
 } from '../services/fishKnowledgeService';
-import { catchMemoryService, CatchMemoryData } from '../services/catchMemoryService';
-import { RemoteImage } from '../components/RemoteImage';
-import { TagChip } from '../components/Common';
-import { ScreenHeader } from '../components';
-import { CardCarousel, EmptyState, useCarouselCardTransform } from '../components/ui';
-import { palette } from '../constants/colors';
-import { font, fs } from '../constants/tokens';
-import { coreColors } from '../constants/coreUi';
-import { formatCaptureWhen, formatLength, formatWeight } from '../utils/formatters';
+import { RemoteImage, prefetchRemoteImages } from '../components/RemoteImage';
+import { MorningLakeScene } from '../components/coreui';
+import { brandColors, font, fs, spacing } from '../constants/tokens';
+import { coreColors, coreGlass, coreRadius } from '../constants/coreUi';
+import { CardCarousel, CardCarouselHandle } from '../components/ui/CardCarousel';
+import { PressableScale } from '../components/ui/PressableScale';
 import { useAuth } from '../contexts/AuthContext';
 import { useCatchArchive } from '../contexts/CatchContext';
 import {
   FishGuideItem,
   FishKnowledgeCard,
   FishKnowledgeDetail,
+  FishKnowledgeSimilar,
+  RemoteCatch,
 } from '../types/models';
-import { RootStackParamList } from '../navigation/types';
+import {
+  RootStackParamList,
+  StackNavigationProp,
+} from '../navigation/types';
 
 type FishSpeciesDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Species'>;
 type SpeciesRouteProp = RouteProp<RootStackParamList, 'Species'>;
 
-const cardOrder = ['HERO', 'IDENTIFICATION', 'ECO', 'GEAR', 'SKILL'];
-/** 卡片胶囊短标签（设计稿中主卡鱼名旁的金边小胶囊） */
-const cardBadges: Record<string, string> = {
-  HERO: '英雄',
-  IDENTIFICATION: '识别',
-  ECO: '生态',
-  GEAR: '装备',
-  SKILL: '技术',
-};
+/* ── 知识卡视觉 Token（深湖蓝 → 湖蓝渐变底 + 金色点缀；不使用黑色底） ── */
+const INK_TOP = '#0B2D4B';
+const INK_BOTTOM = '#165271';
+const CARD_GOLD = '#D6B56D';
+const CARD_GOLD_DIM = 'rgba(214,181,109,0.45)';
+const INK_VALUE = 'rgba(255,255,255,0.85)';
+const INK_VALUE_SOFT = 'rgba(255,255,255,0.60)';
 
-const cardGold = '#D6B56D';
-const cardInkTop = '#171717';
-const cardInkBottom = '#302718';
+const { width: SCREEN_W } = Dimensions.get('window');
+/** 页面合同 §5.2：主卡 ~82–86% 屏宽，邻卡每侧可见 ~5–8% */
+const CARD_WIDTH = Math.round(SCREEN_W * 0.84);
+/** 无图时的文字卡回退比例（w:h，原冻结稿竖版卡高） */
+const FALLBACK_CARD_ASPECT = 0.86;
+/** 卡片比例钳制：插画比例再极端也不让卡片过扁或过长，保证轮播与文字卡可用 */
+const CARD_ASPECT_MIN = 0.72;
+const CARD_ASPECT_MAX = 1.6;
+const CARD_GAP = 10;
+/** 动效合同 §4.2：知识卡无需缩放动画，层次由居中 + 露边承担，仅降透明度 */
+const SIDE_OPACITY = 0.5;
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-/** 左右邻卡只露 14dp（10–16dp 区间中值），避免多卡抢主视觉 */
-const SIDE_PEEK = 14;
-const CARD_GAP = 14;
-/** 主卡 1:1，宽度由露边推算：屏宽 - 2*(露边 + 间距) */
-const CARD_WIDTH = SCREEN_WIDTH - 2 * (SIDE_PEEK + CARD_GAP);
-const SIDE_SCALE = 0.88;
-const SIDE_DROP = 18;
-const SIDE_OPACITY = 0.55;
-/** 补偿侧卡缩放留出的空隙：把侧卡向外推，保证邻卡仍露出 10–16dp */
-const SIDE_PUSH = Math.round((CARD_WIDTH * (1 - SIDE_SCALE)) / 2);
-
-type DetailTabKey = 'CATCH' | 'RANKING' | 'LATEST';
-const detailTabs: { key: DetailTabKey; label: string }[] = [
-  { key: 'CATCH', label: '鱼获' },
-  { key: 'RANKING', label: '排行' },
-  { key: 'LATEST', label: '最新' },
+/** 内容契约 §1：五个固定知识位（顺序冻结，运行时不得重排） */
+const KNOWLEDGE_SLOTS: { type: string; role: string }[] = [
+  { type: 'HERO', role: '鱼种名片' },
+  { type: 'IDENTIFICATION', role: '辨识特征' },
+  { type: 'ECO', role: '生态习性' },
+  { type: 'GEAR', role: '装备建议' },
+  { type: 'SKILL', role: '作钓要点' },
 ];
 
-const orderedActiveCards = (detail: FishKnowledgeDetail): FishKnowledgeCard[] =>
-  detail.cards
-    .map((card) => {
-      const order = cardOrder.indexOf(card.cardType.trim().toUpperCase());
-      if (order < 0 || card.status.toUpperCase() !== 'ACTIVE') return null;
-      return { order, card };
-    })
-    .filter((entry): entry is { order: number; card: FishKnowledgeCard } => entry !== null)
-    .sort(
-      (a, b) =>
-        a.order - b.order || a.card.sortOrder - b.card.sortOrder || a.card.id - b.card.id,
-    )
-    .filter((entry, index, all) => all.findIndex((e) => e.order === entry.order) === index)
-    .map((entry) => entry.card);
+interface KnowledgeRow {
+  label: string;
+  value: string;
+}
 
-const cardSupportText = (card: FishKnowledgeCard): string => {
-  const c = card.content;
-  switch (card.cardType.trim().toUpperCase()) {
-    case 'IDENTIFICATION':
-      return c.features
-        .slice(0, 2)
-        .map((f) => `${f.title}：${f.text}`)
-        .join(' · ');
-    case 'ECO':
-      return [c.waterLayer, c.behavior].filter((v) => v.trim().length > 0).join(' · ');
-    case 'GEAR':
-      return [c.rod, c.hook].filter((v) => v.trim().length > 0).join(' · ');
-    case 'SKILL':
-      return c.tip;
-    default:
-      return c.description.trim().length > 0 ? c.description : card.description;
+interface KnowledgeSlotData {
+  type: string;
+  role: string;
+  /** 该位是否有足够真实内容（无则渲染官方「内容暂不可用」占位，位次不变） */
+  available: boolean;
+  rows: KnowledgeRow[];
+  similar: FishKnowledgeSimilar[];
+  heroSummary: string;
+  artworkUrl: string | null;
+}
+
+const activeCardByType = (detail: FishKnowledgeDetail): Record<string, FishKnowledgeCard> => {
+  const map: Record<string, FishKnowledgeCard> = {};
+  for (const card of detail.cards) {
+    const type = card.cardType.trim().toUpperCase();
+    if (card.status.trim().toUpperCase() !== 'ACTIVE' || map[type]) continue;
+    map[type] = card;
   }
+  return map;
+};
+
+/** 标签-值对 → 知识行（空值行直接省略，不编造不移位） */
+const rowsFromPairs = (pairs: [string, string][]): KnowledgeRow[] =>
+  pairs
+    .filter(([, value]) => value.length > 0)
+    .map(([label, value]) => ({ label, value }));
+
+const compact = (parts: (string | null | undefined)[]): string[] =>
+  parts.map((part) => (part ?? '').trim()).filter((part) => part.length > 0);
+
+/**
+ * 内容契约（04）数据映射：结构化知识是事实来源；
+ * 缺失行直接省略，不得编造、不得移位补位。
+ */
+function buildKnowledgeSlots(detail: FishKnowledgeDetail): KnowledgeSlotData[] {
+  const cards = activeCardByType(detail);
+  const { knowledge, profile, fishing, species } = detail;
+
+  return KNOWLEDGE_SLOTS.map(({ type, role }) => {
+    const card = cards[type];
+    const content = card?.content;
+    const artworkUrl = fishKnowledgeService.resolveAssetUrl(card?.imageUrl ?? '');
+
+    if (type === 'HERO') {
+      const heroSummary =
+        compact([content?.description, card?.description, species.summary])[0] ?? '';
+      return {
+        type,
+        role,
+        available: species.nameCn.length > 0 && (heroSummary.length > 0 || Boolean(artworkUrl)),
+        rows: [],
+        similar: [],
+        heroSummary,
+        artworkUrl,
+      };
+    }
+
+    let rows: KnowledgeRow[] = [];
+    let similar: FishKnowledgeSimilar[] = [];
+
+    if (type === 'IDENTIFICATION') {
+      rows = (content?.features ?? [])
+        .filter((feature) => feature.title || feature.text)
+        .slice(0, 5)
+        .map((feature) => ({
+          label: feature.title,
+          value: feature.text,
+        }));
+      if (rows.length === 0 && profile.features.length > 0) {
+        rows = profile.features.slice(0, 5).map((feature) => ({ label: '特征', value: feature }));
+      }
+      similar = content?.similar ?? [];
+    } else if (type === 'ECO') {
+      const eco = knowledge.ecology;
+      rows = rowsFromPairs([
+        ['栖息', compact([eco.habitat.join(' · '), content?.habitat.join(' · '), profile.habitat.join(' · ')])[0] ?? ''],
+        ['水层', compact([eco.waterLayer, content?.waterLayer, fishing.waterLayer])[0] ?? ''],
+        ['季节', compact([eco.season, content?.season, profile.season.join(' · ')])[0] ?? ''],
+        ['习性', compact([eco.behavior, content?.behavior])[0] ?? ''],
+        ['食性', compact([eco.diet, content?.diet, profile.food])[0] ?? ''],
+      ]);
+    } else if (type === 'GEAR') {
+      const gear = knowledge.gear;
+      rows = rowsFromPairs([
+        ['钓法', compact([gear.method, content?.method, fishing.method.join(' · ')])[0] ?? ''],
+        ['竿', compact([gear.rod, content?.rod])[0] ?? ''],
+        ['线', compact([gear.line, content?.line])[0] ?? ''],
+        ['钩', compact([gear.hook, content?.hook])[0] ?? ''],
+        ['饵', compact([gear.bait.join('、'), content?.bait.join('、'), fishing.bait.join('、')])[0] ?? ''],
+      ]);
+    } else if (type === 'SKILL') {
+      const skill = knowledge.skill;
+      rows = rowsFromPairs([
+        ['找鱼', compact([skill.find, content?.find])[0] ?? ''],
+        ['诱钓', compact([skill.attract, content?.attract])[0] ?? ''],
+        ['操作', compact([skill.action, content?.action])[0] ?? ''],
+        ['提示', compact([skill.tip, content?.tip, fishing.summary])[0] ?? ''],
+      ]);
+    }
+
+    return {
+      type,
+      role,
+      available: rows.length > 0 || similar.length > 0,
+      rows,
+      similar,
+      heroSummary: '',
+      artworkUrl,
+    };
+  });
+}
+
+/** 记录时间：捕捞时间优先，缺失回退创建时间（降序） */
+const recordTime = (item: RemoteCatch): number => {
+  const captured = Date.parse(item.capturedAt);
+  return Number.isFinite(captured) && captured > 0
+    ? captured
+    : Number.isFinite(Date.parse(item.createdAt))
+      ? Date.parse(item.createdAt)
+      : 0;
 };
 
 /**
- * 鱼种详情页：顶部 5 张 Fish Knowledge 卡 + 1 张视频卡的 1:1 轮播
- * （与首页共用全局轮播方案），下方 鱼获 / 排行 / 最新 三个 Tab。
- * Fish Knowledge 内容全部来自后台 CMS（fishKnowledgeService），App 内不硬编码。
+ * 鱼种详情（Fish Guide V2 · 02 鱼种详情 FROZEN）：
+ * Back + 鱼种头（名称 + 轻量描述行 + 金色点缀）→ 固定五张知识卡轮播
+ * （有图时图片满卡即内容；无图回退结构化文字，深湖蓝底非黑）→
+ * `NN / 05` 唯一页指示器 → `我的{鱼种}`（真实 FishRecord 链接）。
+ * 无 Search / Share / 排行 / 「最新」/ 次级 Tab / 页面级 CTA（V1 明确排除）。
  */
 export const FishSpeciesDetailScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<FishSpeciesDetailScreenNavigationProp>();
   const route = useRoute<SpeciesRouteProp>();
   const key = route.params?.key ?? 'grass_carp';
+  const carouselRef = useRef<CardCarouselHandle>(null);
 
   const [detail, setDetail] = useState<FishKnowledgeDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [offlinePreview, setOfflinePreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
-  const [selectedTab, setSelectedTab] = useState<DetailTabKey>('CATCH');
+  /** 冷进入固定 01/05；返回由栈内常驻状态自然恢复 */
+  const [cardIndex, setCardIndex] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -154,579 +250,755 @@ export const FishSpeciesDetailScreen: React.FC = () => {
     () => localGuideItems().find((item) => item.id === key) ?? null,
     [key],
   );
-  const content = detail ?? (fallback ? toFallbackDetail(fallback) : null);
+  /* memo 化：回退分支的 toFallbackDetail 每次渲染都新建对象，
+     不稳定会让下游 slots/预取 effect 跟着每帧重算 */
+  const content = useMemo(
+    () => detail ?? (fallback ? toFallbackDetail(fallback) : null),
+    [detail, fallback],
+  );
+
+  const slots = useMemo(
+    () => (content ? buildKnowledgeSlots(content) : []),
+    [content],
+  );
+  const firstArtwork = useMemo(
+    () => slots.find((slot) => slot.artworkUrl)?.artworkUrl ?? null,
+    [slots],
+  );
+
+  /* 卡片高度跟随插画比例：卡与图同比例，contain 下图片满卡无留白。
+     当前内容管线插画统一 1:1，测量返回前先按 1 渲染避免比例跳变；
+     整组无图（文字回退卡）时不测量，沿用 0.86 竖版卡高。 */
+  const [measuredAspect, setMeasuredAspect] = useState<number | null>(null);
+  useEffect(() => {
+    setMeasuredAspect(null);
+    if (!firstArtwork) return;
+    let mounted = true;
+    Image.getSize(
+      firstArtwork,
+      (width, height) => {
+        if (mounted && width > 0 && height > 0) setMeasuredAspect(width / height);
+      },
+      () => undefined,
+    );
+    return () => {
+      mounted = false;
+    };
+  }, [firstArtwork]);
+  const cardAspect = firstArtwork ? (measuredAspect ?? 1) : FALLBACK_CARD_ASPECT;
+  const cardHeight = Math.round(
+    CARD_WIDTH / Math.min(Math.max(cardAspect, CARD_ASPECT_MIN), CARD_ASPECT_MAX),
+  );
+
+  /* 卡片插画预取：单张 2MB+ 弱网加载可达数秒，进入详情即并行
+     拉全部五张入磁盘缓存，翻卡时即时命中（仅绝对 http 地址生效） */
+  useEffect(() => {
+    prefetchRemoteImages(slots.map((slot) => slot.artworkUrl));
+  }, [slots]);
+
+  /* 我的{鱼种}：已保存 FishRecord 计数与最近真实预览（02 §7） */
+  const { session, catches } = useAuthAndArchive();
+  const speciesCatches = useMemo(() => {
+    if (!content) return [];
+    return catches
+      .filter((item) => item.speciesId === content.species.id)
+      .sort((a, b) => recordTime(b) - recordTime(a));
+  }, [catches, content]);
+  const savedCount = speciesCatches.length;
+  const previews = speciesCatches.slice(0, 2);
 
   if (!content) {
     return (
-      <View style={styles.centerScreen}>
-        <Text style={styles.centerText}>
-          {loading ? '正在加载鱼种详情…' : '暂时无法读取鱼种详情'}
-        </Text>
-        {!loading ? (
+      <View style={styles.screen}>
+        <MorningLakeScene level="data" salience={0.72} />
+        <View style={[styles.unresolved, { paddingTop: insets.top }]}>
           <Pressable
-            onPress={() => setRetryToken((value) => value + 1)}
-            style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.8 }]}
+            onPress={() => navigation.goBack()}
+            style={styles.backHit}
             accessibilityRole="button"
-            accessibilityLabel="重试"
+            accessibilityLabel="返回"
           >
-            <Icon name="refresh" size={17} color="#FFFFFF" />
-            <Text style={styles.retryButtonText}>重试</Text>
+            <AppIcon name="back" size={22} color={coreColors.deepLakeBlue} />
           </Pressable>
-        ) : null}
+          <View style={styles.unresolvedBody}>
+            <Text style={styles.unresolvedTitle}>
+              {loading ? '' : '该鱼种资料暂不可用'}
+            </Text>
+            {!loading ? (
+              <PressableScale onPress={() => setRetryToken((value) => value + 1)} scaleTo={0.96}>
+                <Text style={styles.unresolvedAction}>重试</Text>
+              </PressableScale>
+            ) : null}
+          </View>
+        </View>
       </View>
     );
   }
 
   const species = content.species;
-  const knowledgeCards = orderedActiveCards(content);
-  // Hero 是 5 卡之一，不另加；视频卡固定补在末位
-  const video = content.videos[0] ?? null;
-  const carouselCount = knowledgeCards.length + (video ? 1 : 0);
-  const retry = () => setRetryToken((value) => value + 1);
+
+  /* 鱼种头描述行：单行轻量（displayTag · 水层 → 分类兜底） */
+  const waterLayer = compact([
+    content.knowledge.ecology.waterLayer,
+    content.fishing.waterLayer,
+  ])[0];
+  const displayTag = content.knowledge.displayTag ?? '';
+  const descriptor =
+    compact([displayTag, waterLayer]).join(' · ') || species.category.trim() || species.summary;
+
+  const openMyCatches = () => {
+    navigation.navigate('MyCatches', { speciesQuery: species.nameCn });
+  };
 
   return (
     <View style={styles.screen}>
-      {/* 顶部栏固定，不随内容滚动，高度与边距与其他页面一致 */}
-      <ScreenHeader
-        title={species.nameCn}
-        onBack={() => navigation.goBack()}
-      />
-      {species.aliases.length > 0 ? (
-        <Text style={styles.headerSubline}>{species.aliases.join('、')}</Text>
-      ) : null}
+      <MorningLakeScene level="data" salience={0.72} />
       <ScrollView
         style={styles.scrollBody}
-        contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]}
-        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
+        showsVerticalScrollIndicator={false}
       >
-      {error !== null || offlinePreview ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorBannerText} numberOfLines={2}>
-            {offlinePreview
-              ? `离线预览：${error ?? '当前内容来自本地预览'}`
-              : error ?? '内容暂不可用'}
-          </Text>
+        {/* ── Back + 鱼种头（冻结层级：深蓝衬线鱼名最强 + 湖蓝描述行 + 居中金色点缀） ── */}
+        <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
           <Pressable
-            onPress={retry}
-            style={({ pressed }) => [styles.retryChip, pressed && { opacity: 0.8 }]}
+            onPress={() => navigation.goBack()}
+            style={styles.backHit}
             accessibilityRole="button"
-            accessibilityLabel="重试"
+            accessibilityLabel="返回"
           >
-            <Text style={styles.retryChipText}>重试</Text>
+            <AppIcon name="back" size={22} color={coreColors.deepLakeBlue} />
           </Pressable>
+          <View style={styles.headerCenter} pointerEvents="none">
+            <Text style={styles.speciesName}>{species.nameCn}</Text>
+            {descriptor.length > 0 ? (
+              <Text style={styles.speciesDescriptor} numberOfLines={1}>
+                {descriptor}
+              </Text>
+            ) : null}
+            <View style={styles.goldRule} />
+          </View>
+          <View style={styles.backHit} pointerEvents="none" />
         </View>
-      ) : null}
 
-      {/* ── 顶部轮播：Fish Knowledge 卡 ×5 + 视频卡 ×1 ── */}
-      {carouselCount > 0 ? (
-        <CardCarousel
-          count={carouselCount}
-          cardWidth={CARD_WIDTH}
-          cardHeight={CARD_WIDTH}
-          gap={CARD_GAP}
-          sideScale={SIDE_SCALE}
-          sideDrop={SIDE_DROP}
-          sideOpacity={SIDE_OPACITY}
-          renderItem={({ index, scrollX, step }) => {
-            const isVideo = index >= knowledgeCards.length;
-            const knowledgeCard = isVideo ? null : knowledgeCards[index];
-            const coverUrl = knowledgeCard
-              ? knowledgeCard.imageUrl.trim().length > 0
-                ? fishKnowledgeService.resolveAssetUrl(knowledgeCard.imageUrl)
-                : null
-              : video && video.coverUrl
-                ? fishKnowledgeService.resolveAssetUrl(video.coverUrl)
-                : null;
-            return (
-              <KnowledgeCarouselCard
-                index={index}
-                total={carouselCount}
+        {/* ── 知识区域级错误（最小隔离 + 区域内重试；不影响页面身份） ── */}
+        {error !== null || offlinePreview ? (
+          <View style={styles.errorChipRow}>
+            <Text style={styles.errorChipText} numberOfLines={1}>
+              {offlinePreview ? '离线内容 · 展示本地预览' : '暂时无法加载'}
+            </Text>
+            <PressableScale
+              onPress={() => setRetryToken((value) => value + 1)}
+              scaleTo={0.94}
+            >
+              <Text style={styles.errorChipRetry}>重试</Text>
+            </PressableScale>
+          </View>
+        ) : null}
+
+        {/* ── 固定五张知识卡轮播（有图满卡展示；无自动播放 / 无循环 / 无缩放动画） ── */}
+        <View
+          style={styles.carouselWrap}
+          accessibilityLabel={`第 ${cardIndex + 1} 张，共 5 张`}
+        >
+          <CardCarousel
+            ref={carouselRef}
+            count={KNOWLEDGE_SLOTS.length}
+            cardWidth={CARD_WIDTH}
+            cardHeight={cardHeight}
+            gap={CARD_GAP}
+            sideScale={1}
+            sideDrop={0}
+            sideOpacity={SIDE_OPACITY}
+            sidePush={0}
+            onChange={setCardIndex}
+            renderItem={({ index, isActive, scrollX, step }) => (
+              <KnowledgeCard
+                slot={slots[index]}
+                position={index + 1}
+                isActive={isActive}
+                onCenterOnly={() => carouselRef.current?.scrollToIndex(index)}
+                speciesName={species.nameCn}
+                scientificName={species.scientificName ?? ''}
+                tags={compact([species.category, species.family, species.genus])}
                 scrollX={scrollX}
                 step={step}
-                coverUrl={coverUrl}
-                title={knowledgeCard ? species.nameCn : (video?.title ?? '视频')}
-                badge={knowledgeCard ? (cardBadges[knowledgeCard.cardType.trim().toUpperCase()] ?? '鱼鉴') : '视频'}
-                support={
-                  knowledgeCard
-                    ? cardSupportText(knowledgeCard)
-                    : video
-                      ? `${video.type} · ${video.duration}s`
-                      : ''
-                }
-                isVideo={isVideo}
-                onOpenVideo={
-                  isVideo && video
-                    ? () => Linking.openURL(video.videoUrl).catch(() => undefined)
-                    : undefined
-                }
+                index={index}
               />
-            );
-          }}
-        />
-      ) : null}
-
-      {/* ── 鱼名 + 标签 ── */}
-      <View style={styles.speciesHeader}>
-        <View style={styles.speciesHeaderRow}>
-          <View style={styles.speciesHeaderText}>
-            <Text style={styles.speciesTitle}>{species.nameCn}</Text>
-            {species.scientificName && species.scientificName.trim().length > 0 ? (
-              <Text style={styles.speciesScientific}>{species.scientificName}</Text>
-            ) : null}
-          </View>
-          <Pressable style={styles.bookmarkButton} accessibilityRole="button" accessibilityLabel="收藏">
-            <Icon name="bookmark-outline" size={22} color={palette.waterTeal} />
-          </Pressable>
-        </View>
-        <View style={styles.speciesTags}>
-          {species.category.trim().length > 0 ? (
-            <TagChip text={species.category} emphasized />
-          ) : null}
-          {species.family && species.family.trim().length > 0 ? (
-            <TagChip text={species.family} />
-          ) : null}
-          {species.genus && species.genus.trim().length > 0 ? <TagChip text={species.genus} /> : null}
-        </View>
-      </View>
-
-      {/* ── Tabs：鱼获 / 排行 / 最新 ── */}
-      <View style={styles.tabBar}>
-        {detailTabs.map((tab) => (
-          <Pressable
-            key={tab.key}
-            onPress={() => setSelectedTab(tab.key)}
-            style={[styles.tabItem, selectedTab === tab.key && styles.tabItemSelected]}
-            accessibilityRole="button"
-            accessibilityLabel={tab.label}
-          >
-            <Text
-              style={[
-                styles.tabItemText,
-                selectedTab === tab.key && styles.tabItemTextSelected,
-              ]}
-            >
-              {tab.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {selectedTab === 'CATCH' ? (
-        <SpeciesCatchList speciesId={species.id} speciesName={species.nameCn} />
-      ) : selectedTab === 'RANKING' ? (
-        <View style={styles.placeholderCard}>
-          <EmptyState
-            title="排行榜筹备中"
-            description="按鱼种的最大重量与长度排行，即将开放"
-            style={styles.placeholderInner}
+            )}
           />
         </View>
-      ) : (
-        <View style={styles.placeholderCard}>
-          <EmptyState
-            title="最新动态筹备中"
-            description="钓友们的最新鱼获与发现，即将开放"
-            style={styles.placeholderInner}
-          />
+
+        {/* ── 页指示器 `NN / 05`（唯一指示器，settled 后更新） ── */}
+        <View style={styles.indicator}>
+          <Text style={styles.indicatorCurrent}>
+            {String(cardIndex + 1).padStart(2, '0')}
+          </Text>
+          <Text style={styles.indicatorTotal}> / 05</Text>
         </View>
-      )}
+
+        {/* ── 我的{鱼种}（Mist Glass 容器；0 记录走冻结零记录子状态） ── */}
+        <View style={styles.mySpecies}>
+          {savedCount >= 1 ? (
+            <PressableScale onPress={openMyCatches} scaleTo={0.99} style={styles.mySpeciesHit}>
+              <View style={styles.mySpeciesHeader}>
+                <Text style={styles.mySpeciesTitle}>我的{species.nameCn}</Text>
+                <View style={styles.mySpeciesCountRow}>
+                  <Text style={styles.mySpeciesCount}>{savedCount}次记录</Text>
+                  <AppIcon name="chevron_right" size={15} color={coreColors.deepLakeBlue} />
+                </View>
+              </View>
+            </PressableScale>
+          ) : (
+            <View style={styles.mySpeciesHeader}>
+              <Text style={styles.mySpeciesTitle}>我的{species.nameCn}</Text>
+              <Text style={styles.mySpeciesCount}>0次记录</Text>
+            </View>
+          )}
+
+          {savedCount >= 1 ? (
+            <View style={styles.previewRow}>
+              {previews.map((item) => (
+                <PressableScale
+                  key={item.id}
+                  onPress={() =>
+                    navigation.navigate('CatchDetail', { catchId: item.id, initialCatch: item })
+                  }
+                  scaleTo={0.985}
+                  style={styles.previewTileHit}
+                  accessibilityRole="button"
+                  accessibilityLabel={`查看鱼获 ${item.speciesName || species.nameCn}`}
+                >
+                  <View style={styles.previewTile}>
+                    <RemoteImage
+                      url={item.imageUrl}
+                      authToken={session?.accessToken ?? null}
+                      style={styles.previewImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                </PressableScale>
+              ))}
+              {/* 仅 1 条真实记录：不伪造第二张，用占位保持两列几何 */}
+              {previews.length === 1 ? <View style={styles.previewTileHit} /> : null}
+            </View>
+          ) : (
+            <View style={styles.zeroBody}>
+              <Text style={styles.zeroCopy}>还没有记录</Text>
+              <PressableScale
+                onPress={() => navigation.navigate('Identify')}
+                scaleTo={0.96}
+                style={styles.zeroActionHit}
+                accessibilityRole="button"
+                accessibilityLabel="去记录鱼获"
+              >
+                {/* PressableScale 的 style 只作用于外层，children 内需自包行容器才能横排 */}
+                <View style={styles.zeroActionRow}>
+                  <Text style={styles.zeroAction}>去记录鱼获</Text>
+                  <AppIcon
+                    name="chevron_right"
+                    size={14}
+                    color={brandColors.primaryTeal}
+                  />
+                </View>
+              </PressableScale>
+            </View>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
 };
 
-/* ─── 轮播卡片：1:1，编号 01/06 + 鱼名 + 胶囊 + 一句说明 ─────────────────── */
+/* 组合小 Hook：会话 + 鱼获档案（详情页两处依赖） */
+function useAuthAndArchive(): { session: ReturnType<typeof useAuth>['session']; catches: RemoteCatch[] } {
+  const { session } = useAuth();
+  const { catches } = useCatchArchive();
+  return { session, catches };
+}
 
-const KnowledgeCarouselCard: React.FC<{
-  index: number;
-  total: number;
+/* ─── 知识卡（图片即内容；无图回退深湖蓝金文字卡） ────────────────────────── */
+
+const KnowledgeCard: React.FC<{
+  slot: KnowledgeSlotData;
+  position: number;
+  isActive: boolean;
+  onCenterOnly: () => void;
+  speciesName: string;
+  scientificName: string;
+  tags: string[];
   scrollX: Animated.Value;
   step: number;
-  coverUrl: string | null;
-  title: string;
-  badge: string;
-  support: string;
-  isVideo: boolean;
-  onOpenVideo?: () => void;
-}> = ({ index, total, scrollX, step, coverUrl, title, badge, support, isVideo, onOpenVideo }) => {
-  const { scale, opacity, translateY, translateX } = useCarouselCardTransform(
-    index,
-    scrollX,
-    step,
-    SIDE_SCALE,
-    SIDE_DROP,
-    SIDE_OPACITY,
-    SIDE_PUSH,
-  );
-  const pageCountText = String(total).padStart(2, '0');
+  index: number;
+}> = ({ slot, position, isActive, onCenterOnly, speciesName, scientificName, tags, scrollX, step, index }) => {
+  /* 动效合同 §4.2：不缩放，仅按距中心距离连续降透明度 */
+  const inputRange = [(index - 1) * step, index * step, (index + 1) * step];
+  const opacity = scrollX.interpolate({
+    inputRange,
+    outputRange: [SIDE_OPACITY, 1, SIDE_OPACITY],
+    extrapolate: 'clamp',
+  });
 
   return (
-    <Animated.View
-      style={[
-        styles.carouselCardWrap,
-        { opacity, transform: [{ translateX }, { scale }, { translateY }] },
-      ]}
-    >
+    <Animated.View style={[styles.inkWrap, { opacity }]}>
+      {/* 邻卡点击仅居中（§4.3）；居中卡为只读知识面，无隐藏动作 */}
       <Pressable
-        onPress={onOpenVideo}
-        disabled={!isVideo || !onOpenVideo}
-        style={({ pressed }) => [styles.carouselCard, pressed && { opacity: 0.92 }]}
-        accessibilityRole={isVideo ? 'button' : undefined}
-        accessibilityLabel={isVideo ? `打开视频 ${title}` : undefined}
+        onPress={isActive ? undefined : onCenterOnly}
+        disabled={isActive}
+        style={({ pressed }) => [styles.inkCardPress, pressed && { opacity: 0.92 }]}
       >
-        {coverUrl ? (
-          <RemoteImage url={coverUrl} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      <View style={styles.inkCard}>
+        {/* 深湖蓝 → 湖蓝渐变底：无图回退卡的卡底；有图卡作 contain 上下留白的衬底 */}
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Defs>
+            <LinearGradient id={`ink-${index}`} x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={INK_TOP} />
+              <Stop offset="1" stopColor={INK_BOTTOM} />
+            </LinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill={`url(#ink-${index})`} />
+        </Svg>
+
+        {slot.artworkUrl ? (
+          /* 图片即内容：卡高已按插画实测比例设定，contain 满卡无留白；
+             不用 cover——插画标注贴边，任何裁切都会丢内容 */
+          <RemoteImage
+            url={slot.artworkUrl}
+            style={styles.artImage}
+            resizeMode="contain"
+          />
         ) : (
-          <View style={StyleSheet.absoluteFill}>
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: cardInkTop }]} />
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: cardInkBottom, opacity: 0.9, height: '50%', top: '50%' },
-              ]}
-            />
-          </View>
+          <>
+            {/* 卡头：金色衬线序号 + 金边角色胶囊 */}
+            <View style={styles.inkHeader}>
+              <Text style={styles.inkNumber}>{String(position).padStart(2, '0')}</Text>
+              <View style={styles.inkRolePill}>
+                <Text style={styles.inkRoleText}>{slot.role}</Text>
+              </View>
+            </View>
+
+            {!slot.available ? (
+              /* 官方「内容暂不可用」占位（位次与 NN/05 保持不变） */
+              <View style={styles.unavailableBody}>
+                <Text style={styles.unavailableTitle}>内容暂不可用</Text>
+                <Text style={styles.unavailableSub}>该卡片资料正在完善</Text>
+              </View>
+            ) : slot.type === 'HERO' ? (
+              <View style={styles.heroBody}>
+                <View style={styles.heroTextBlock}>
+                  <Text style={styles.heroName}>{speciesName}</Text>
+                  {scientificName.length > 0 ? (
+                    <Text style={styles.heroScientific} numberOfLines={1}>
+                      {scientificName}
+                    </Text>
+                  ) : null}
+                  {slot.heroSummary.length > 0 ? (
+                    <Text style={styles.heroSummary} numberOfLines={4}>
+                      {slot.heroSummary}
+                    </Text>
+                  ) : null}
+                  {tags.length > 0 ? (
+                    <View style={styles.heroTags}>
+                      {tags.map((tag) => (
+                        <View key={tag} style={styles.heroTag}>
+                          <Text style={styles.heroTagText}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            ) : (
+              <View style={styles.rowsBody}>
+                {slot.rows.map((row) => (
+                  <View key={`${row.label}-${row.value}`} style={styles.inkRow}>
+                    <Text style={styles.inkRowLabel}>{row.label}</Text>
+                    <Text style={styles.inkRowValue} numberOfLines={2}>
+                      {row.value}
+                    </Text>
+                  </View>
+                ))}
+                {slot.similar.length > 0 ? (
+                  <View style={styles.inkRow}>
+                    <Text style={styles.inkRowLabel}>易混淆</Text>
+                    {slot.similar.slice(0, 3).map((item) => (
+                      <Text
+                        key={item.name}
+                        style={styles.inkSimilarText}
+                        numberOfLines={2}
+                      >
+                        <Text style={styles.inkSimilarName}>{item.name}</Text>
+                        {item.difference ? `：${item.difference}` : ''}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            )}
+          </>
         )}
-
-        {isVideo ? (
-          <View style={styles.videoBadgeWrap}>
-            <View style={styles.videoPlayBadge}>
-              <Icon name="play" size={26} color="#FFFFFF" />
-            </View>
-          </View>
-        ) : null}
-
-        {/* 左上角编号 */}
-        <View style={styles.cardIndexRow}>
-          <Text style={styles.cardIndexCurrent}>{String(index + 1).padStart(2, '0')}</Text>
-          <Text style={styles.cardIndexTotal}>{` / ${pageCountText}`}</Text>
-        </View>
-
-        {/* 底部：鱼名 + 胶囊 + 说明 */}
-        <View style={styles.cardFooter}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.cardTitle} numberOfLines={1}>
-              {title}
-            </Text>
-            <View style={styles.cardBadge}>
-              <Text style={styles.cardBadgeText}>{badge}</Text>
-            </View>
-          </View>
-          {support.trim().length > 0 ? (
-            <Text style={styles.cardSupport} numberOfLines={2}>
-              {support}
-            </Text>
-          ) : null}
-        </View>
+      </View>
       </Pressable>
     </Animated.View>
   );
 };
 
-/* ─── 鱼获 Tab：该鱼种的真实鱼获记录 ──────────────────────────────────────── */
-
-const SpeciesCatchList: React.FC<{ speciesId: string; speciesName: string }> = ({
-  speciesId,
-  speciesName,
-}) => {
-  const navigation = useNavigation<FishSpeciesDetailScreenNavigationProp>();
-  const { session } = useAuth();
-  const { catches } = useCatchArchive();
-  const [memories, setMemories] = useState<Record<string, CatchMemoryData>>({});
-
-  const speciesCatches = useMemo(
-    () => catches.filter((item) => item.speciesId === speciesId),
-    [catches, speciesId],
-  );
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const entries = await Promise.all(
-        speciesCatches.map(
-          async (item) => [item.id, await catchMemoryService.load(item.id)] as const,
-        ),
-      );
-      if (mounted) setMemories(Object.fromEntries(entries));
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [speciesCatches]);
-
-  if (speciesCatches.length === 0) {
-    return (
-      <EmptyState
-        variant="fishbook"
-        cardWidth={280}
-        title={`还没有${speciesName}的鱼获`}
-        description="拍下你的渔获，渔见会安静地帮你认出它、收藏它"
-        style={styles.emptySection}
-      />
-    );
-  }
-
-  return (
-    <View style={styles.catchList}>
-      {speciesCatches.map((item) => {
-        const memory = memories[item.id];
-        const weightLabel = formatWeight(memory?.weightKg ?? null, 'kg');
-        const lengthLabel = formatLength(memory?.lengthCm ?? null, 'cm');
-        const location = memory?.location?.trim();
-        const meta = [weightLabel, lengthLabel, location].filter((v) => !!v && v.length > 0);
-        return (
-          <Pressable
-            key={item.id}
-            onPress={() =>
-              navigation.navigate('CatchDetail', { catchId: item.id, initialCatch: item })
-            }
-            style={({ pressed }) => [styles.catchRow, pressed && { opacity: 0.85 }]}
-            accessibilityRole="button"
-            accessibilityLabel={`查看鱼获 ${item.speciesName}`}
-          >
-            <View style={styles.catchThumb}>
-              <RemoteImage
-                url={item.imageUrl}
-                authToken={session?.accessToken ?? null}
-                style={StyleSheet.absoluteFill}
-                resizeMode="cover"
-              />
-            </View>
-            <View style={styles.catchBody}>
-              <Text style={styles.catchName}>{item.speciesName || speciesName}</Text>
-              <Text style={styles.catchDate}>{formatCaptureWhen(item.capturedAt)}</Text>
-              {meta.length > 0 ? (
-                <View style={styles.catchMetaRow}>
-                  {meta.map((value) => (
-                    <View key={value} style={styles.catchMetaChip}>
-                      <Text style={styles.catchMetaText}>{value}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-            <Icon name="chevron-forward" size={18} color={palette.mutedInk} />
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
-  /* 页面自有的别名说明行（Top Navigation V1 不承载副标题） */
-  headerSubline: {
-    fontSize: fs(13),
-    lineHeight: fs(18),
-    color: coreColors.mistBlueGray,
-    paddingHorizontal: 16,
-    marginTop: 2,
-    marginBottom: 4,
-  } as TextStyle,
-  screen: { flex: 1, backgroundColor: palette.warmBackground },
-  scrollBody: { flex: 1 },
-  content: { paddingTop: 14, paddingBottom: 40 },
-  centerScreen: {
-    flex: 1,
-    backgroundColor: palette.warmBackground,
+  screen: { flex: 1 } as ViewStyle,
+  scrollBody: { flex: 1 } as ViewStyle,
+  content: {} as ViewStyle,
+
+  /* 鱼种头 */
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xs,
+    marginBottom: 6,
+  } as ViewStyle,
+  backHit: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  centerText: { color: palette.mutedInk, fontSize: fs(14) },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    backgroundColor: palette.waterTeal,
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  retryButtonText: { color: '#FFFFFF' },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 20,
-    marginBottom: 12,
-    backgroundColor: '#FFF3E8',
-    borderRadius: 16,
-    padding: 12,
-    gap: 10,
-  },
-  errorBannerText: { flex: 1, color: '#9A5B16', fontSize: fs(11) },
-  retryChip: {
-    backgroundColor: palette.waterTeal,
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  retryChipText: { color: '#FFFFFF', fontSize: fs(12) },
-
-  /* 轮播卡片 */
-  carouselCardWrap: { flex: 1 },
-  carouselCard: {
+  } as ViewStyle,
+  headerCenter: {
     flex: 1,
-    borderRadius: 28,
-    backgroundColor: cardInkTop,
+    alignItems: 'center',
+    gap: 4,
+  } as ViewStyle,
+  speciesName: {
+    fontFamily: font.serif,
+    fontSize: fs(30),
+    lineHeight: fs(38),
+    fontWeight: '600',
+    letterSpacing: 3,
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+  speciesDescriptor: {
+    fontSize: fs(12),
+    lineHeight: fs(17),
+    letterSpacing: 2,
+    color: coreColors.lakeBlue,
+    maxWidth: '86%',
+  } as TextStyle,
+  goldRule: {
+    width: 28,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: coreColors.morningGold,
+    marginTop: 5,
+  } as ViewStyle,
+
+  /* 区域级错误胶囊 */
+  errorChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: coreGlass.B.border,
+    backgroundColor: coreGlass.B.bg,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginBottom: 10,
+  } as ViewStyle,
+  errorChipText: {
+    fontSize: fs(11),
+    color: coreColors.lakeBlue,
+  } as TextStyle,
+  errorChipRetry: {
+    fontSize: fs(12),
+    fontWeight: '600',
+    color: brandColors.primaryTeal,
+  } as TextStyle,
+
+  /* 轮播与指示器 */
+  carouselWrap: {} as ViewStyle,
+  indicator: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginTop: 2,
+  } as ViewStyle,
+  indicatorCurrent: {
+    fontFamily: font.serif,
+    fontSize: fs(15),
+    fontWeight: '600',
+    letterSpacing: 1,
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+  indicatorTotal: {
+    fontSize: fs(11),
+    lineHeight: fs(16),
+    letterSpacing: 1,
+    color: coreColors.lakeBlue,
+  } as TextStyle,
+
+  /* 我的{鱼种}（Mist Glass A 容器） */
+  mySpecies: {
+    marginTop: 16,
+    marginHorizontal: spacing.page,
+    borderRadius: coreRadius.lg,
+    borderWidth: 1,
+    backgroundColor: coreGlass.A.bg,
+    borderColor: coreGlass.A.border,
+    shadowColor: coreGlass.A.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  } as ViewStyle,
+  mySpeciesHit: {
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+    marginVertical: -spacing.md,
+    paddingVertical: spacing.md,
+  } as ViewStyle,
+  mySpeciesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 32,
+  } as ViewStyle,
+  mySpeciesTitle: {
+    fontFamily: font.serif,
+    fontSize: fs(17),
+    fontWeight: '600',
+    letterSpacing: 1,
+    color: coreColors.deepLakeBlue,
+  } as TextStyle,
+  mySpeciesCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  } as ViewStyle,
+  mySpeciesCount: {
+    fontSize: fs(13),
+    letterSpacing: 0.5,
+    color: coreColors.lakeBlue,
+  } as TextStyle,
+  previewRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: spacing.md,
+  } as ViewStyle,
+  previewTileHit: {
+    flex: 1,
+  } as ViewStyle,
+  previewTile: {
+    height: 96,
+    borderRadius: coreRadius.sm,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  } as ViewStyle,
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  } as ImageStyle,
+
+  /* 零记录子状态（02A FROZEN：无箭头不可点 + 一行文案 + 文字动作） */
+  zeroBody: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+  } as ViewStyle,
+  zeroCopy: {
+    fontSize: fs(13),
+    letterSpacing: 1,
+    color: coreColors.mistBlueGray,
+  } as TextStyle,
+  zeroActionHit: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  } as ViewStyle,
+  zeroActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
+  } as ViewStyle,
+  zeroAction: {
+    fontSize: fs(14),
+    /* 显式行高：CJK 字形光学中心落在行框中心，与 14dp 箭头由 alignItems 居中对齐 */
+    lineHeight: fs(16),
+    fontWeight: '600',
+    letterSpacing: 1,
+    color: brandColors.primaryTeal,
+  } as TextStyle,
+
+  /* 未解析 / 加载兜底（保持页面身份 + Back 可用） */
+  unresolved: {
+    flex: 1,
+  } as ViewStyle,
+  unresolvedBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+  } as ViewStyle,
+  unresolvedTitle: {
+    fontSize: fs(14),
+    letterSpacing: 1,
+    color: coreColors.lakeBlue,
+  } as TextStyle,
+  unresolvedAction: {
+    fontSize: fs(14),
+    fontWeight: '600',
+    color: brandColors.primaryTeal,
+  } as TextStyle,
+
+  /* ── 知识卡 ── */
+  inkWrap: { flex: 1 } as ViewStyle,
+  inkCardPress: {
+    flex: 1,
+  } as ViewStyle,
+  inkCard: {
+    flex: 1,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: CARD_GOLD_DIM,
     overflow: 'hidden',
     shadowColor: '#0B2A30',
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.2,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
-  },
-  cardIndexRow: {
-    position: 'absolute',
-    top: 18,
-    left: 20,
+    backgroundColor: INK_TOP,
+  } as ViewStyle,
+  inkHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  cardIndexCurrent: {
-    color: '#FFFFFF',
-    fontSize: fs(24),
-    fontWeight: '700',
-    textShadowColor: 'rgba(8,28,38,0.5)',
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 1 },
-  },
-  cardIndexTotal: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: fs(13),
-    marginBottom: 3,
-    textShadowColor: 'rgba(8,28,38,0.5)',
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 1 },
-  },
-  cardFooter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 22,
-    paddingTop: 46,
-    gap: 8,
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  cardTitle: {
-    flexShrink: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 6,
+  } as ViewStyle,
+  inkNumber: {
     fontFamily: font.serif,
-    color: '#FFFFFF',
-    fontSize: fs(30),
-    fontWeight: '600',
-    letterSpacing: 2,
-    textShadowColor: 'rgba(8,28,38,0.55)',
-    textShadowRadius: 10,
-    textShadowOffset: { width: 0, height: 1 },
-  },
-  cardBadge: {
+    fontSize: fs(26),
+    fontWeight: '700',
+    lineHeight: fs(30),
+    color: CARD_GOLD,
+    letterSpacing: 1,
+  } as TextStyle,
+  inkRolePill: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: cardGold,
+    borderColor: CARD_GOLD_DIM,
+    backgroundColor: 'rgba(214,181,109,0.10)',
     paddingHorizontal: 10,
     paddingVertical: 3,
-    backgroundColor: 'rgba(8,28,38,0.25)',
-  },
-  cardBadgeText: { color: cardGold, fontSize: fs(11), letterSpacing: 2 },
-  cardSupport: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: fs(12),
-    lineHeight: 18,
-    textShadowColor: 'rgba(8,28,38,0.5)',
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 1 },
-  },
-  videoBadgeWrap: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoPlayBadge: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: 'rgba(8,28,38,0.45)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  /* 鱼名 + 标签 */
-  speciesHeader: { marginTop: 14, marginHorizontal: 20 },
-  speciesHeaderRow: { flexDirection: 'row', alignItems: 'center' },
-  speciesHeaderText: { flex: 1 },
-  speciesTitle: { color: palette.deepInk, fontSize: fs(32), fontWeight: '700' },
-  speciesScientific: { color: palette.mutedInk, fontSize: fs(13), marginTop: 3 },
-  bookmarkButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: palette.cardWhite,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  speciesTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
-
-  /* Tabs */
-  tabBar: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginTop: 18,
-    backgroundColor: palette.cardWhite,
-    borderRadius: 18,
-    padding: 5,
-    gap: 4,
-  },
-  tabItem: { flex: 1, borderRadius: 14, paddingVertical: 11, alignItems: 'center' },
-  tabItemSelected: { backgroundColor: palette.deepInk },
-  tabItemText: { color: palette.mutedInk, fontSize: fs(12), fontWeight: '500' },
-  tabItemTextSelected: { color: '#FFFFFF', fontWeight: '700' },
-
-  /* 占位 / 鱼获列表 */
-  placeholderCard: {
-    marginHorizontal: 20,
-    marginTop: 14,
-    backgroundColor: palette.cardWhite,
-    borderRadius: 24,
-    padding: 18,
-  },
-  placeholderInner: { backgroundColor: 'transparent' },
-  /** 鱼获列表空状态：与 catchList 对齐的页面边距 */
-  emptySection: {
-    marginHorizontal: 20,
-    marginTop: 14,
+    marginTop: 3,
   } as ViewStyle,
-  catchList: { marginHorizontal: 20, marginTop: 14, gap: 10 },
-  catchRow: {
-    flexDirection: 'row',
+  inkRoleText: {
+    fontSize: fs(10),
+    letterSpacing: 2,
+    color: CARD_GOLD,
+  } as TextStyle,
+
+  unavailableBody: {
+    flex: 1,
     alignItems: 'center',
-    backgroundColor: palette.cardWhite,
-    borderRadius: 20,
-    padding: 12,
-    gap: 12,
-  },
-  catchThumb: {
-    width: 68,
-    height: 68,
-    borderRadius: 14,
-    backgroundColor: palette.softWater,
-    overflow: 'hidden',
-  },
-  catchBody: { flex: 1 },
-  catchName: { color: palette.deepInk, fontSize: fs(15), fontWeight: '600' },
-  catchDate: { color: palette.mutedInk, fontSize: fs(11), marginTop: 4 },
-  catchMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  catchMetaChip: {
-    backgroundColor: palette.warmBackground,
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+  } as ViewStyle,
+  unavailableTitle: {
+    fontSize: fs(14),
+    letterSpacing: 2,
+    color: 'rgba(255,255,255,0.72)',
+  } as TextStyle,
+  unavailableSub: {
+    fontSize: fs(11),
+    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.42)',
+  } as TextStyle,
+
+  /* 图片即内容：插画按宽度完整放入（contain，横向不裁切） */
+  artImage: {
+    flex: 1,
+  } as ImageStyle,
+
+  /* HERO 回退卡身（无图时纯名片文字） */
+  heroBody: {
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+  } as ViewStyle,
+  heroTextBlock: {
+    gap: 5,
+  } as ViewStyle,
+  heroName: {
+    fontFamily: font.serif,
+    fontSize: fs(26),
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: '#FFFFFF',
+  } as TextStyle,
+  heroScientific: {
+    fontSize: fs(11),
+    fontStyle: 'italic',
+    letterSpacing: 0.5,
+    color: INK_VALUE_SOFT,
+  } as TextStyle,
+  heroSummary: {
+    fontSize: fs(12),
+    lineHeight: fs(18),
+    color: INK_VALUE,
+  } as TextStyle,
+  heroTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  } as ViewStyle,
+  heroTag: {
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: CARD_GOLD_DIM,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  catchMetaText: { color: palette.mutedInk, fontSize: fs(10) },
+    paddingVertical: 2,
+  } as ViewStyle,
+  heroTagText: {
+    fontSize: fs(10),
+    letterSpacing: 1,
+    color: CARD_GOLD,
+  } as TextStyle,
+
+  /* 结构化回退卡身：金边信息行 */
+  rowsBody: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 8,
+  } as ViewStyle,
+  inkRow: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(214,181,109,0.32)',
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    gap: 3,
+  } as ViewStyle,
+  inkRowLabel: {
+    fontSize: fs(10),
+    letterSpacing: 2,
+    color: CARD_GOLD,
+  } as TextStyle,
+  inkRowValue: {
+    fontSize: fs(12.5),
+    lineHeight: fs(18),
+    color: INK_VALUE,
+  } as TextStyle,
+  inkSimilarText: {
+    fontSize: fs(12),
+    lineHeight: fs(18),
+    color: INK_VALUE_SOFT,
+  } as TextStyle,
+  inkSimilarName: {
+    color: INK_VALUE,
+    fontWeight: '600',
+  } as TextStyle,
 });

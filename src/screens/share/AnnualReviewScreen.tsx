@@ -12,7 +12,7 @@ import {
 import Svg, { Defs, LinearGradient as SvgGradient, Rect, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon, AppIconName } from '../../components/icons/AppIcon';
 import { StackNavigationProp } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -151,7 +151,7 @@ export const AnnualReviewScreen: React.FC = () => {
       <ScreenHeader
         onBack={() => navigation.goBack()}
         right={
-          <HeaderIconButton name="share-social-outline" color={textPrimary} onPress={shareAnnual} />
+          <HeaderIconButton name="share" color={textPrimary} onPress={shareAnnual} />
         }
       />
       <ScrollView
@@ -188,7 +188,7 @@ export const AnnualReviewScreen: React.FC = () => {
           ]}
         >
           <OverviewCell
-            icon="calendar-outline"
+            icon="date"
             value={`${review.total}`}
             label="次鱼获记录"
             sub={null}
@@ -200,7 +200,7 @@ export const AnnualReviewScreen: React.FC = () => {
           />
           <CellDivider />
           <OverviewCell
-            icon="fish-outline"
+            icon="species"
             value={`${review.speciesCount}`}
             label="种鱼"
             sub={review.newSpeciesThisYear > 0 ? `今年新增 ${review.newSpeciesThisYear} 种` : null}
@@ -210,7 +210,7 @@ export const AnnualReviewScreen: React.FC = () => {
           />
           <CellDivider />
           <OverviewCell
-            icon="stats-chart-outline"
+            icon="chart"
             value={`${review.avgPerDay > 0 ? review.avgPerDay : 0}`}
             label="平均每天(尾)"
             sub={`共记录 ${review.total} 条鱼`}
@@ -223,7 +223,7 @@ export const AnnualReviewScreen: React.FC = () => {
           />
           <CellDivider />
           <OverviewCell
-            icon="today-outline"
+            icon="date"
             value={`${review.days}`}
             label="今年记录天数"
             sub={review.startDateLabel ? `从 ${review.startDateLabel} 开始` : null}
@@ -268,7 +268,7 @@ export const AnnualReviewScreen: React.FC = () => {
           >
             <View style={styles.breakTitleRow}>
               <View style={[styles.breakIcon, { backgroundColor: 'rgba(61,107,142,0.12)' }]}>
-                <Icon name="trending-up" size={16} color={BLUE} />
+                <AppIcon name="weight" size={16} color={BLUE} />
               </View>
               <View style={styles.breakTitleText}>
                 <Text style={[styles.breakTitle, { color: textPrimary }]}>最大鱼获记录</Text>
@@ -306,7 +306,7 @@ export const AnnualReviewScreen: React.FC = () => {
                       </Text>
                     </View>
                     {index < arr.length - 1 ? (
-                      <Icon name="chevron-forward" size={13} color={textSecondary} />
+                      <AppIcon name="chevron_right" size={13} color={textSecondary} />
                     ) : null}
                   </React.Fragment>
                 ))}
@@ -329,7 +329,7 @@ export const AnnualReviewScreen: React.FC = () => {
           >
             <View style={styles.breakTitleRow}>
               <View style={[styles.breakIcon, { backgroundColor: 'rgba(77,158,161,0.14)' }]}>
-                <Icon name="fish" size={16} color={palette.waterTeal} />
+                <AppIcon name="species" size={16} color={palette.waterTeal} />
               </View>
               <View style={styles.breakTitleText}>
                 <Text style={[styles.breakTitle, { color: textPrimary }]}>鱼种数量</Text>
@@ -349,7 +349,7 @@ export const AnnualReviewScreen: React.FC = () => {
                   {activeYear} 年前
                 </Text>
               </View>
-              <Icon name="arrow-forward" size={15} color={GOLD} />
+              <AppIcon name="chevron_right" size={15} color={GOLD} />
               <View style={styles.speciesCell}>
                 <Text style={[styles.speciesValue, { color: textPrimary }]}>
                   {review.speciesCount} 种
@@ -441,7 +441,7 @@ export const AnnualReviewScreen: React.FC = () => {
               </Svg>
               <View style={styles.annualContent} pointerEvents="none">
                 <View style={styles.annualTitleRow}>
-                  <Icon name="ribbon" size={15} color={GOLD} />
+                  <AppIcon name="share" size={15} color={GOLD} />
                   <Text style={styles.annualTitle}>生成年度分享</Text>
                 </View>
                 <Text style={styles.annualSub}>把这一年的回顾，变成一份分享作品</Text>
@@ -459,7 +459,7 @@ const CellDivider: React.FC = () => (
 );
 
 const OverviewCell: React.FC<{
-  icon: string;
+  icon: AppIconName;
   value: string;
   label: string;
   sub: string | null;
@@ -469,12 +469,12 @@ const OverviewCell: React.FC<{
   onInfo?: () => void;
 }> = ({ icon, value, label, sub, ink, muted, decimal, onInfo }) => (
   <View style={styles.overviewCell}>
-    <Icon name={icon} size={17} color={BLUE} />
+    <AppIcon name={icon} size={17} color={BLUE} />
     <View style={styles.overviewValueRow}>
       <Text style={[styles.overviewValue, { color: ink }]}>{value}</Text>
       {onInfo ? (
         <PressableScale onPress={onInfo} scaleTo={0.9} hitSlop={6}>
-          <Icon name="information-circle-outline" size={12} color={muted} />
+          <AppIcon name="help" size={12} color={muted} />
         </PressableScale>
       ) : null}
     </View>
@@ -519,7 +519,7 @@ const FirstCard: React.FC<{ card: AnnualFirstCard; authToken: string | null }> =
     </Text>
     {card.location ? (
       <View style={styles.locationRow}>
-        <Icon name="location" size={11} color={GOLD} />
+        <AppIcon name="location" size={11} color={GOLD} />
         <Text style={[styles.locationText, { color: 'rgba(23,59,75,0.6)' }]} numberOfLines={1}>
           {card.location}
         </Text>
@@ -555,7 +555,7 @@ const MemoryCard: React.FC<{ card: AnnualMemoryCard; authToken: string | null }>
     </Text>
     {card.location ? (
       <View style={styles.locationRow}>
-        <Icon name="location" size={11} color={GOLD} />
+        <AppIcon name="location" size={11} color={GOLD} />
         <Text style={[styles.locationText, { color: 'rgba(23,59,75,0.6)' }]} numberOfLines={1}>
           {card.location}
         </Text>

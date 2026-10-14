@@ -7,13 +7,17 @@ import { MorningLakeScene } from './MorningLakeScene';
  * 账号与隐私 · 内容页背景（Active Path 共享背景实现）。
  *
  * 视觉权威：Morning_Lake_Master_V1 / BG_CONTENT + 各页冻结稿构图 ——
- * 上部约 1/3 为无太阳晨雾湖景，向下自然渐隐入干净的白/MistWhite 内容场；
+ * 顶部晨雾湖景按设计稿近全强度呈现（仅 ~8% 轻纱保证头部可读），
+ * 上部保持清晰、靠下方才自然渐隐入干净的白/MistWhite 内容场；
  * 不复刻旧稿强日出/金色倒影（Active_Path_Visual_Adjustment_Authority_V1）。
  * 页面内容浮在白场上；本组件只负责环境层，不承载任何文字。
  */
 
 /** 内容场基色（lakeWhite 邻域；卡片为白，页面白偏雾） */
 export const CONTENT_FIELD = '#F6FAFA';
+
+/** 顶部湖景轻纱：设计稿照片近全强度，仅 5-10% 白纱（较 content 层默认 25% 更透） */
+const LAKE_VEIL_SALIENCE = 0.92;
 
 /**
  * 设置页首卡顶部留白：让第一张卡落在湖景渐变完成的白场
@@ -38,14 +42,15 @@ export const LakeContentBackdrop: React.FC<LakeContentBackdropProps> = ({
   const zoneHeight = topHeight ?? undefined;
   return (
     <View style={[StyleSheet.absoluteFill, styles.root, style]} pointerEvents="none">
-      {/* 顶部湖景区：底部 55% 渐变过渡到内容场白（无独立分割线） */}
+      {/* 顶部湖景区：上部保持清晰，约 45% 起才向内容场白渐变（无独立分割线） */}
       <View style={[styles.topZone, zoneHeight !== undefined ? { height: zoneHeight } : null]}>
-        <MorningLakeScene level="content" />
+        <MorningLakeScene level="content" salience={LAKE_VEIL_SALIENCE} />
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
           <Defs>
             <LinearGradient id="lake-fade" x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor={CONTENT_FIELD} stopOpacity="0" />
-              <Stop offset="0.55" stopColor={CONTENT_FIELD} stopOpacity="0.55" />
+              <Stop offset="0.45" stopColor={CONTENT_FIELD} stopOpacity="0.06" />
+              <Stop offset="0.75" stopColor={CONTENT_FIELD} stopOpacity="0.5" />
               <Stop offset="1" stopColor={CONTENT_FIELD} stopOpacity="1" />
             </LinearGradient>
           </Defs>

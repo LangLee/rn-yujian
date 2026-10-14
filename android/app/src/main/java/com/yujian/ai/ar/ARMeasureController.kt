@@ -3,6 +3,8 @@ package com.yujian.ai.ar
 import android.view.View
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.WritableMap
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 /**
  * AR 引擎控制器公共接口：ARCore 与华为 AR Engine 各有一份实现，
@@ -30,3 +32,10 @@ interface ARMeasureController {
 
 /** 控制器 → JS 事件回调（name: planeDetected / sessionError） */
 typealias AREventEmitter = (name: String, params: WritableMap?) -> Unit
+
+/** AR 阻塞操作（GL 暂停 / 会话关闭）的串行后台线程：这些调用会等待 GL 渲染
+ *  线程与 AR 引擎服务（真机可达数秒），在主线程同步执行会触发系统 ANR */
+internal val arHeavyOps: ExecutorService =
+    Executors.newSingleThreadExecutor { r ->
+        Thread(r, "yujian-ar-teardown").apply { isDaemon = true }
+    }

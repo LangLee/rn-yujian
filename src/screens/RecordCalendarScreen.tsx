@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -207,13 +207,13 @@ export const RecordCalendarScreen: React.FC = () => {
             {/* 月份导航 + 月/年切换 */}
             <View style={styles.monthNavRow}>
               <PressableScale onPress={() => shiftMonth(-1)} scaleTo={0.9} style={styles.navArrow}>
-                <Icon name="chevron-back" size={18} color={textPrimary} />
+                <AppIcon name="back" size={18} color={textPrimary} />
               </PressableScale>
               <Text style={[styles.monthNavLabel, { color: textPrimary }]}>
                 {cursor.year}年{cursor.month + 1}月
               </Text>
               <PressableScale onPress={() => shiftMonth(1)} scaleTo={0.9} style={styles.navArrow}>
-                <Icon name="chevron-forward" size={18} color={textPrimary} />
+                <AppIcon name="chevron_right" size={18} color={textPrimary} />
               </PressableScale>
               <ModeSegment
                 mode={mode}
@@ -340,7 +340,7 @@ export const RecordCalendarScreen: React.FC = () => {
                 scaleTo={0.9}
                 style={styles.navArrow}
               >
-                <Icon name="chevron-back" size={18} color={textPrimary} />
+                <AppIcon name="back" size={18} color={textPrimary} />
               </PressableScale>
               <Text style={[styles.monthNavLabel, { color: textPrimary }]}>{cursor.year}年</Text>
               <PressableScale
@@ -348,7 +348,7 @@ export const RecordCalendarScreen: React.FC = () => {
                 scaleTo={0.9}
                 style={styles.navArrow}
               >
-                <Icon name="chevron-forward" size={18} color={textPrimary} />
+                <AppIcon name="chevron_right" size={18} color={textPrimary} />
               </PressableScale>
               <ModeSegment
                 mode={mode}
@@ -511,7 +511,7 @@ export const RecordCalendarScreen: React.FC = () => {
                           <FishGlyph size={14} color={accent} />
                         </View>
                       )}
-                      <Icon name="chevron-forward" size={15} color={textSecondary} />
+                      <AppIcon name="chevron_right" size={15} color={textSecondary} />
                     </View>
                   </PressableScale>
                 );
@@ -645,13 +645,13 @@ const TimelineRow: React.FC<{
             </Text>
             {metaBits ? <Text style={[styles.timelineMeta, { color: textPrimary }]}>{metaBits}</Text> : null}
             <View style={styles.timelineLocationRow}>
-              <Icon name="location-outline" size={11} color={textSecondary} />
+              <AppIcon name="location" size={11} color={textSecondary} />
               <Text style={[styles.timelineLocation, { color: textSecondary }]} numberOfLines={1}>
                 {location ?? '待确认'}
               </Text>
             </View>
           </View>
-          <Icon name="chevron-forward" size={16} color={textSecondary} />
+          <AppIcon name="chevron_right" size={16} color={textSecondary} />
         </View>
       </PressableScale>
     </View>

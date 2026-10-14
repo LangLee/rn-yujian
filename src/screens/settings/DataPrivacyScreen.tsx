@@ -162,7 +162,7 @@ export const DataPrivacyScreen: React.FC = () => {
         <SettingsGroupLabel label="数据使用" />
         <SettingsCard>
           <SettingsRow
-            icon="sparkles-outline"
+            icon="sparkles"
             tint="blue"
             label="AI 模型改进"
             value={consent.phase === 'error' ? undefined : consentStatusLabel}
@@ -200,14 +200,14 @@ export const DataPrivacyScreen: React.FC = () => {
           ) : null}
 
           <SettingsRow
-            icon="location-outline"
+            icon="location"
             tint="green"
             label="位置权限"
             value={locationStatus}
             onPress={() => setLocationSheet(true)}
           />
           <SettingsRow
-            icon="download-outline"
+            icon="save"
             tint="slate"
             label="导出我的数据"
             badge="即将推出"
@@ -219,7 +219,7 @@ export const DataPrivacyScreen: React.FC = () => {
         <SettingsGroupLabel label="账号数据" />
         <SettingsCard>
           <SettingsRow
-            icon="person-remove-outline"
+            icon="logout"
             tint="slate"
             label="注销账号"
             badge="即将推出"
@@ -231,7 +231,7 @@ export const DataPrivacyScreen: React.FC = () => {
         <SettingsGroupLabel label="法律" />
         <SettingsCard>
           <SettingsRow
-            icon="document-text-outline"
+            icon="note"
             tint="amber"
             label="查看《隐私政策》"
             onPress={() => navigation.navigate('LegalDocument', { doc: 'privacy' })}

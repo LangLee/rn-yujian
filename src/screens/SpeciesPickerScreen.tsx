@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { AppIcon } from '../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList, SpeciesPickerRouteProp } from '../navigation/types';
 import { useTheme } from '../contexts/ThemeContext';
 import { FishGuideItem } from '../types/models';
@@ -189,7 +189,7 @@ export const SpeciesPickerScreen: React.FC = () => {
         onBack={handleBack}
         right={
           <HeaderIconButton
-            name={searchOpen ? 'close' : 'search-outline'}
+            name={searchOpen ? 'close' : 'search'}
             color={textPrimary}
             onPress={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
           />
@@ -205,7 +205,7 @@ export const SpeciesPickerScreen: React.FC = () => {
         {/* 搜索栏平时收起，点右上角图标后在标题栏下方展开 */}
         {searchOpen ? (
           <View style={[styles.searchWrap, { backgroundColor: profile.surface.glassStrong }]}>
-            <Icon name="search-outline" size={17} color={textSecondary} />
+            <AppIcon name="search" size={17} color={textSecondary} />
             <TextInput
               style={[styles.searchInput, { color: textPrimary }]}
               value={query}
@@ -217,7 +217,7 @@ export const SpeciesPickerScreen: React.FC = () => {
             />
             {searching ? (
               <PressableScale onPress={() => setQuery('')} scaleTo={0.9}>
-                <Icon name="close-circle" size={17} color={textSecondary} />
+                <AppIcon name="clear_field" size={17} color={textSecondary} />
               </PressableScale>
             ) : null}
           </View>
@@ -407,7 +407,7 @@ const SpeciesRow: React.FC<{
             </Text>
           ) : null}
         </View>
-        <Icon name="chevron-forward" size={16} color={textSecondary} />
+        <AppIcon name="chevron_right" size={16} color={textSecondary} />
       </GlassCard>
     </PressableScale>
   );

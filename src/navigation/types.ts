@@ -44,7 +44,7 @@ export type RootStackParamList = {
     };
   } | undefined;
   /** 我的鱼获 Hub（P20：我的鱼获 / 鱼获分享 / 成长历程 三分段） */
-  MyCatches: { tab?: CatchHubTab } | undefined;
+  MyCatches: { tab?: CatchHubTab; speciesQuery?: string } | undefined;
   /** 当天鱼获详情（My Catches 时间线单日 >10 条「查看全部」进入） */
   CatchDay: { dayKey: string };
   /** 鱼鉴首页（P08） */
