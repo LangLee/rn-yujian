@@ -38,7 +38,7 @@ import { catchMemoryService, CatchMemoryData } from '../services/catchMemoryServ
 import { homeFeedback } from '../services/homeFeedback';
 import { RemoteImage } from '../components/RemoteImage';
 import { PressableScale } from '../components/ui/PressableScale';
-import { CardCarousel } from '../components/ui/CardCarousel';
+import { CardCarousel, CardCarouselHandle } from '../components/ui/CardCarousel';
 import { ProfileAvatar } from '../components/ui/ProfileAvatar';
 import { MorningLakeScene, YuJianPrimaryCaptureButton } from '../components/coreui';
 import cameraFlash from '../assets/home/animation/camera_flash.json';
@@ -67,6 +67,7 @@ export const HomeScreen: React.FC = () => {
   /* 头像权威：服务端 avatar_url（编辑资料保存成功后同步）→ 本地遗留头像 → 默认人像 */
   const avatar = session?.avatarUrl || legacyAvatar || null;
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const [memories, setMemories] = useState<Record<string, CatchMemoryData>>({});
 
   const flashRef = useRef<LottieView>(null);
@@ -81,6 +82,22 @@ export const HomeScreen: React.FC = () => {
   const isEmptyHome = catches.length === 0;
 
   const visibleCatches = useMemo(() => catches.slice(0, 6), [catches]);
+
+  /* 新增鱼获后回到首页：列表头部换成了新记录，轮播回到第一张展示它
+     （首页常驻挂载，ScrollView 会保留上次浏览位置，不重置会停在旧卡） */
+  const carouselRef = useRef<CardCarouselHandle>(null);
+  const lastFocusedFirstId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isFocused || visibleCatches.length === 0) return;
+    const firstId = visibleCatches[0].id;
+    if (
+      lastFocusedFirstId.current !== null &&
+      lastFocusedFirstId.current !== firstId
+    ) {
+      carouselRef.current?.scrollToIndex(0, false);
+    }
+    lastFocusedFirstId.current = firstId;
+  }, [isFocused, visibleCatches]);
 
   useEffect(() => {
     let mounted = true;
@@ -171,7 +188,6 @@ export const HomeScreen: React.FC = () => {
      鱼获卡片因此闪现。离开 Home 的转场（280ms）结束后再撤下内容
      （display:none，不产生原生视图但保留组件状态），抖动窗口内只剩主题背景色；
      回到 Home 立即恢复。快速往返（340ms 内）不会撤下，避免内容闪烁。 */
-  const isFocused = useIsFocused();
   const [contentHidden, setContentHidden] = useState(false);
   useEffect(() => {
     if (isFocused) {
@@ -289,6 +305,7 @@ export const HomeScreen: React.FC = () => {
           {/* catches===0 时整个普通布局不可达（Empty Home 承接），此处恒有数据 */}
           <View style={{ marginTop: 14 }}>
             <CardCarousel
+                ref={carouselRef}
                 count={visibleCatches.length}
                 cardWidth={CARD_WIDTH}
                 cardHeight={CARD_HEIGHT}

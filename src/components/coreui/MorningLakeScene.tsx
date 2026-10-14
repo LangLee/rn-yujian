@@ -316,9 +316,9 @@ export const MorningLakeScene: React.FC<MorningLakeSceneProps> = ({
                 `${cover.x(LINE_END[0])} ${cover.y(LINE_END[1])}`
               }
               stroke="#E9F1F2"
-              strokeWidth={Math.max(1, cover.s(1.5))}
+              strokeWidth={Math.max(0.6, cover.s(1.1))}
               strokeLinecap="round"
-              strokeOpacity={0.8}
+              strokeOpacity={0.6}
               fill="none"
             />
           </Svg>
