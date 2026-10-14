@@ -9,8 +9,10 @@ import {
   ActivityIndicator,
   Image,
   ImageStyle,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -540,33 +542,63 @@ const SheetShell: React.FC<{
   children: React.ReactNode;
 }> = ({ visible, onClose, children }) => {
   const insets = useSafeAreaInsets();
+  /* Android：edge-to-edge Modal 里 KAV 收起键盘后 padding 归零不可靠，会残留
+     底部间隙——改为手动监听 keyboardDidShow/Hide，用键盘高度精确抬升、精确归零
+     （与 KeyboardAvoidingScrollView 同一方案）；iOS 保持 KAV 原生行为 */
+  const [kbLift, setKbLift] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return undefined;
+    }
+    const show = Keyboard.addListener('keyboardDidShow', (e) =>
+      setKbLift(e.endCoordinates?.height ?? 0)
+    );
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKbLift(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   if (!visible) {
     return null;
   }
+  const sheetBody = (
+    <Pressable
+      style={[styles.sheetBody, { paddingBottom: insets.bottom + 24 }]}
+      onPress={(e) => e.stopPropagation()}
+    >
+      <View style={styles.sheetHandle} />
+      {children}
+    </Pressable>
+  );
   return (
     <Modal
       transparent
       animationType="slide"
       onRequestClose={onClose}
       statusBarTranslucent
+      navigationBarTranslucent
     >
       <Pressable style={styles.sheetScrim} onPress={onClose}>
-        {/* 键盘避让：搜索/数值输入框聚焦时整个 Sheet 上抬到键盘上方。
-            edge-to-edge 后（statusBarTranslucent）Modal 弹窗不随键盘
-            resize，Android 同样由 KAV padding 抬升，iOS 保持原行为 */}
-        <KeyboardAvoidingView
-          behavior="padding"
-          style={styles.sheetAvoid}
-          pointerEvents="box-none"
-        >
-          <Pressable
-            style={[styles.sheetBody, { paddingBottom: insets.bottom + 24 }]}
-            onPress={(e) => e.stopPropagation()}
+        {Platform.OS === 'ios' ? (
+          <KeyboardAvoidingView
+            behavior="padding"
+            style={styles.sheetAvoid}
+            pointerEvents="box-none"
           >
-            <View style={styles.sheetHandle} />
-            {children}
-          </Pressable>
-        </KeyboardAvoidingView>
+            {sheetBody}
+          </KeyboardAvoidingView>
+        ) : (
+          <View
+            style={[
+              styles.sheetAvoid,
+              kbLift > 0 ? { paddingBottom: kbLift } : null,
+            ]}
+            pointerEvents="box-none"
+          >
+            {sheetBody}
+          </View>
+        )}
       </Pressable>
     </Modal>
   );
@@ -862,10 +894,16 @@ export const ResultMeasureSheet: React.FC<{
 }> = ({ visible, kind, value, onClose, onCommit }) => {
   const meta = MEASURE_META[kind];
   const [draft, setDraft] = useState('');
+  const inputRef = useRef<TextInput>(null);
   useEffect(() => {
     if (visible) {
       setDraft(value);
+      // autoFocus 在 Modal slide 入场动画中常被 Android 吃掉：延迟到动画基本
+      // 结束后再聚焦，保证抽屉弹出即拉起键盘
+      const timer = setTimeout(() => inputRef.current?.focus(), 250);
+      return () => clearTimeout(timer);
     }
+    return undefined;
   }, [visible, value]);
   const trimmed = draft.trim();
   const invalid = Boolean(trimmed) && !isValidMeasureText(kind, trimmed);
@@ -881,6 +919,7 @@ export const ResultMeasureSheet: React.FC<{
       <Text style={styles.sheetTitle}>{meta.title}</Text>
       <View style={styles.measureBox}>
         <TextInput
+          ref={inputRef}
           style={styles.measureInput}
           value={draft}
           onChangeText={(t) => setDraft(sanitizeMeasureText(t))}

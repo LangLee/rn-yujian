@@ -388,6 +388,9 @@ export const CatchDetailScreen: React.FC = () => {
   const editScrollMetrics = useRef({ contentH: 0, viewH: 0 });
   const kbOpenRef = useRef(false);
   const storyScrollDoneRef = useRef(false);
+  /* Android：edge-to-edge Modal 里 KAV 收起键盘后 padding 归零不可靠，会残留
+     底部间隙——手动用键盘高度抬升/归零（iOS 仍用 KAV） */
+  const [kbLift, setKbLift] = useState(0);
 
   const scrollStoryIntoView = useCallback(() => {
     const { contentH, viewH } = editScrollMetrics.current;
@@ -407,9 +410,10 @@ export const CatchDetailScreen: React.FC = () => {
   );
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => {
+    const show = Keyboard.addListener('keyboardDidShow', (e) => {
       kbOpenRef.current = true;
       storyScrollDoneRef.current = false;
+      setKbLift(e.endCoordinates?.height ?? 0);
       /* KAV 的收缩布局在键盘事件后下一帧生效：双 rAF 跨过重排再量 */
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
@@ -423,6 +427,7 @@ export const CatchDetailScreen: React.FC = () => {
     const hide = Keyboard.addListener('keyboardDidHide', () => {
       kbOpenRef.current = false;
       storyScrollDoneRef.current = false;
+      setKbLift(0);
     });
     return () => {
       show.remove();
@@ -1163,12 +1168,18 @@ export const CatchDetailScreen: React.FC = () => {
         transparent
         visible={editMounted}
         statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={closeEditSheet}
       >
-        {/* 键盘避让：MainActivity edge-to-edge 后弹窗不再随键盘 resize
-            （statusBarTranslucent 的 Modal 尤甚），双平台统一 KAV padding
-            把 Sheet 整体抬到键盘上方；感言聚焦后由上方键盘监听滚进可视区 */}
-        <KeyboardAvoidingView style={styles.editFill} behavior="padding">
+        {/* 键盘避让：iOS 用 KAV padding；Android edge-to-edge 下 KAV 在 Modal 里
+            收起键盘后 padding 归零不可靠（残留底部间隙），enabled=false 使其退化为
+            普通 View，改用键盘高度手动 paddingBottom 精确抬升/归零；感言聚焦后由
+            上方键盘监听滚进可视区 */}
+        <KeyboardAvoidingView
+          behavior="padding"
+          enabled={Platform.OS === 'ios'}
+          style={[styles.editFill, kbLift > 0 ? { paddingBottom: kbLift } : null]}
+        >
           {/* 遮罩压暗底层详情页（冻结稿 ~38%）；点击交由关闭确认把关 */}
           <TouchableWithoutFeedback onPress={closeEditSheet}>
             <Animated.View
