@@ -15,6 +15,10 @@ import {
   AIPhase,
 } from '../components/coreui/AIAmbientField';
 import { RecognitionStatusCard } from '../components/coreui/RecognitionStatusCard';
+import type {
+  NormalizedFishBox,
+  ProductionRecognitionResultDTO,
+} from '../types/models';
 
 type RecognizingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Recognizing'>;
 
@@ -44,13 +48,39 @@ const CARD_CROSSFADE_MS = 240;
 const STORY_MS = AI_STATE_MIN_MS.imageRecognizing + AI_STATE_MIN_MS.fishLocated + AI_STATE_MIN_MS.speciesRecognizing;
 /** 收场转场（V1.2 RESOLVE：冻结段位 → ResolveStrength=(1-p)² 整体淡出） */
 const RESOLVE_MS = 200;
+/**
+ * 鱼体轮廓光最短展示时长（demo V1.1 经典金冻结时间线 2600ms：描边生长
+ * 1000ms → 柔光淡入至 1400ms → 确认高光 1600-1850ms → 稳定巡航至 2600ms
+ * 关键帧）——轮廓揭示晚于故事结尾时适度顺延 RESOLVE，保证时间线完整
+ * 走完；顺延上限 1500ms，不拖慢慢识别的收场。
+ */
+const CONTOUR_MIN_PLAY_MS = 2600;
+const CONTOUR_MAX_EXTRA_MS = 1500;
 const TIMEOUT_MS = 45000;
+
+/** 从识别结果提取鱼体 bbox：优先质量门选出的主检测，否则取置信度最高者 */
+const pickFishBox = (result: ProductionRecognitionResultDTO): NormalizedFishBox | null => {
+  const primary = result?.assessment?.primary;
+  if (primary?.box) {
+    return primary.box;
+  }
+  const detections = result?.detectorRun?.detections;
+  if (Array.isArray(detections) && detections.length > 0) {
+    const best = detections.reduce((a, b) => (b.confidence >= a.confidence ? b : a));
+    if (best?.box) {
+      return best.box;
+    }
+  }
+  return null;
+};
 
 /**
  * P03 识别处理中（Recognition Processing 冻结设计 V1.2）：
- * 全屏刚拍下的照片（视觉主导、无处理色罩）+ edge-aura 边缘光环
- * （2026-10 替换原 AI Edge Field 四能量岛；识别全程贴屏缘流动）+ 鱼焦点
- * （定位后视觉主角，暂缓）+ RecognitionStatusCard。
+ * 全屏刚拍下的照片（视觉主导、无处理色罩）+ 水光光场（2026-10 自
+ * edge-aura 光环更换为 demo「四周水光识别动效」效果02 移植；识别全程
+ * 贴屏缘流转）+ 鱼体轮廓光（demo Fish Contour Glow V1.3 移植：原生
+ * detectorRun 真实 bbox 的有机鱼形四层描边，随「已定位到鱼体」揭示，
+ * 描边生长 → 识别确认高光 → 日光金流光巡航）+ RecognitionStatusCard。
  * 禁止 HUD / 扫描框 / 进度条 / 伪百分比。
  * 结果路由由真实推理门控：推理更快 → 等故事走完（2.75s + 200ms RESOLVE）；
  * 推理更慢 → 停留在当前真实状态不伪造后续；失败立即路由。
@@ -67,6 +97,13 @@ export const RecognizingScreen: React.FC = () => {
   const [cardLate, setCardLate] = useState(false);
   const [resolveStarted, setResolveStarted] = useState(false);
 
+  /* 真实检测鱼体 bbox（归一化）：结果就绪且进入「已定位到鱼体」状态后
+     揭示为轮廓光；两条件到达顺序不确定，用 ref 暂存先到的一方。 */
+  const [fishBox, setFishBox] = useState<NormalizedFishBox | null>(null);
+  const pendingFishBoxRef = useRef<NormalizedFishBox | null>(null);
+  const phase2StartedRef = useRef(false);
+  const fishRevealedElapsedRef = useRef<number | null>(null);
+
   // 退场转场期间 IdentifyScreen 重挂载会 reset 清空 image，
   // 用挂载瞬间的照片冻结本屏展示，避免结果转场时照片先闪没。
   const [photoUri] = useState(() => toFileUri(image?.filePath));
@@ -74,6 +111,10 @@ export const RecognizingScreen: React.FC = () => {
      相机流保持铺满（cover）。同样在挂载瞬间冻结。 */
   const [photoFit] = useState<'cover' | 'contain'>(() =>
     image?.source === 'gallery' ? 'contain' : 'cover',
+  );
+  /* 照片像素尺寸（EXIF 归一后）：bbox → 屏幕映射基准，挂载瞬间冻结 */
+  const [photoPixelSize] = useState<{ width: number; height: number } | null>(() =>
+    image?.width && image?.height ? { width: image.width, height: image.height } : null,
   );
 
   const startedAt = useMemo(() => Date.now(), []);
@@ -83,6 +124,19 @@ export const RecognizingScreen: React.FC = () => {
   // 覆盖真正的失败原因。
   const recognizeRef = useRef(recognizeAndRecord);
   recognizeRef.current = recognizeAndRecord;
+
+  /* 轮廓光揭示：结果 bbox 已到 且 「已定位到鱼体」状态已开始（900ms 节拍），
+     两者都满足才出手——描边生长从这一刻起算，与状态文案同步。 */
+  const tryRevealFish = () => {
+    if (fishRevealedElapsedRef.current != null) {
+      return;
+    }
+    if (!phase2StartedRef.current || !pendingFishBoxRef.current) {
+      return;
+    }
+    fishRevealedElapsedRef.current = Date.now() - startedAt;
+    setFishBox(pendingFishBoxRef.current);
+  };
 
   // 收场（RESOLVE）：先冻结光场段位/粒子（Motion Contract §7），
   // 再以 ResolveStrength=(1-p)²（Easing.out(quad)）淡出 ambient/状态/鱼焦点。
@@ -106,9 +160,17 @@ export const RecognizingScreen: React.FC = () => {
     let acc = 0;
     for (let i = 1; i < STATE_ORDER.length; i++) {
       acc += AI_STATE_MIN_MS[STATE_ORDER[i - 1]];
-      timers.push(setTimeout(() => setStateIndex(i), acc));
+      const isPhase2 = i === 1;
+      timers.push(setTimeout(() => {
+        setStateIndex(i);
+        if (isPhase2) {
+          phase2StartedRef.current = true;
+          tryRevealFish();
+        }
+      }, acc));
     }
     return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* 状态 1 早→晚卡片交叉淡出 */
@@ -131,6 +193,11 @@ export const RecognizingScreen: React.FC = () => {
         if (cancelled) {
           return;
         }
+        // 真实检测鱼体 bbox：喂给轮廓光（若已进入「已定位到鱼体」状态立即揭示）
+        if (result?.ready) {
+          pendingFishBoxRef.current = pickFishBox(result);
+          tryRevealFish();
+        }
         const proceed = () => {
           if (result.ready && result.prediction) {
             navigation.replace('Result');
@@ -138,10 +205,18 @@ export const RecognizingScreen: React.FC = () => {
             navigation.replace('RecognitionIssue');
           }
         };
-        // 呈现时间管理（V1.2）：结果就绪后补完 2.75s 三状态故事，
+        // 呈现时间管理（V1.2）：结果就绪后补完 2.75s 三状态故事；轮廓光
+        // 揭示较晚时适度顺延（≤1500ms），保证描边生长与确认高光完整可见，
         // 最后 200ms RESOLVE 冻结淡出与路由衔接
         const elapsed = Date.now() - startedAt;
-        const fadeDelay = Math.max(0, STORY_MS - elapsed - RESOLVE_MS);
+        let targetEndMs = STORY_MS;
+        if (fishRevealedElapsedRef.current != null) {
+          targetEndMs = Math.min(
+            Math.max(STORY_MS, fishRevealedElapsedRef.current + CONTOUR_MIN_PLAY_MS),
+            STORY_MS + CONTOUR_MAX_EXTRA_MS,
+          );
+        }
+        const fadeDelay = Math.max(0, targetEndMs - elapsed - RESOLVE_MS);
         setTimeout(runResolve, fadeDelay);
         setTimeout(proceed, fadeDelay + RESOLVE_MS);
       } catch (e) {
@@ -177,11 +252,13 @@ export const RecognizingScreen: React.FC = () => {
 
   return (
     <View style={styles.screen}>
-      {/* 环境层：全屏照片 + 暗角 + edge-aura 边缘光环（识别动效）+ 鱼焦点 */}
+      {/* 环境层：全屏照片 + 暗角 + 水光光场（识别动效）+ 鱼体轮廓光（真实 bbox） */}
       <AIAmbientField
         phase={phase}
         photoUri={photoUri}
         photoFit={photoFit}
+        fishBox={fishBox}
+        photoPixelSize={photoPixelSize}
         resolveOpacity={resolveOpacity}
         frozen={resolveStarted}
       />

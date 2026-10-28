@@ -65,4 +65,6 @@ android/app/src/main/assets/fish_classifier.tflite
 android/app/src/main/assets/fish_detector_yolox_nano_v0_1.onnx
 android/app/src/main/assets/detector_metadata.json
 android/app/src/main/assets/recognition_pipeline_v1.json
+android/app/src/main/assets/sam_vision_encoder_quantized.onnx
+android/app/src/main/assets/sam_prompt_encoder_mask_decoder_quantized.onnx
 .model-download/

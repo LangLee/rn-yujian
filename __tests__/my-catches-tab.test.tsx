@@ -1,7 +1,7 @@
 /**
  * 我的鱼获 Tab（My Catches V2 冻结稿）渲染测试：
  * 时间线结构（Sticky 月份 / 日期节点 / 当日摘要 / 行卡 / Growth Mark 徽章）、
- * F1 内联筛选面板、搜索摘要与三类空状态、单日折叠规则、相机按钮常驻。
+ * F1 内联筛选面板、搜索摘要与三类空状态、单日折叠规则、不再叠加底部相机按钮。
  */
 import React from 'react';
 import { SectionList, ScrollView } from 'react-native';
@@ -112,7 +112,7 @@ describe('我的鱼获 Tab（时间档案）', () => {
     mockNavigate.mockClear();
   });
 
-  test('时间线：月份分组 + 日期节点 + 当日摘要 + 摘要行 + 相机按钮', async () => {
+  test('时间线：月份分组 + 日期节点 + 当日摘要 + 摘要行，无底部相机按钮', async () => {
     render(<Harness />);
 
     // 主题与记忆均为异步装载：等时间线本体出现
@@ -138,8 +138,8 @@ describe('我的鱼获 Tab（时间档案）', () => {
     expect(screen.getAllByText('草鱼').length).toBe(2);
     expect(screen.getByText('鲫鱼')).toBeTruthy();
 
-    // 底部共享相机按钮常驻
-    expect(screen.getByLabelText('拍照识别')).toBeTruthy();
+    // 拍摄入口由首页承担：本页不再渲染底部相机按钮
+    expect(screen.queryByLabelText('拍照识别')).toBeNull();
   });
 
   test('Growth Mark：最早草鱼带「首条草鱼」徽章，42cm 的不带', async () => {
@@ -169,20 +169,26 @@ describe('我的鱼获 Tab（时间档案）', () => {
       expect(screen.getByText('没有找到相关鱼获')).toBeTruthy();
     });
     expect(screen.getByText('你可以搜索：鱼种、地点、日期')).toBeTruthy();
-    expect(screen.getByLabelText('拍照识别')).toBeTruthy();
   });
 
-  test('F1 内联筛选面板：四维标题 + 重置 + chips 即时生效', async () => {
+  test('F1 内联筛选面板：五维单行标题 + 重置 + chips 即时生效/再点取消', async () => {
     render(<Harness filterOpen />);
 
     expect(await screen.findByText('筛选')).toBeTruthy();
     expect(screen.getByText('重置')).toBeTruthy();
     expect(screen.getByText('鱼种')).toBeTruthy();
     expect(screen.getByText('时间')).toBeTruthy();
-    expect(screen.getByText('尺寸')).toBeTruthy();
+    // 尺寸拆为长度 / 重量两行，单位挂在标题而非每个 chip
+    expect(screen.getByText('长度')).toBeTruthy();
+    expect(screen.getByText('cm')).toBeTruthy();
+    expect(screen.getByText('重量')).toBeTruthy();
+    expect(screen.getByText('kg')).toBeTruthy();
     expect(screen.getByText('特殊记录')).toBeTruthy();
     expect(screen.getByText('本月')).toBeTruthy();
+    expect(screen.getByText('20-40')).toBeTruthy();
     expect(screen.getByText('里程碑')).toBeTruthy();
+    // 不再提供「不限」chip：未选即不限
+    expect(screen.queryByText('不限')).toBeNull();
 
     // 特殊记录=首条（首条某鱼种）：c/b/d 各是本鱼种首条 → 3 条命中
     fireEvent.press(screen.getAllByText('首条')[0]);
@@ -190,8 +196,8 @@ describe('我的鱼获 Tab（时间档案）', () => {
       expect(screen.getByText('3 次鱼获 · 3 种鱼 · 3 记录天数')).toBeTruthy();
     });
 
-    // 先清空特殊记录（第 4 个「不限」属于特殊记录维度），再单选里程碑
-    fireEvent.press(screen.getAllByText('不限')[3]);
+    // 再点已选 chip 取消该条件 → 恢复全量
+    fireEvent.press(screen.getAllByText('首条')[0]);
     await waitFor(() => {
       expect(screen.getByText('4 次鱼获 · 3 种鱼 · 3 记录天数')).toBeTruthy();
     });
@@ -200,7 +206,6 @@ describe('我的鱼获 Tab（时间档案）', () => {
     fireEvent.press(screen.getByText('里程碑'));
     expect(await screen.findByText('没有找到符合条件的鱼获')).toBeTruthy();
     expect(screen.getByText('试试调整筛选条件')).toBeTruthy();
-    expect(screen.getByLabelText('拍照识别')).toBeTruthy();
 
     // 清除筛选恢复时间线
     fireEvent.press(screen.getByText('清除筛选'));
@@ -253,12 +258,15 @@ describe('我的鱼获 Tab（时间档案）', () => {
     expect(onEditFilter).toHaveBeenCalled();
   });
 
-  test('档案空状态：还没有鱼获记录', async () => {
+  test('档案空状态：还没有鱼获记录，「记录第一条鱼」直达拍照识别', async () => {
     mockArchive = [];
     render(<Harness />);
     expect(await screen.findByText('还没有鱼获记录')).toBeTruthy();
     expect(screen.getByText('拍下第一条鱼，开始你的鱼获时间线')).toBeTruthy();
-    expect(screen.getByLabelText('拍照识别')).toBeTruthy();
+    expect(screen.queryByLabelText('拍照识别')).toBeNull();
+
+    fireEvent.press(screen.getByLabelText('记录第一条鱼'));
+    expect(mockNavigate).toHaveBeenCalledWith('Identify');
   });
 
   test('单日 7 条：默认前 5 + 查看另外 2 条', async () => {

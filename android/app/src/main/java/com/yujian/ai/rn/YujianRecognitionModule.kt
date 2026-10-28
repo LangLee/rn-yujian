@@ -12,7 +12,9 @@ import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import com.yujian.ai.ai.FishRecognitionPipeline
 import com.yujian.ai.ai.InferenceTrace
+import com.yujian.ai.ai.NormalizedFishBox
 import com.yujian.ai.ai.ProductionRecognitionResult
+import com.yujian.ai.ai.SamContourEngine
 import com.yujian.ai.feedback.FeedbackDraft
 import com.yujian.ai.feedback.FeedbackRepository
 import com.yujian.ai.inference.InferenceAsset
@@ -25,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -50,6 +53,8 @@ class YujianRecognitionModule(reactContext: ReactApplicationContext) :
     private val pipelineLazy = lazy { FishRecognitionPipeline(appContext) }
     private val recorderLazy = lazy { InferenceRecorder(appContext) }
     private val feedbackLazy = lazy { FeedbackRepository(appContext) }
+    /** SAM 鱼体轮廓分割（demo samService 同款 SlimSAM-77-uniform q8），辅助视觉、按需加载。 */
+    private val samLazy = lazy { SamContourEngine(appContext) }
 
     /** In-memory selected images keyed by stable image_id (yj_img_<uuid>). */
     private val images = ConcurrentHashMap<String, SelectedImage>()
@@ -185,6 +190,36 @@ class YujianRecognitionModule(reactContext: ReactApplicationContext) :
         promise.resolve(imageId)
     }
 
+    /**
+     * SAM 鱼体轮廓分割（demo samService 同款 Xenova/slimsam-77-uniform q8）：
+     * 以归一化检测框 [box] 为提示分割鱼体，返回归一化闭合轮廓点；[box] 缺省时
+     * 复用 pipeline 已加载的检测器选主框。掩码为空/过小 resolve(null)；
+     * 有轮廓但未过可信度门禁时 trustworthy=false，JS 侧退回 bbox 合成轮廓。
+     */
+    @ReactMethod
+    fun extractFishContour(imageId: String, box: ReadableMap?, promise: Promise) {
+        scope.launch {
+            try {
+                val selected = requireImage(imageId)
+                val prompt = box?.let(::readBox) ?: pipelineLazy.value.detectPrimaryBox(selected.bitmap)
+                if (prompt == null) {
+                    promise.resolve(null)
+                    return@launch
+                }
+                // 会话按需初始化（读 13MB 资产 + 建图）放到后台线程，避免卡主线程
+                val engine = withContext(Dispatchers.Default) { samLazy.value }
+                val result = engine.extractContour(selected.bitmap, prompt)
+                if (result == null) {
+                    promise.resolve(null)
+                    return@launch
+                }
+                promise.resolve(contourToMap(result))
+            } catch (error: Exception) {
+                promise.reject("E_CONTOUR", error.message ?: "鱼体轮廓分割失败", error)
+            }
+        }
+    }
+
     /** Warm up detector + classifier sessions so the first recognize() is not slow. */
     @ReactMethod
     fun warmup(promise: Promise) {
@@ -192,6 +227,8 @@ class YujianRecognitionModule(reactContext: ReactApplicationContext) :
             try {
                 // Touching the lazy pipeline constructor loads and verifies both models.
                 pipelineLazy.value
+                // SAM 轮廓分割为辅助视觉：顺带预热，但加载失败不影响识别可用性
+                withContext(Dispatchers.Default) { runCatching { samLazy.value.warmup() } }
                 promise.resolve(true)
             } catch (error: Exception) {
                 promise.reject("E_WARMUP", error.message ?: "模型加载失败", error)
@@ -212,10 +249,43 @@ class YujianRecognitionModule(reactContext: ReactApplicationContext) :
 
     private fun closeEngines() {
         if (pipelineLazy.isInitialized()) pipelineLazy.value.close()
+        if (samLazy.isInitialized()) samLazy.value.close()
         images.clear()
         results.clear()
         scope.cancel()
     }
+
+    private fun readBox(map: ReadableMap): NormalizedFishBox? {
+        if (!map.hasKey("x1") || !map.hasKey("y1") || !map.hasKey("x2") || !map.hasKey("y2")) return null
+        return NormalizedFishBox(
+            map.getDouble("x1").toFloat(),
+            map.getDouble("y1").toFloat(),
+            map.getDouble("x2").toFloat(),
+            map.getDouble("y2").toFloat(),
+        ).normalized()
+    }
+
+    private fun contourToMap(result: SamContourEngine.ContourResult): WritableMap =
+        Arguments.createMap().apply {
+            putString("modelId", SamContourEngine.MODEL_ID)
+            putArray("points", Arguments.createArray().apply {
+                result.points.forEach { point ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putDouble("x", point.x.toDouble())
+                            putDouble("y", point.y.toDouble())
+                        },
+                    )
+                }
+            })
+            putDouble("iouScore", result.iouScore.toDouble())
+            putInt("pixelCount", result.pixelCount)
+            putMap("maskBox", boxToMap(result.maskBox))
+            putBoolean("trustworthy", result.trustworthy)
+            putDouble("encoderLatencyMs", result.encoderLatencyMs.toDouble())
+            putDouble("decoderLatencyMs", result.decoderLatencyMs.toDouble())
+            putDouble("totalLatencyMs", result.totalLatencyMs.toDouble())
+        }
 
     private fun serializeResult(selected: SelectedImage, result: ProductionRecognitionResult): WritableMap {
         val prediction = result.prediction

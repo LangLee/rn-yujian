@@ -25,7 +25,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 // 因此这里不 mock react-native-svg。
 
 // Mock @shopify/react-native-skia（依赖 CanvasKit/RNSkiaModule 原生，jest 下不可用；
-// 仅 ScanEffect 视觉动效使用，桩化为不渲染的空组件即可）
+// 水光光场等视觉动效使用，桩化为不渲染的空组件即可）
 jest.mock('@shopify/react-native-skia', () => {
   const React = require('react');
   const Noop = () => null;

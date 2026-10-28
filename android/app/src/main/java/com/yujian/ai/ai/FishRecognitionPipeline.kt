@@ -21,6 +21,16 @@ class FishRecognitionPipeline(context: Context) : AutoCloseable {
     private val detector = FishDetectorEngine(context)
     private val classifier = FishRecognitionEngine(context)
 
+    /**
+     * 仅跑检测器并按质量门选出主检测框（SAM 轮廓分割无框提示时的兜底），
+     * 复用已加载的 detector 会话，不额外加载模型。
+     */
+    suspend fun detectPrimaryBox(bitmap: Bitmap): NormalizedFishBox? {
+        val detectorRun = detector.detect(bitmap)
+        val assessment = FishDetectionQualityGate.assess(detectorRun.detections)
+        return (assessment.primary ?: detectorRun.detections.maxByOrNull { it.confidence })?.box?.normalized()
+    }
+
     suspend fun recognize(bitmap: Bitmap): ProductionRecognitionResult {
         val detectorRun = detector.detect(bitmap)
         val assessment = FishDetectionQualityGate.assess(detectorRun.detections)

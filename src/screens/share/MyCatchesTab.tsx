@@ -17,7 +17,6 @@ import { catchMemoryService, CatchMemoryData } from '../../services/catchMemoryS
 import { coreColors, PAGE_MARGIN } from '../../constants/coreUi';
 import { font, fs, spacing } from '../../constants/tokens';
 import { PressableScale } from '../../components/ui/PressableScale';
-import { YuJianPrimaryCaptureButton } from '../../components/coreui';
 import {
   ActiveCondition,
   ActiveConditionKey,
@@ -84,7 +83,8 @@ const RAIL_COLOR = 'rgba(184,198,206,0.85)';
  * 我的鱼获 Tab · My Catches V2（Chronological Archive，FROZEN）。
  *
  * 结构（Design Audit §2）：搜索/筛选（Hub 头部）→ 档案摘要 → 月份分组（Sticky）
- * → 日期节点/当日摘要 → FishRecordRowCard → Growth Mark → 共享拍摄入口。
+ * → 日期节点/当日摘要 → FishRecordRowCard → Growth Mark。
+ * 拍摄入口由首页承担，本页不再叠加底部相机按钮。
  */
 export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
   searchMode,
@@ -497,7 +497,7 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
                   ? `expand-${item.dayKey}`
                   : `collapse-${item.dayKey}-${index}`
           }
-          contentContainerStyle={[styles.content, { paddingBottom: 140 + insets.bottom }]}
+          contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
           stickySectionHeadersEnabled
           renderSectionHeader={({ section }) => <MonthHeader label={monthLabelOf(section.key)} />}
           renderItem={renderRow}
@@ -527,7 +527,7 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
               </PressableScale>
             </View>
           ) : emptyKind === 'archive' ? (
-            <ArchiveEmptyState />
+            <ArchiveEmptyState onCapture={() => navigation.navigate('Identify')} />
           ) : emptyKind === 'search' ? (
             <SearchEmptyState
               onClear={() => {
@@ -547,15 +547,6 @@ export const MyCatchesTab: React.FC<MyCatchesTabControllerProps> = ({
           )}
         </View>
       )}
-
-      {/* 底部中央共享拍摄入口（Archive/Search/Filter Empty 与时间线常驻，不参与滚动） */}
-      <View style={[styles.fab, { bottom: insets.bottom + spacing.md }]}>
-        <YuJianPrimaryCaptureButton
-          onPress={() => navigation.navigate('Identify')}
-          size={52}
-          accessibilityLabel="拍照识别"
-        />
-      </View>
     </View>
   );
 };
@@ -969,16 +960,24 @@ const conditionStyles = StyleSheet.create({
   } as TextStyle,
 });
 
-/** Archive Empty（Empty States Spec §1：底部共享相机按钮是唯一主行动，不再叠加同级按钮） */
-const ArchiveEmptyState: React.FC = () => (
+/** Archive Empty（Empty States Spec §1：「记录第一条鱼」是唯一主行动，直达拍照识别） */
+const ArchiveEmptyState: React.FC<{ onCapture: () => void }> = ({ onCapture }) => (
   <View style={stateStyles.wrap}>
     <Text style={stateStyles.title}>还没有鱼获记录</Text>
     <Text style={stateStyles.subtitle}>拍下第一条鱼，开始你的鱼获时间线</Text>
-    <Text style={stateStyles.hint}>记录第一条鱼</Text>
+    <PressableScale
+      onPress={onCapture}
+      scaleTo={0.97}
+      style={stateStyles.actionHit}
+      accessibilityRole="button"
+      accessibilityLabel="记录第一条鱼"
+    >
+      <Text style={stateStyles.action}>记录第一条鱼</Text>
+    </PressableScale>
   </View>
 );
 
-/** Search Empty（§3：保留 query / × / 取消 / Filter 条件 / 相机按钮） */
+/** Search Empty（§3：保留 query / × / 取消 / Filter 条件） */
 const SearchEmptyState: React.FC<{ onClear: () => void }> = ({ onClear }) => (
   <View style={stateStyles.wrap}>
     <Text style={stateStyles.title}>没有找到相关鱼获</Text>
@@ -989,7 +988,7 @@ const SearchEmptyState: React.FC<{ onClear: () => void }> = ({ onClear }) => (
   </View>
 );
 
-/** Filter Empty（§2：清除筛选 主恢复 / 修改筛选 次恢复；相机按钮是记录入口不是恢复 CTA） */
+/** Filter Empty（§2：清除筛选 主恢复 / 修改筛选 次恢复） */
 const FilterEmptyState: React.FC<{ onClear: () => void; onEdit: () => void }> = ({
   onClear,
   onEdit,
@@ -1022,11 +1021,6 @@ const stateStyles = StyleSheet.create({
     fontSize: fs(13),
     color: coreColors.lakeBlue,
     textAlign: 'center',
-  } as TextStyle,
-  hint: {
-    fontSize: fs(12),
-    color: coreColors.lakeBlue,
-    marginTop: 4,
   } as TextStyle,
   actionHit: {
     paddingVertical: 8,
@@ -1141,11 +1135,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: coreColors.deepLakeBlue,
   } as TextStyle,
-  /** 底部中央共享相机底座（My Catches 冻结稿：Camera 居中，全局不参与滚动） */
-  fab: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  } as ViewStyle,
 });

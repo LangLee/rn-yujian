@@ -10,10 +10,12 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MorningLakeScene } from './MorningLakeScene';
-import { EdgeAuraFrame } from '../EdgeAuraFrame';
+import { WaterLightFrame } from '../WaterLightFrame';
+import { FishContourGlow } from '../FishContourGlow';
+import type { NormalizedFishBoxInput } from '../fishContourEngine';
 
 /**
  * AIAmbientField —— 识别处理页环境层。
@@ -22,24 +24,29 @@ import { EdgeAuraFrame } from '../EdgeAuraFrame';
  *   · Recognition_Design_Closure_V1_2.md —— 三状态产品模型
  *   · spec/Recognition_State_Timeline_Spec_V1_3.md —— 图片识别中 → 已定位到鱼体 → 鱼种识别中
  *   · processing/motion/Recognition_Processing_Motion_Spec_V1_2.md —— 节拍/强度/速度
- *   · processing/spec/Recognition_Processing_Visual_Spec_V1_1.md —— 色彩令牌/鱼焦点几何
+ *   · processing/spec/Recognition_Processing_Visual_Spec_V1_1.md —— 色彩令牌
  *   · processing/accessibility/Recognition_Reduce_Motion_V1.md —— 减弱动态
  *
- * 2026-10 边缘动效修订（用户拍板，替换 AI Edge Field V1 四能量岛光场）：
- *   · 识别过程的边缘动画改为 edge-aura 方案（edge-aura.js.org 引擎移植，
- *     详见 EdgeAuraFrame / edgeAuraEngine）：贴整屏边缘流动的有机光环——
- *     亮芯 + 内长尾羽化沿屏幕边缘 8s/圈流动，环形噪声调制粗细呼吸，
- *     入场自底边中点点亮扫过半环（替代旧 420ms 分层入场编排）；
- *     色板保持渔见清晨湖畔色（湖水青 → 鱼鳞薄荷 → 湖雾白 → 晨金结 → 回青）。
+ * 2026-10 边缘动效修订（先替 AI Edge Field V1 四能量岛为 edge-aura 光环，
+ * 再按本地特效 demo 更换为水光光场，并接回真实 bbox 鱼体轮廓光）：
+ *   · L2-L5 识别过程边缘动画为「四周水光识别动效」移植（demo AI--main /
+ *     FishCatchWaterOverlay 效果02，详见 WaterLightFrame / waterLightEngine）：
+ *     贴屏内缘的有机水光环（三层 bloom 呼吸流转，深湖青 / 琥珀金 / 雾蓝
+ *     缠绕）+ 底部湖水焦散与晨光光斑 + 沿环漂移光珠与底边中点水纹装饰；
+ *     入场 1.2s 自下而上点亮解锁。
+ *   · L6 鱼体轮廓光（demo Fish Contour Glow V1.3 移植，详见 FishContourGlow /
+ *     fishContourEngine）：原生 detectorRun 的真实鱼体 bbox 映射到屏幕，
+ *     有机鱼形四层光学描边 —— 0-1000ms 生长、1600-1850ms 识别确认高光、
+ *     1400ms 起日光金流光巡航。轮廓在「已定位到鱼体」状态揭示（由
+ *     RecognizingScreen 门控传入），替代旧椭圆鱼焦点预留。
  *   · 保留结构不动：全屏照片（视觉主导）、中性暗角、状态强度链
- *     （StateStrength 1.00 → 0.80 → 0.62）、RESOLVE 冻结停表 + 淡出、
- *     鱼焦点预留（SHOW_FISH_FOCUS，待真实 bbox 接入）。
+ *     （StateStrength 1.00 → 0.80 → 0.62）、RESOLVE 冻结停表 + 淡出。
  *
  * 三状态（V1.2 State Timeline，恰好三个用户可见状态）：
  *   图片识别中 ≥900ms → 已定位到鱼体 ≥600ms → 鱼种识别中 ≥1250ms
- *   → RESOLVE 200ms（光环停表冻结段位，ResolveStrength=(1-p)² 整体淡出）
+ *   → RESOLVE 200ms（动效停表冻结段位，ResolveStrength=(1-p)² 整体淡出）
  *
- * Reduce Motion：光环静态呈现于入场完成位（180ms 静态淡入，无流动）。
+ * Reduce Motion：水光与轮廓光静态呈现于入场完成位（180ms 静态淡入，无流动）。
  */
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -52,10 +59,6 @@ export const AI_GOLD_HOT = '#FFE7AE';
 export const STATUS_BG = 'rgba(26,44,53,0.85)';
 export const STATUS_TEXT_SECONDARY = '#BFD0D7';
 
-/** 鱼焦点冻结色：光晕基色 / 轮廓热金（Visual Spec Fish focus geometry） */
-const FISH_HALO_BASE = '#FFD98A';
-const FISH_CONTOUR_HOT = AI_GOLD_HOT;
-
 /** 识别处理三状态（V1.2 State Timeline） */
 export type AIPhase = 'imageRecognizing' | 'fishLocated' | 'speciesRecognizing';
 
@@ -67,7 +70,7 @@ export const AI_STATE_MIN_MS: Record<AIPhase, number> = {
 };
 
 /**
- * StateStrength 目标：光环全程是视觉主角，后段轻微收束叙事
+ * StateStrength 目标：边缘水光全程是视觉主角，后段轻微收束叙事
  * （0.58/0.36 的「为鱼让位」版本随四岛光场一并废弃）。
  */
 export const AI_STATE_STRENGTH: Record<AIPhase, number> = {
@@ -84,45 +87,24 @@ const TRANSITION_MS: Record<AIPhase, number> = {
 /** V1.2 统一缓动 cubic-bezier(0.22, 1, 0.36, 1) */
 const EASE_V12 = Easing.bezier(0.22, 1, 0.36, 1);
 
-/** 鱼焦点暂缓开关（用户 2026-10：中间鱼体亮光先不实现；真实 bbox 接入后开启） */
-const SHOW_FISH_FOCUS = false;
-
 /** 中性暗角（照片中心 55% 不动、仅压暗外围衬托边缘光，非规格禁止的色彩罩） */
 const VIGNETTE_COLOR = '#06141A';
-
-/** 0↔1 正弦呼吸循环（native driver：opacity / transform） */
-function breatheLoop(v: Animated.Value, ms: number): Animated.CompositeAnimation {
-  const half = ms / 2;
-  return Animated.loop(
-    Animated.sequence([
-      Animated.timing(v, { toValue: 1, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(v, { toValue: 0, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ]),
-  );
-}
-
-/**
- * 鱼焦点几何（Visual Spec「Fish focus geometry」，真实检测 bbox 映射）：
- * radiusX = bbox宽×0.62+14dp；radiusY = bbox高×0.72+14dp；径向外延 1.18×；
- * 内部透明不填充鱼体；周界椭圆 1.2dp 金色响应。
- */
-export interface FishFocus {
-  cx: number;
-  cy: number;
-  halfW: number;
-  halfH: number;
-}
 
 interface AIAmbientFieldProps {
   /** 当前产品状态（V1.2 三状态） */
   phase: AIPhase;
   /** 刚拍下的照片（本地 file:// URI，L1 视觉主导、无处理色罩） */
   photoUri: string | null;
-  /** 鱼焦点（真实检测 bbox 归一化映射；缺省为中心偏置 Level C 兜底） */
-  fishFocus?: FishFocus;
+  /**
+   * 真实检测鱼体 bbox（归一化；原生 detectorRun 结果，由 RecognizingScreen
+   * 在「已定位到鱼体」状态门控后传入）。缺省不渲染轮廓光。
+   */
+  fishBox?: NormalizedFishBoxInput | null;
+  /** 照片像素尺寸（EXIF 归一后；bbox → 屏幕映射基准）。缺省不渲染轮廓光 */
+  photoPixelSize?: { width: number; height: number } | null;
   /** 收场淡出（ResolveStrength=(1-p)²；0=正常，1=完全淡出；仅作用 L2-L7，照片不动） */
   resolveOpacity?: Animated.AnimatedInterpolation<number> | Animated.Value | number;
-  /** RESOLVE 已开始：光环停表冻结段位（Motion Contract §7） */
+  /** RESOLVE 已开始：动效停表冻结段位（Motion Contract §7） */
   frozen?: boolean;
   /**
    * 照片适配：cover = 相机流（铺满裁切）；contain = 相册流
@@ -134,7 +116,8 @@ interface AIAmbientFieldProps {
 export const AIAmbientField: React.FC<AIAmbientFieldProps> = ({
   phase,
   photoUri,
-  fishFocus = { cx: 0.5, cy: 0.42, halfW: 0.3, halfH: 0.1 },
+  fishBox = null,
+  photoPixelSize = null,
   resolveOpacity = 1,
   frozen = false,
   photoFit = 'cover',
@@ -153,8 +136,8 @@ export const AIAmbientField: React.FC<AIAmbientFieldProps> = ({
     [],
   );
 
-  /* ── 入场：常态由光环自带 kindle 点亮扫过（0.85s 自底边中点扫半环）承担，
-     无需旧版 420ms 分层编排；Reduce Motion 改 180ms 静态淡入。 ── */
+  /* ── 入场：常态由水光自带 1.2s 自下而上点亮承担，无需旧版 420ms 分层
+     编排；Reduce Motion 改 180ms 静态淡入。 ── */
   const entry = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (reduceMotion) {
@@ -164,7 +147,7 @@ export const AIAmbientField: React.FC<AIAmbientFieldProps> = ({
   }, [reduceMotion, entry]);
 
   /* ── StateStrength：1.00 → 0.80(260ms) → 0.62(280ms) 插值（2026-10 修订）；
-     初值直接取首状态目标（入场由 kindle 承担，不双重渐入）；
+     初值直接取首状态目标（入场由点亮承担，不双重渐入）；
      Reduce Motion 用 180ms alpha 插值（ReduceMotion §10）。 ── */
   const strength = useRef(new Animated.Value(AI_STATE_STRENGTH[phase])).current;
   useEffect(() => {
@@ -175,50 +158,6 @@ export const AIAmbientField: React.FC<AIAmbientFieldProps> = ({
       useNativeDriver: true,
     }).start();
   }, [phase, reduceMotion, strength]);
-
-  /* ── 鱼焦点（状态 2/3 的视觉主角，预留未启用）：OUTLINE 揭示 360ms；
-     CLASSIFYING 轮廓呼吸 0.36↔0.42/1900ms。Reduce Motion：180ms 揭示至静态中值。 ── */
-  const focusActive = phase === 'fishLocated' || phase === 'speciesRecognizing';
-  const reveal = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (!focusActive) {
-      reveal.setValue(0);
-      return;
-    }
-    reveal.setValue(0);
-    Animated.timing(reveal, {
-      toValue: 1,
-      duration: reduceMotion ? 180 : 360,
-      easing: EASE_V12,
-      useNativeDriver: true,
-    }).start();
-  }, [focusActive, reduceMotion, reveal]);
-
-  const breath = useRef(new Animated.Value(0.5)).current;
-  useEffect(() => {
-    if (reduceMotion || frozen || phase !== 'speciesRecognizing') {
-      breath.setValue(0.5);
-      return;
-    }
-    const loop = breatheLoop(breath, 1900);
-    loop.start();
-    return () => loop.stop();
-  }, [reduceMotion, frozen, phase, breath]);
-
-  /* 光晕峰 ≤0.18；轮廓 OUTLINE 揭示至 0.42，CLASSIFYING 呼吸 0.36↔0.42 */
-  const haloAlpha = Animated.multiply(
-    reveal,
-    breath.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.18] }),
-  );
-  const contourAlpha = Animated.multiply(
-    reveal,
-    breath.interpolate({ inputRange: [0, 1], outputRange: [0.72, 0.85] }),
-  );
-
-  const frx = fishFocus.halfW * 2 * size.w * 0.62 + 14;
-  const fry = fishFocus.halfH * 2 * size.h * 0.72 + 14;
-  const fcx = fishFocus.cx * size.w;
-  const fcy = fishFocus.cy * size.h;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
@@ -248,45 +187,34 @@ export const AIAmbientField: React.FC<AIAmbientFieldProps> = ({
           <Rect x="0" y="0" width={size.w} height={size.h} fill={`url(#vig${uid})`} />
         </Svg>
 
-        {/* L2-L5. 识别过程边缘动效（2026-10 替换为 edge-aura 光环）：
-            贴整屏边缘流动的有机光环；入场 = 自底边中点点亮扫过半环；
-            StateStrength 承载三状态收束叙事；frozen（RESOLVE）停表冻结段位。 */}
+        {/* L2-L5. 识别过程边缘动效（2026-10 更换为水光光场）：
+            四周水光环 + 底部焦散光斑 + 流光点缀；入场 = 1.2s 自下而上
+            点亮解锁；StateStrength 承载三状态收束叙事；frozen（RESOLVE）
+            停表冻结段位。 */}
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: strength }]} pointerEvents="none">
           <Animated.View
             style={[StyleSheet.absoluteFill, reduceMotion ? { opacity: entry } : undefined]}
             pointerEvents="none"
           >
-            <EdgeAuraFrame width={size.w} height={size.h} paused={frozen} />
+            <WaterLightFrame width={size.w} height={size.h} paused={frozen} />
           </Animated.View>
         </Animated.View>
 
-        {/* L6. 鱼焦点（状态 2/3 视觉主角，不随边缘光环强度链）。
-            用户要求先不实现 —— 待原生检测 bbox 事件接入后置 true 启用
-            （届时用真实 bbox 映射替换中心偏置兜底）。 */}
-        {SHOW_FISH_FOCUS && focusActive && (
-          <>
-            <Animated.View style={[StyleSheet.absoluteFill, { opacity: haloAlpha }]} pointerEvents="none">
-              <Svg style={StyleSheet.absoluteFill} width={size.w} height={size.h} pointerEvents="none">
-                <Defs>
-                  <RadialGradient id={`halo${uid}`} cx="50%" cy="50%" rx="50%" ry="50%">
-                    <Stop offset="0.55" stopColor={FISH_HALO_BASE} stopOpacity="0" />
-                    <Stop offset="0.85" stopColor={FISH_HALO_BASE} stopOpacity="1" />
-                    <Stop offset="1" stopColor={FISH_HALO_BASE} stopOpacity="0" />
-                  </RadialGradient>
-                </Defs>
-                <Ellipse cx={fcx} cy={fcy} rx={frx * 1.18} ry={fry * 1.18} fill={`url(#halo${uid})`} />
-              </Svg>
-            </Animated.View>
-            <Animated.View style={[StyleSheet.absoluteFill, { opacity: contourAlpha }]} pointerEvents="none">
-              <Svg style={StyleSheet.absoluteFill} width={size.w} height={size.h} pointerEvents="none">
-                {/* 轮廓柔光：12dp @ 55%×核心（关键帧03：金色能量描边+外发光） */}
-                <Ellipse cx={fcx} cy={fcy} rx={frx} ry={fry} fill="none" stroke={FISH_CONTOUR_HOT} strokeWidth={12} strokeOpacity={0.55} />
-                {/* 周界椭圆核心：2.2dp 金色响应 */}
-                <Ellipse cx={fcx} cy={fcy} rx={frx} ry={fry} fill="none" stroke={FISH_CONTOUR_HOT} strokeWidth={2.2} />
-              </Svg>
-            </Animated.View>
-          </>
-        )}
+        {/* L6. 鱼体轮廓光（demo Fish Contour Glow V1.3 移植）：真实检测
+            bbox 的有机鱼形四层光学描边，「已定位到鱼体」状态的视觉主角；
+            不随边缘水光强度链（有自己的生长/确认/巡航时间线）；
+            frozen（RESOLVE）停表冻结段位。 */}
+        {fishBox && photoPixelSize ? (
+          <FishContourGlow
+            width={size.w}
+            height={size.h}
+            fishBox={fishBox}
+            photoWidth={photoPixelSize.width}
+            photoHeight={photoPixelSize.height}
+            photoFit={photoFit}
+            paused={frozen}
+          />
+        ) : null}
       </Animated.View>
     </View>
   );

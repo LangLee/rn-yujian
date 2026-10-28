@@ -215,6 +215,22 @@ def detectorBundleMembers = [
     "recognition_pipeline_v1.json",
 ] as Set
 
+// SAM 鱼体轮廓分割（demo 同款 Xenova/slimsam-77-uniform q8 量化导出）：
+// 来自 Hugging Face，国内网络经 hf-mirror 镜像下载（scripts/fetch-sam.sh 兜底），
+// 这里只做在位校验（SHA256 + 字节数，与 SamContourEngine 常量一致），不自动下载。
+def samAssets = [
+    [
+        name: "sam_vision_encoder_quantized.onnx",
+        sha256: "cce23c7b2e5d4f330932738fb67ba518e04b0d99ccdd1cccd22a7da4e01f2971",
+        bytes: 8882165L,
+    ],
+    [
+        name: "sam_prompt_encoder_mask_decoder_quantized.onnx",
+        sha256: "cb90b279f549d2cab7fd6e20c38522438c65d84bdcca3d2a764cff7d857fdce2",
+        bytes: 4903810L,
+    ],
+]
+
 def sha256Of = { File f ->
     def digest = java.security.MessageDigest.getInstance("SHA-256")
     f.eachByte(1024 * 1024) { byte[] buffer, int len ->
@@ -288,7 +304,18 @@ tasks.register("fetchModelAssets") {
                 bundle.delete()
             }
         }
-        logger.lifecycle("模型资产: 校验通过（classifier + detector 均就位）")
+        // SAM 轮廓分割资产：在位校验（缺失/不符时明确报错，由 scripts/fetch-sam.sh 兜底下载）
+        samAssets.each { asset ->
+            def file = new File(modelAssetsDir, asset.name)
+            if (!file.exists() || file.length() != asset.bytes || sha256Of(file) != asset.sha256) {
+                throw new GradleException(
+                    "SAM 轮廓分割模型缺失或校验失败：${asset.name}\n" +
+                    "请执行 ./scripts/fetch-sam.sh 下载（Hugging Face Xenova/slimsam-77-uniform q8），\n" +
+                    "或将 demo 项目的 model/ 下同名文件拷入 android/app/src/main/assets/ 后重新构建"
+                )
+            }
+        }
+        logger.lifecycle("模型资产: 校验通过（classifier + detector + sam 均就位）")
     }
 }
 
