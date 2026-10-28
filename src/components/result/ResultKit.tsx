@@ -908,10 +908,28 @@ export const ResultMeasureSheet: React.FC<{
   useEffect(() => {
     if (visible) {
       setDraft(value);
-      // autoFocus 在 Modal slide 入场动画中常被 Android 吃掉：延迟到动画基本
-      // 结束后再聚焦，保证抽屉弹出即拉起键盘
-      const timer = setTimeout(() => inputRef.current?.focus(), 250);
-      return () => clearTimeout(timer);
+      /* 不能用 autoFocus：Modal slide 入场动画期间 Dialog 窗口尚未获得系统
+         焦点（华为 EMUI/HarmonyOS 高发），此时聚焦会被吞掉 showSoftInput，
+         且输入框已聚焦态下后续 focus() 是 no-op，键盘永远起不来。改为动画
+         结束后再聚焦；若键盘仍未弹出（窗口焦点来得更晚的慢机型），再强制
+         blur→focus 重新触发一次 showSoftInput。 */
+      let kbShown = false;
+      const kbShow = Keyboard.addListener('keyboardDidShow', () => {
+        kbShown = true;
+      });
+      const timers: ReturnType<typeof setTimeout>[] = [
+        setTimeout(() => inputRef.current?.focus(), 300),
+        setTimeout(() => {
+          if (!kbShown) {
+            inputRef.current?.blur();
+            inputRef.current?.focus();
+          }
+        }, 800),
+      ];
+      return () => {
+        kbShow.remove();
+        timers.forEach(clearTimeout);
+      };
     }
     return undefined;
   }, [visible, value]);
@@ -935,7 +953,6 @@ export const ResultMeasureSheet: React.FC<{
           onChangeText={(t) => setDraft(sanitizeMeasureText(t))}
           keyboardType="decimal-pad"
           maxLength={8}
-          autoFocus
           placeholder="0"
           placeholderTextColor={ROW_PLACEHOLDER}
           returnKeyType="done"

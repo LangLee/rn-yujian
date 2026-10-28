@@ -84,10 +84,11 @@ type ResultState = 'high' | 'medium' | 'low';
  * (长度/重量/地点 整行点按弹 Sheet 输入+›；值展示带单位) → 感言卡(写下这次鱼获的故事+语音胶囊+0/300)
  * → 双 CTA(继续记忆·相册图标 / 保存本次鱼获·金描边)。
  * 中置信度 = 一行确认提示 + 横向候选卡(Top-1 模型建议·弱青边；选中 2dp 青) +
- * 都不是？选择其他鱼种 ›；选定后提示退场、身份行回显选定鱼种，候选区保留可更换；
+ * 都不是？选择其他鱼种 ›；选定后提示与候选区整体退场，屏幕切换为确认态
+ * （身份行回显选定鱼种，修改鱼种可再次更换）；
  * 记录区常驻，选定鱼种前保存禁用。
  * 低置信度 = 无法确认是什么鱼 + 按钮对(手动选择鱼种·白底金边 / 重新拍摄·灰蓝底)，
- * 记录区同样常驻展示（保存需先选定鱼种）。
+ * 选定后按钮对同样退场、切换为确认态展示；记录区常驻（保存需先选定鱼种）。
  * 视觉基调自然安静纪实；不继承处理页任何 AI 光效。
  */
 export const RecognitionResultScreen: React.FC = () => {
@@ -156,6 +157,10 @@ export const RecognitionResultScreen: React.FC = () => {
     }
     return prediction.candidates.length >= 2 ? 'medium' : 'low';
   }, [prediction]);
+
+  /** 不确定结果（中/低置信度）：选定鱼种后即视为已确认，整屏切换为
+      高置信度确认态（中/低置信度专属区块退场，身份行回显选定鱼种） */
+  const resolved = state === 'high' || Boolean(selectedKey);
 
   useEffect(() => {
     if (!prediction) {
@@ -248,6 +253,40 @@ export const RecognitionResultScreen: React.FC = () => {
     animations.start();
     return () => animations.stop();
   }, [reduceMotion, heroOpacity, heroScale, nameOpacity, nameTranslate]);
+
+  /* 不确定结果（中/低置信度）选定鱼种 → 确认态：身份行以一次与入场一致的
+     克制渐显切换（Motion Spec V1；reduceMotion 直接定格终态） */
+  const resolvedShownRef = useRef(resolved);
+  useEffect(() => {
+    if (resolvedShownRef.current === resolved) {
+      return undefined;
+    }
+    resolvedShownRef.current = resolved;
+    if (!resolved || reduceMotion) {
+      return undefined;
+    }
+    // 用户可能在入场动效进行中就选定：先停掉同一 Value 上的在跑动画再接管
+    nameOpacity.stopAnimation();
+    nameTranslate.stopAnimation();
+    nameOpacity.setValue(0);
+    nameTranslate.setValue(6);
+    const anim = Animated.parallel([
+      Animated.timing(nameOpacity, {
+        toValue: 1,
+        duration: 260,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(nameTranslate, {
+        toValue: 0,
+        duration: 260,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]);
+    anim.start();
+    return () => anim.stop();
+  }, [resolved, reduceMotion, nameOpacity, nameTranslate]);
 
   const candidates: RecognitionCandidate[] = useMemo(
     () => prediction?.candidates.slice(0, 3) ?? [],
@@ -482,8 +521,6 @@ export const RecognitionResultScreen: React.FC = () => {
   const textPrimary = coreColors.deepLakeBlue;
   const textSecondary = coreColors.lakeBlue;
   const saveDisabled = !selectedKey;
-  /** 不确定结果（中/低置信度）：选定鱼种后才进入已解析记录契约并回显身份行 */
-  const resolved = state === 'high' || Boolean(selectedKey);
   const bbox = result.assessment.primary?.box ?? null;
   const contentWidth = Math.min(windowWidth - RESULT_MARGIN * 2, 440);
 
@@ -528,7 +565,8 @@ export const RecognitionResultScreen: React.FC = () => {
           </Animated.View>
 
           {/* 鱼种身份行（44dp 规范：30sp 衬线 + 修改鱼种›）：高置信度直出；
-              不确定结果（中/低置信度）选定鱼种后同样回显，修改鱼种可再次更换 */}
+              不确定结果（中/低置信度）选定鱼种后切换为确认态时回显，
+              修改鱼种可再次更换（唯一更换入口，候选区已退场） */}
           {resolved ? (
             <Animated.View
               style={[
@@ -563,21 +601,19 @@ export const RecognitionResultScreen: React.FC = () => {
             </Animated.View>
           ) : null}
 
-          {/* 中置信度：未选定时一行确认提示 + 横向候选卡 + 都不是？选择其他鱼种 ›；
-              选定后提示由身份行接替回显，候选区不收起（点卡片即更换），
-              「选择其他鱼种」保留为再次替换入口 */}
-          {state === 'medium' ? (
+          {/* 中置信度（仅未选定鱼种时展示）：一行确认提示 + 横向候选卡 +
+              都不是？选择其他鱼种 ›；选定后整块退场，屏幕按确认态展示，
+              更换鱼种由身份行「修改鱼种」承担 */}
+          {state === 'medium' && !resolved ? (
             <Animated.View
               style={{
                 opacity: nameOpacity,
                 transform: [{ translateY: nameTranslate }],
               }}
             >
-              {!resolved ? (
-                <Text style={[styles.mediumPrompt, { color: textPrimary }]}>
-                  帮我确认一下，这条鱼更像哪一种？
-                </Text>
-              ) : null}
+              <Text style={[styles.mediumPrompt, { color: textPrimary }]}>
+                帮我确认一下，这条鱼更像哪一种？
+              </Text>
               <View style={styles.candidateWrap}>
                 <ResultCandidateRow
                   candidates={candidateItems}
@@ -609,10 +645,10 @@ export const RecognitionResultScreen: React.FC = () => {
             </Animated.View>
           ) : null}
 
-          {/* 低置信度恢复对（Action Button V1.1 冻结配比：
+          {/* 低置信度恢复对（仅未选定鱼种时展示；Action Button V1.1 冻结配比：
             SECONDARY_STRONG 手动选择 58% / SECONDARY_MUTED 重新拍摄 42%）；
-            选定鱼种后记录区可保存，按钮对保持常驻 */}
-          {state === 'low' ? (
+            选定后按钮对退场，屏幕切换为确认态展示（返回拍摄走标题栏返回） */}
+          {state === 'low' && !resolved ? (
             <Animated.View
               style={{
                 opacity: nameOpacity,
