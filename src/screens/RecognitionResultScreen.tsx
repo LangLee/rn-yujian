@@ -84,7 +84,8 @@ type ResultState = 'high' | 'medium' | 'low';
  * (长度/重量/地点 整行点按弹 Sheet 输入+›；值展示带单位) → 感言卡(写下这次鱼获的故事+语音胶囊+0/300)
  * → 双 CTA(继续记忆·相册图标 / 保存本次鱼获·金描边)。
  * 中置信度 = 一行确认提示 + 横向候选卡(Top-1 模型建议·弱青边；选中 2dp 青) +
- * 都不是？选择其他鱼种 ›；记录区常驻，选定鱼种前保存禁用。
+ * 都不是？选择其他鱼种 ›；选定后提示退场、身份行回显选定鱼种，候选区保留可更换；
+ * 记录区常驻，选定鱼种前保存禁用。
  * 低置信度 = 无法确认是什么鱼 + 按钮对(手动选择鱼种·白底金边 / 重新拍摄·灰蓝底)，
  * 记录区同样常驻展示（保存需先选定鱼种）。
  * 视觉基调自然安静纪实；不继承处理页任何 AI 光效。
@@ -481,7 +482,7 @@ export const RecognitionResultScreen: React.FC = () => {
   const textPrimary = coreColors.deepLakeBlue;
   const textSecondary = coreColors.lakeBlue;
   const saveDisabled = !selectedKey;
-  /** 低置信度：手动选择鱼种后才进入已解析记录契约 */
+  /** 不确定结果（中/低置信度）：选定鱼种后才进入已解析记录契约并回显身份行 */
   const resolved = state === 'high' || Boolean(selectedKey);
   const bbox = result.assessment.primary?.box ?? null;
   const contentWidth = Math.min(windowWidth - RESULT_MARGIN * 2, 440);
@@ -526,8 +527,9 @@ export const RecognitionResultScreen: React.FC = () => {
             />
           </Animated.View>
 
-          {/* 高置信度 / 低置信度已解析：鱼种身份行（44dp 规范：30sp 衬线 + 修改鱼种›） */}
-          {state !== 'medium' && resolved ? (
+          {/* 鱼种身份行（44dp 规范：30sp 衬线 + 修改鱼种›）：高置信度直出；
+              不确定结果（中/低置信度）选定鱼种后同样回显，修改鱼种可再次更换 */}
+          {resolved ? (
             <Animated.View
               style={[
                 styles.identityRow,
@@ -561,8 +563,9 @@ export const RecognitionResultScreen: React.FC = () => {
             </Animated.View>
           ) : null}
 
-          {/* 中置信度：一行确认提示 + 横向候选卡 + 都不是？选择其他鱼种 ›
-            （确认后候选区不收起，追加记录契约区） */}
+          {/* 中置信度：未选定时一行确认提示 + 横向候选卡 + 都不是？选择其他鱼种 ›；
+              选定后提示由身份行接替回显，候选区不收起（点卡片即更换），
+              「选择其他鱼种」保留为再次替换入口 */}
           {state === 'medium' ? (
             <Animated.View
               style={{
@@ -570,9 +573,11 @@ export const RecognitionResultScreen: React.FC = () => {
                 transform: [{ translateY: nameTranslate }],
               }}
             >
-              <Text style={[styles.mediumPrompt, { color: textPrimary }]}>
-                帮我确认一下，这条鱼更像哪一种？
-              </Text>
+              {!resolved ? (
+                <Text style={[styles.mediumPrompt, { color: textPrimary }]}>
+                  帮我确认一下，这条鱼更像哪一种？
+                </Text>
+              ) : null}
               <View style={styles.candidateWrap}>
                 <ResultCandidateRow
                   candidates={candidateItems}
@@ -667,20 +672,6 @@ export const RecognitionResultScreen: React.FC = () => {
             ) : null}
 
             <ResultNoteCard value={storyText} onChange={setStoryText} />
-
-            {/* 关闭手动修改地点时：仅提示已自动定位 */}
-            {!privacy.manualLocationEdit && activeLocation ? (
-              <View style={styles.autoLenRow}>
-                <AppIcon
-                  name="success"
-                  size={12}
-                  color={coreColors.morningGold}
-                />
-                <Text style={styles.autoLenText}>
-                  已自动定位钓点（设置中已关闭手动修改地点）
-                </Text>
-              </View>
-            ) : null}
 
             {saveError ? (
               <Text

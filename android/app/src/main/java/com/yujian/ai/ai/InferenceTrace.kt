@@ -18,7 +18,7 @@ object InferenceTrace {
 
     /**
      * Production-pipeline context supplied when the classifier input comes from
-     * DET_FISH_v0.1 rather than directly from the user-selected bitmap.
+     * the fish detector rather than directly from the user-selected bitmap.
      */
     data class PipelineContext(
         val originalWidth: Int,

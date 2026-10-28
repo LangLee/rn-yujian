@@ -625,6 +625,8 @@ export const ResultLocationSheet: React.FC<{
   const [results, setResults] = useState<PlaceSearchItem[]>([]);
   const [recent, setRecent] = useState<PlaceSearchItem[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 定位不再随拍照获取：本 Sheet 是钓点唯一的取数入口，首次打开自动定位一次 */
+  const autoLocatedRef = useRef(false);
 
   useEffect(() => {
     if (visible) {
@@ -702,6 +704,14 @@ export const ResultLocationSheet: React.FC<{
       setState('error');
     }
   }, [onCommit, onClose]);
+
+  // 打开 Sheet 时若还没有地点：此时才申请定位权限并自动定位（拒绝后仍可搜索/手选）
+  useEffect(() => {
+    if (visible && !currentLabel && !autoLocatedRef.current) {
+      autoLocatedRef.current = true;
+      void useCurrent();
+    }
+  }, [visible, currentLabel, useCurrent]);
 
   const row = (item: PlaceSearchItem, key: string) => (
     <Pressable

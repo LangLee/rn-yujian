@@ -48,8 +48,9 @@ const TIMEOUT_MS = 45000;
 
 /**
  * P03 识别处理中（Recognition Processing 冻结设计 V1.2）：
- * 全屏刚拍下的照片（视觉主导、无处理色罩）+ AI Edge Field（四能量岛
- * 边缘光场）+ 鱼焦点（定位后视觉主角）+ RecognitionStatusCard。
+ * 全屏刚拍下的照片（视觉主导、无处理色罩）+ edge-aura 边缘光环
+ * （2026-10 替换原 AI Edge Field 四能量岛；识别全程贴屏缘流动）+ 鱼焦点
+ * （定位后视觉主角，暂缓）+ RecognitionStatusCard。
  * 禁止 HUD / 扫描框 / 进度条 / 伪百分比。
  * 结果路由由真实推理门控：推理更快 → 等故事走完（2.75s + 200ms RESOLVE）；
  * 推理更慢 → 停留在当前真实状态不伪造后续；失败立即路由。
@@ -176,7 +177,7 @@ export const RecognizingScreen: React.FC = () => {
 
   return (
     <View style={styles.screen}>
-      {/* 环境层：全屏照片 + 边缘受光 + 四岛能量带 + 发丝 + 粒子 + 鱼焦点 */}
+      {/* 环境层：全屏照片 + 暗角 + edge-aura 边缘光环（识别动效）+ 鱼焦点 */}
       <AIAmbientField
         phase={phase}
         photoUri={photoUri}

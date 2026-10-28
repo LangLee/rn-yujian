@@ -217,11 +217,15 @@ export const coreMotion = {
 
 export type BackgroundLevel = 'hero' | 'content' | 'data';
 
-/** 背景存在感：Home 100%，内容页 ~75%，数据页 ~55%（同一清晨湖畔世界） */
+/**
+ * 背景存在感（backgrounds/morning_lake_v1 treatment_contract.json，已冻结）：
+ * Home 100% / 内容页 75% / 数据页 48%（target_salience_vs_home 数值权威）。
+ * 三档共用同一清晨湖畔母版，仅以白纱厚度区分（纱 opacity = 1 − 存在感）。
+ */
 export const backgroundSalience: Record<BackgroundLevel, number> = {
   hero: 1,
   content: 0.75,
-  data: 0.55,
+  data: 0.48,
 };
 
 // ---------------------------------------------------------------------------

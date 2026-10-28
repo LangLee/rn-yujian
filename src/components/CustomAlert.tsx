@@ -10,6 +10,7 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import { AlertButton } from '../utils/alert';
 import { fs } from '../constants/tokens';
+import { palette } from '../constants/colors';
 
 interface CustomAlertProps {
   visible: boolean;
@@ -47,7 +48,9 @@ export function CustomAlert({
       onRequestClose={onDismiss}
     >
       <View style={styles.overlay}>
-        <View style={[styles.alertContainer, { backgroundColor: colors.card }]}>
+        {/* 对话框必须是实底：colors.card 是湖景玻璃 Token（半透明），
+            仅适用于叠在湖景背景上的卡片，叠在遮罩上会透出底色 */}
+        <View style={[styles.alertContainer, { backgroundColor: colors.background }]}>
           {title && (
             <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
           )}
@@ -61,7 +64,7 @@ export function CustomAlert({
           <View
             style={[
               styles.buttonContainer,
-              { borderTopColor: colors.border },
+              { borderTopColor: palette.hairline },
               buttonLayout === 'vertical' && styles.buttonContainerVertical,
             ]}
           >
@@ -78,11 +81,11 @@ export function CustomAlert({
                 buttonLayout === 'vertical'
                   ? {
                       borderBottomWidth: StyleSheet.hairlineWidth,
-                      borderBottomColor: colors.border,
+                      borderBottomColor: palette.hairline,
                     }
                   : {
                       borderRightWidth: StyleSheet.hairlineWidth,
-                      borderRightColor: colors.border,
+                      borderRightColor: palette.hairline,
                     };
 
               return (
@@ -111,7 +114,8 @@ export function CustomAlert({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    /* 湖世界 Scrim（与底部编辑 Sheet 同源），不用纯黑 */
+    backgroundColor: 'rgba(8, 24, 30, 0.40)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -121,6 +125,8 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     borderRadius: 16,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: palette.hairline,
     ...Platform.select({
       ios: {
         shadowColor: '#000',

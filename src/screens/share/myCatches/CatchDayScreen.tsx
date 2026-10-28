@@ -77,15 +77,15 @@ export const CatchDayScreen: React.FC = () => {
 
   return (
     <View style={styles.screen}>
-      {/* 与列表页一致：不盖全屏白纱，白蒙版只在鱼获卡片上 */}
-      <MorningLakeScene level="data" salience={1} />
+      {/* 与列表页同档：BG_DATA 存在感 48%；白蒙版只在鱼获卡片上 */}
+      <MorningLakeScene level="data" />
       <ScreenHeader title={title} onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.summaryRow}>
-          <AppIcon name="location" size={12} color={coreColors.mistBlueGray} />
+          <AppIcon name="location" size={12} color={coreColors.lakeBlue} />
           <Text style={styles.summary} numberOfLines={1}>
             {weekday ? `${weekday} · ` : ''}
             {summary}
@@ -130,15 +130,15 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   summary: {
     flexShrink: 1,
-    fontSize: fs(12),
-    color: coreColors.mistBlueGray,
+    fontSize: fs(13),
+    color: coreColors.lakeBlue,
   } as TextStyle,
   cardWrap: {
     marginBottom: 10,
   } as ViewStyle,
   empty: {
     textAlign: 'center',
-    color: coreColors.mistBlueGray,
+    color: coreColors.lakeBlue,
     fontSize: fs(13),
     paddingVertical: 40,
   } as TextStyle,

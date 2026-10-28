@@ -86,8 +86,8 @@ export const CatchHubScreen: React.FC = () => {
 
   return (
     <View style={styles.screen}>
-      {/* v2 列表页：不盖全屏白纱，场景直接呈现；白蒙版只保留在鱼获卡片上 */}
-      <MorningLakeScene level="data" salience={1} />
+      {/* BG_DATA 冻结档（my_catches_v2 → BG_DATA）：存在感 48% 全屏白纱；卡片白蒙版保留主视觉 */}
+      <MorningLakeScene level="data" />
 
       {/* 顶栏：常规 = 返回 + 标题 + Search/Filter；Search Mode = 返回 + 搜索框 + 取消 */}
       <View

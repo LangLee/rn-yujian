@@ -2,7 +2,7 @@
 # 拉取拍照识鱼所需的端侧模型资产（对齐原工程 CI 的 download-and-gate 流程）：
 #   1. classifier：GitHub Release pan277942135/Yujian → mobile-model-v0.2
 #      → fish_classifier_v0_2.tflite（固定 SHA256/大小，与 FishRecognitionEngine 常量一致）
-#   2. detector：同仓库 → detector-model-v0.1 → det_fish_v0_1_android_bundle.zip
+#   2. detector：同仓库 → detector-model-v0.3 → det_fish_v0_3_android_bundle.zip
 #      （metadata 与 onnx 二进制自校验：SHA256 + 字节数）
 # 校验通过后安装到 android/app/src/main/assets/。assets 变更需重新构建，不会热更新。
 set -euo pipefail
@@ -12,10 +12,12 @@ ASSETS_DIR="$(cd "$(dirname "$0")/.." && pwd)/android/app/src/main/assets"
 WORK_DIR="$(mktemp -d /tmp/yujian-models.XXXXXX)"
 
 CLASSIFIER_URL="https://github.com/${REPO}/releases/download/mobile-model-v0.2/fish_classifier_v0_2.tflite"
-DETECTOR_URL="https://github.com/${REPO}/releases/download/detector-model-v0.1/det_fish_v0_1_android_bundle.zip"
+DETECTOR_URL="https://github.com/${REPO}/releases/download/detector-model-v0.3/det_fish_v0_3_android_bundle.zip"
 
-CLASSIFIER_SHA256="9575ede5c6c85b850647016d76e8e5175fa9ea6b609c47c83f54b4062e47d14e"
-CLASSIFIER_BYTES="6220308"
+# 与 build.gradle fetchModelAssets / FishRecognitionEngine 常量保持一致
+# （2026-09-29 模型工厂向 mobile-model-v0.2 重新发布了 15 类 classifier）
+CLASSIFIER_SHA256="29c2f2fd1608178f023b8e35edf632c0dd685df4a7ae1c3562220a7352ccce18"
+CLASSIFIER_BYTES="6244908"
 
 sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
 
@@ -28,9 +30,9 @@ echo "==> 校验 classifier 固定哈希/大小"
 [ "$(sha256 "$WORK_DIR/fish_classifier_v0_2.tflite")" = "$CLASSIFIER_SHA256" ] \
   || { echo "✗ classifier SHA256 不匹配"; exit 1; }
 
-echo "==> 下载 detector bundle (detector-model-v0.1)"
-curl -fSL -o "$WORK_DIR/det_fish_v0_1_android_bundle.zip" "$DETECTOR_URL"
-unzip -oq "$WORK_DIR/det_fish_v0_1_android_bundle.zip" -d "$WORK_DIR/det_bundle"
+echo "==> 下载 detector bundle (detector-model-v0.3)"
+curl -fSL -o "$WORK_DIR/det_fish_v0_3_android_bundle.zip" "$DETECTOR_URL"
+unzip -oq "$WORK_DIR/det_fish_v0_3_android_bundle.zip" -d "$WORK_DIR/det_bundle"
 
 ONNX="$WORK_DIR/det_bundle/fish_detector_yolox_nano_v0_1.onnx"
 META="$WORK_DIR/det_bundle/detector_metadata.json"

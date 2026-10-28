@@ -33,7 +33,7 @@ type ProfileScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Prof
  * 身份卡（头像/昵称/账号身份）为主、三项钓鱼统计为支撑语境、
  * 三行设置导航（编辑个人资料 / 账号与安全 / 关于渔见）为功能层。
  * 身份卡本身不是第二个编辑资料入口；不加徽章/等级/连击等游戏化语义；
- * 头像缺失/加载失败回退 Shared Default Profile Avatar V1。
+ * 头像缺失/加载失败回退 Shared Default Profile Avatar V2（默认钓者头像图）。
  */
 export const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<ProfileScreenNavigationProp>();

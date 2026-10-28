@@ -201,8 +201,8 @@ export const FishGuideHomeScreen: React.FC = () => {
 
   return (
     <View style={styles.screen}>
-      {/* BG_DATA：同一清晨湖畔世界，mist ≈0.30（卡片保持主视觉） */}
-      <MorningLakeScene level="data" salience={0.72} />
+      {/* BG_DATA 冻结档：同一清晨湖畔母版，存在感 48%（mist 0.30 + 降饱和/对比），卡片保持主视觉 */}
+      <MorningLakeScene level="data" />
       {/* 头部（V2 冻结稿）：‹ 返回 + 居中「鱼鉴」深蓝衬线大标题 + 右侧搜索图标 */}
       <View style={[styles.titleBlock, { paddingTop: insets.top + 6 }]}>
         <Pressable

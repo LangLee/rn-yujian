@@ -43,7 +43,8 @@ import atmosphereParticle from '../../assets/coreui/atmosphere_particle.png';
  * 渲染顺序保证 lake → ripple → bobber；涟漪恒为 1 个。
  *
  * - 场景按 cover 等比铺满（居中裁切），锚点元素用 refX/refY 严格对齐参考坐标；
- * - level 控制背景存在感：hero 100% / content ~75% / data ~55%（盖白纱，不换世界）；
+ * - level 控制背景存在感：hero 100% / content 75% / data 48%（盖白纱，不换世界；
+ *   数值权威 = morning_lake_v1 treatment_contract.json target_salience_vs_home）；
  * - 动效全部来自 motion_tokens.json，alive, not animated；Reduce Motion 时静态呈现。
  */
 

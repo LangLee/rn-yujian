@@ -310,7 +310,7 @@ export const FishSpeciesDetailScreen: React.FC = () => {
   if (!content) {
     return (
       <View style={styles.screen}>
-        <MorningLakeScene level="data" salience={0.72} />
+        <MorningLakeScene level="data" />
         <View style={[styles.unresolved, { paddingTop: insets.top }]}>
           <Pressable
             onPress={() => navigation.goBack()}
@@ -352,7 +352,7 @@ export const FishSpeciesDetailScreen: React.FC = () => {
 
   return (
     <View style={styles.screen}>
-      <MorningLakeScene level="data" salience={0.72} />
+      <MorningLakeScene level="data" />
       <ScrollView
         style={styles.scrollBody}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}

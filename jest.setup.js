@@ -45,6 +45,11 @@ jest.mock('@shopify/react-native-skia', () => {
     RoundedRect: Noop,
     Blur: Noop,
     Paint: Noop,
+    Fill: make('Fill'),
+    Shader: make('Shader'),
+    ImageShader: make('ImageShader'),
+    ColorType: { RGBA_8888: 'RGBA_8888' },
+    AlphaType: { Opaque: 1, Premul: 2, Unpremul: 3 },
     vec: (x, y) => ({ x, y }),
     Skia: new Proxy(
       {},

@@ -16,7 +16,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Production DET_FISH_v0.1 runtime.
+ * Production DET_FISH_v0.3 runtime.
  *
  * Contract mirrors backend app/detector_runtime.py:
  * - YOLOX-Nano, 416x416
@@ -68,10 +68,10 @@ class FishDetectorEngine(private val context: Context) : AutoCloseable {
         } finally {
             options.close()
         }.also { session ->
-            require(session.inputNames.size == 1) { "DET_FISH_v0.1 必须只有一个输入 tensor" }
-            require(session.outputNames.size == 1) { "DET_FISH_v0.1 必须只有一个输出 tensor" }
+            require(session.inputNames.size == 1) { "DET_FISH_v0.3 必须只有一个输入 tensor" }
+            require(session.outputNames.size == 1) { "DET_FISH_v0.3 必须只有一个输出 tensor" }
             require(session.inputNames.first() == verifiedModel.inputName) {
-                "DET_FISH_v0.1 输入名不一致：runtime=${session.inputNames.first()} metadata=${verifiedModel.inputName}"
+                "DET_FISH_v0.3 输入名不一致：runtime=${session.inputNames.first()} metadata=${verifiedModel.inputName}"
             }
         }
     }
@@ -88,7 +88,7 @@ class FishDetectorEngine(private val context: Context) : AutoCloseable {
         val rows = OnnxTensor.createTensor(environment, prepared.buffer.asFloatBuffer(), shape).use { tensor ->
             session.run(mapOf(model.inputName to tensor)).use { result ->
                 val output = result[0] as? OnnxTensor
-                    ?: error("DET_FISH_v0.1 输出不是 FLOAT tensor")
+                    ?: error("DET_FISH_v0.3 输出不是 FLOAT tensor")
                 materializeRows(output.value)
             }
         }
@@ -309,8 +309,8 @@ class FishDetectorEngine(private val context: Context) : AutoCloseable {
         context.assets.open(name).bufferedReader(Charsets.UTF_8).use { it.readText() }
 
     companion object {
-        const val MODEL_VERSION = "DET_FISH_v0.1"
-        const val DATASET_VERSION = "DET_DS_v0.1"
+        const val MODEL_VERSION = "DET_FISH_v0.3"
+        const val DATASET_VERSION = "DET_DS_v0.3"
         const val MODEL_FAMILY = "YOLOX_NANO"
         const val MODEL_FILE = "fish_detector_yolox_nano_v0_1.onnx"
         const val METADATA_FILE = "detector_metadata.json"
@@ -371,11 +371,11 @@ class FishDetectorEngine(private val context: Context) : AutoCloseable {
         }
 
         private fun materializeRows(value: Any): Array<FloatArray> {
-            val batch = value as? Array<*> ?: error("DET_FISH_v0.1 输出维度异常")
-            require(batch.size == 1) { "DET_FISH_v0.1 batch size 必须为 1" }
-            val rows = batch[0] as? Array<*> ?: error("DET_FISH_v0.1 输出 rows 异常")
+            val batch = value as? Array<*> ?: error("DET_FISH_v0.3 输出维度异常")
+            require(batch.size == 1) { "DET_FISH_v0.3 batch size 必须为 1" }
+            val rows = batch[0] as? Array<*> ?: error("DET_FISH_v0.3 输出 rows 异常")
             return Array(rows.size) { index ->
-                rows[index] as? FloatArray ?: error("DET_FISH_v0.1 row[$index] 不是 FloatArray")
+                rows[index] as? FloatArray ?: error("DET_FISH_v0.3 row[$index] 不是 FloatArray")
             }
         }
 

@@ -201,7 +201,7 @@ android {
 // detector 通过 detector_metadata.json 与 onnx 二进制自洽校验；升级模型时需同步改这里。
 def modelReleaseBase = "https://github.com/pan277942135/Yujian/releases/download"
 def classifierReleaseUrl = "${modelReleaseBase}/mobile-model-v0.2/fish_classifier_v0_2.tflite"
-def detectorBundleUrl = "${modelReleaseBase}/detector-model-v0.1/det_fish_v0_1_android_bundle.zip"
+def detectorBundleUrl = "${modelReleaseBase}/detector-model-v0.3/det_fish_v0_3_android_bundle.zip"
 // 2026-09-29 模型工厂再次向同一 Release 资产位重新发布了 classifier（MODEL_CROP_M1_v0.2，
 // DS_M1_v1.1，15 类：移除 other_freshwater_fish），旧 16 类文件已被覆盖删除，
 // 常量以 mobile-model-v0.2 的 export_report.json / fish_classifier_v0_2.metadata.json 为准。
@@ -260,8 +260,8 @@ tasks.register("fetchModelAssets") {
             detectorOk = onnx.length() == metaJson.onnx_bytes && sha256Of(onnx) == metaJson.onnx_sha256
         }
         if (!detectorOk) {
-            logger.lifecycle("模型资产: 下载 detector bundle（detector-model-v0.1）…")
-            def bundle = File.createTempFile("det_fish_v0_1", ".zip")
+            logger.lifecycle("模型资产: 下载 detector bundle（detector-model-v0.3）…")
+            def bundle = File.createTempFile("det_fish_v0_3", ".zip")
             bundle.deleteOnExit()
             try {
                 downloadTo(detectorBundleUrl, bundle)

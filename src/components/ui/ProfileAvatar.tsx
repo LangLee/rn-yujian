@@ -1,16 +1,14 @@
 import React from 'react';
 import { Image, ImageStyle, StyleSheet, View, ViewStyle } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import defaultAvatar from '../../assets/coreui/default_avatar.png';
 import { RemoteImage } from '../RemoteImage';
 
 /**
- * Shared Default Profile Avatar V1 · FROZEN
- * （design/system/components/profile_avatar_v1/default_profile_avatar_contract.json）
+ * Shared Default Profile Avatar V2
  *
  * 语义：登录用户有真实头像 → 真实头像；缺失/加载失败 → 本默认头像；
  * 未登录游客是另一个状态，不属于本组件。各消费面与真实头像同尺寸。
- * 视觉：96×96 视口；外盘 r43 fill #6BFFFFFF / stroke #9EFFFFFF·2；
- * 人像 stroke #30485A·4：头圆心 (48,37) r13 + 圆头肩线。
+ * 视觉：assets/coreui/default_avatar.png（钓者湖山默认头像，320×320 圆形透明底）。
  *
  * 远程头像（http(s)/相对路径）经 RemoteImage：相对路径自动带鉴权头，
  * 加载失败回退默认头像；本地 data:/file: URI 直接展示。
@@ -64,19 +62,13 @@ export class ProfileAvatar extends React.Component<ProfileAvatarProps, ProfileAv
   }
 }
 
-/** 默认头像字形（合同矢量：外盘 + 人像线稿） */
+/** 默认头像（钓者湖山图，圆形透明底，按展示尺寸铺满头像框） */
 export const DefaultAvatarGlyph: React.FC<{ size: number }> = ({ size }) => (
-  <Svg width={size} height={size} viewBox="0 0 96 96">
-    <Circle cx={48} cy={48} r={43} fill="#6BFFFFFF" stroke="#9EFFFFFF" strokeWidth={2} />
-    <Circle cx={48} cy={37} r={13} fill="none" stroke="#30485A" strokeWidth={4} />
-    <Path
-      d="M 22 82 C 24 62 36 56 48 56 C 60 56 72 62 74 82"
-      fill="none"
-      stroke="#30485A"
-      strokeWidth={4}
-      strokeLinecap="round"
-    />
-  </Svg>
+  <Image
+    source={defaultAvatar}
+    style={{ width: size, height: size }}
+    resizeMode="cover"
+  />
 );
 
 const styles = StyleSheet.create({

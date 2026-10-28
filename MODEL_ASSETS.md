@@ -9,14 +9,14 @@
 
 | 文件 | 来源 | 校验 |
 | --- | --- | --- |
-| `fish_classifier.tflite` | Release `mobile-model-v0.2` 的 `fish_classifier_v0_2.tflite`（重命名） | 固定 SHA256 `9575ede5…7d14e`、6220308 字节（与 `FishRecognitionEngine` 常量一致） |
-| `fish_detector_yolox_nano_v0_1.onnx` | Release `detector-model-v0.1` 的 bundle | SHA256/字节数须与 `detector_metadata.json` 配套 |
-| `detector_metadata.json` | 同上 bundle | 含 onnx 哈希、输入名 `images`、shape `[1,3,416,416]` |
+| `fish_classifier.tflite` | Release `mobile-model-v0.2` 的 `fish_classifier_v0_2.tflite`（重命名） | 固定 SHA256 `29c2f2fd…cce18`、6244908 字节（与 `FishRecognitionEngine` 常量一致；2026-09-29 重新发布的 15 类版本） |
+| `fish_detector_yolox_nano_v0_1.onnx` | Release `detector-model-v0.3` 的 bundle | SHA256/字节数须与 `detector_metadata.json` 配套 |
+| `detector_metadata.json` | 同上 bundle | `DET_FISH_v0.3`/`DET_DS_v0.3`，含 onnx 哈希 `98257b95…c9a1`、输入名 `images`、shape `[1,3,416,416]` |
 | `recognition_pipeline_v1.json` | 同上 bundle | 契约 `RECOGNITION_PIPELINE_v1`，阈值须与 `FishDetectionQualityGate` 常量一致 |
 | `preprocess_contract_v1.json` | 已在仓库 | classifier 预处理契约（224 letterbox / ImageNet 归一化） |
 
 Release 仓库：`pan277942135/Yujian`（模型工厂；detector 的权威产物在
-`gs://yujian-model-factory-571785698442/models/DET_FISH_v0.1/`，Release 为 Android 镜像）。
+`gs://yujian-model-factory-571785698442/models/DET_FISH_v0.3/`，Release 为 Android 镜像）。
 bundle 中的 `golden_cases.json` 与 `golden/*.jpg` 是 CI 五例黄金回归用的，不会打进 App。
 
 ## 构建时自动下载

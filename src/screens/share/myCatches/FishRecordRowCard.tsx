@@ -19,8 +19,8 @@ import {
  * Growth Mark 徽章收在鱼种行右端（Chevron 左侧，不压照片、不改卡高）。
  */
 
-/** 缩略图（List Image Spec V1 1:1 · 14dp 圆角；按压缩节奏取 76dp） */
-const THUMB = 76;
+/** 缩略图（List Image Spec V1 §4：1:1 · 82dp · 14dp 圆角，冻结值） */
+const THUMB = 82;
 const THUMB_RADIUS = 14;
 /** 照片纯白衬边（设计稿照片外 ~2dp 白 mat，像贴在卡上的冲印照） */
 const MAT = 2;
@@ -128,10 +128,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: THUMB_RADIUS,
-    backgroundColor: 'rgba(255,255,255,0.90)',
+    /* 冻结稿卡片近实白（~241-253）：湖景上白蒙版保持卡片是页面最强重复元素 */
+    backgroundColor: 'rgba(255,255,255,0.94)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.65)',
-    padding: 4,
+    borderColor: 'rgba(255,255,255,0.85)',
+    padding: 5,
   } as ViewStyle,
   /** 纯白衬边 + 照片 = 贴册冲印照（外 16dp 圆角包 14dp 照片圆角） */
   thumbMat: {

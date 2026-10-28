@@ -5,6 +5,7 @@ import {
   Easing,
   Image,
   ImageStyle,
+  PixelRatio,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -45,17 +46,27 @@ import cameraFlash from '../assets/home/animation/camera_flash.json';
 import emptyHeroTitle from '../assets/coreui/empty_hero_title.png';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-/** 居中大卡宽度：设计稿主卡约占屏宽 74%，两侧卡片露出更多形成层次 */
-const CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.74);
+/**
+ * 轮播几何（NH01 多屏响应式契约 V1）：
+ * 主卡宽 min(min(trackWidth, 560) × 0.70, 337.2dp)，宽高比 247:293，高上限 400dp。
+ * 宽度随屏宽推导、高度由宽度按固定比例得出，各屏下比例一致不漂移。
+ */
+const CARD_WIDTH = Math.round(Math.min(Math.min(SCREEN_WIDTH, 560) * 0.7, 337.2));
+const CARD_HEIGHT = Math.round(Math.min((CARD_WIDTH * 293) / 247, 400));
 /** 首卡/末卡也能居中：内容区两侧留出 (屏宽 - 卡宽) / 2 */
 const SIDE_PADDING = Math.round((SCREEN_WIDTH - CARD_WIDTH) / 2);
 const CARD_GAP = Math.round(SCREEN_WIDTH * 0.045);
-const CARD_HEIGHT = Math.max(280, Math.round(SCREEN_HEIGHT * 0.37));
 const CARD_STEP = CARD_WIDTH + CARD_GAP;
-/** 两侧卡片轻缩放下沉（冻结稿为单主卡；多记录时弱化立体层次，禁 3D cover flow） */
-const SIDE_DROP = 10;
-const SIDE_SCALE = 0.92;
-const SIDE_PUSH = Math.round((CARD_WIDTH * (1 - SIDE_SCALE)) / 2) - 2;
+/**
+ * 副卡（Peek）：真实相邻记录，高 66.7% 主卡、宽 ≤82% 主卡、顶部下沉 15dp。
+ * 等比缩放 2/3 同时满足两条比例且照片不变形；缩放补偿把副卡贴回主卡侧边，
+ * 与主卡保持同一 gap（几何重叠 ≤1dp），只露出窄条预览。
+ */
+const SIDE_DROP = 15;
+const SIDE_SCALE = 2 / 3;
+const SIDE_PUSH = Math.round((CARD_WIDTH * (1 - SIDE_SCALE)) / 2);
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 
 export const HomeScreen: React.FC = () => {
@@ -69,6 +80,49 @@ export const HomeScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const [memories, setMemories] = useState<Record<string, CatchMemoryData>>({});
+
+  /* ── 六区间间距公式（NH01 契约 §8.2，Adaptive V2.2）────────────────
+     safeHeight 扣一次上下安全区；fontPressure / shortHeightPressure 按契约：
+     fp = clamp((fontScale−1)/0.5)，shp = clamp((620−safeHeight)/220)。 */
+  const safeHeight = SCREEN_HEIGHT - insets.top - insets.bottom;
+  const fontPressure = clamp01((PixelRatio.getFontScale() - 1) / 0.5);
+  const shortHeightPressure = clamp01((620 - safeHeight) / 220);
+  /** Header–Stats：max(9, clamp(safeHeight×0.035,14,28) − 3fp − 2shp) */
+  const headerToStats = Math.max(
+    9,
+    Math.min(Math.max(safeHeight * 0.035, 14), 28) - 3 * fontPressure - 2 * shortHeightPressure,
+  );
+  /** Stats–Title 基础 gap：max(12, base − 2fp)；base 14(<700)/16(<840)/18dp */
+  const statsToTitleBase = Math.max(
+    12,
+    (safeHeight < 700 ? 14 : safeHeight < 840 ? 16 : 18) - 2 * fontPressure,
+  );
+  /** Title–Card（带内冻结）：max(8, base − 4fp)；base 8(<500)/12(<700)/18(<840)/20dp */
+  const titleToCard = Math.max(
+    8,
+    (safeHeight < 500 ? 8 : safeHeight < 700 ? 12 : safeHeight < 840 ? 18 : 20) - 4 * fontPressure,
+  );
+  /** Card–CTA 基础 gap：max(3, clamp(safeHeight×0.018,8,14) − 3fp − 2shp) */
+  const cardToCtaBase = Math.max(
+    3,
+    Math.min(Math.max(safeHeight * 0.018, 8), 14) - 3 * fontPressure - 2 * shortHeightPressure,
+  );
+
+  /* ── 长屏盈余 1:1 分配（Appendix A V1.1）──────────────────────────
+     A(品牌+统计) / B(标题+轮播) / C(CTA+相机) 三个分配带；
+     盈余 S = 统计区底→CTA 顶可用高 − (hB + gAB_base + gBC_base)，
+     S>0 时 gAB、gBC 各加 S/2（只对增量 1:1，带内冻结间距不动），
+     长屏多余空间一半抬升轮播带、一半留在卡片下方，不再全部堆积底部。
+     CTA 绝对锚定在相机坞，gAB 定下 B 带位置后 gBC 自动成立。 */
+  const [statsBottomY, setStatsBottomY] = useState<number | null>(null);
+  const [titleHeight, setTitleHeight] = useState<number | null>(null);
+  const [ctaTopY, setCtaTopY] = useState<number | null>(null);
+  const statsToTitleGap = useMemo(() => {
+    if (statsBottomY == null || titleHeight == null || ctaTopY == null) return statsToTitleBase;
+    const bandBHeight = titleHeight + titleToCard + CARD_HEIGHT;
+    const surplus = ctaTopY - statsBottomY - (bandBHeight + statsToTitleBase + cardToCtaBase);
+    return surplus > 0 ? statsToTitleBase + surplus / 2 : statsToTitleBase;
+  }, [statsBottomY, titleHeight, ctaTopY, statsToTitleBase, titleToCard, cardToCtaBase]);
 
   const flashRef = useRef<LottieView>(null);
   const flashOpacity = useRef(new Animated.Value(0)).current;
@@ -227,14 +281,6 @@ export const HomeScreen: React.FC = () => {
         /* ── Empty Home V2：安静等待，随时记录 ─────────────────── */
         <EmptyHomeLayout
           insetsTop={insets.top}
-          loggedIn={!!session}
-          nicknameEntry={
-            <Animated.View style={{ transform: [{ scale: profileScale }] }}>
-              <PressableScale onPress={openProfile} scaleTo={0.94} style={styles.avatarHit}>
-                <ProfileAvatar size={AVATAR_SIZE} avatarUrl={avatar} />
-              </PressableScale>
-            </Animated.View>
-          }
           onLogin={() => navigation.navigate('Login')}
         />
       ) : (
@@ -255,22 +301,27 @@ export const HomeScreen: React.FC = () => {
             />
           }
         >
-          {/* ── 品牌区 ─────────────────────────────────────────── */}
-          <View style={[styles.brandRow, styles.pageInset]}>
-            <PressableScale onPress={openProfile} scaleTo={0.97}>
-              <Text style={styles.brand}>渔见</Text>
-            </PressableScale>
-
-            {/* 头像入口（共享 ProfileAvatar：已设头像或默认人像合同图形） */}
-            <Animated.View style={{ transform: [{ scale: profileScale }] }}>
-              <PressableScale onPress={openProfile} scaleTo={0.94} style={styles.avatarHit}>
-                <ProfileAvatar size={AVATAR_SIZE} avatarUrl={avatar} />
+          {/* ── 品牌区 + 统计区 = 分配带 A（Appendix A V1.1）────────── */}
+          <View
+            onLayout={(e) =>
+              setStatsBottomY(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
+            }
+          >
+            <View style={[styles.brandRow, styles.pageInset]}>
+              <PressableScale onPress={openProfile} scaleTo={0.97}>
+                <Text style={styles.brand}>渔见</Text>
               </PressableScale>
-            </Animated.View>
-          </View>
 
-          {/* ── 统计区（设计稿：直接落在背景上，细分割线隔开） ──────── */}
-          <View style={[styles.statBar, styles.pageInset]}>
+              {/* 头像入口（共享 ProfileAvatar：已设头像或默认钓者头像图） */}
+              <Animated.View style={{ transform: [{ scale: profileScale }] }}>
+                <PressableScale onPress={openProfile} scaleTo={0.94} style={styles.avatarHit}>
+                  <ProfileAvatar size={AVATAR_SIZE} avatarUrl={avatar} />
+                </PressableScale>
+              </Animated.View>
+            </View>
+
+            {/* ── 统计区（设计稿：直接落在背景上，细分割线隔开） ────── */}
+            <View style={[styles.statBar, styles.pageInset, { marginTop: headerToStats }]}>
             {stats.map((stat, i) => (
               <React.Fragment key={stat.label}>
                 {i > 0 && <View style={styles.statDivider} />}
@@ -284,10 +335,15 @@ export const HomeScreen: React.FC = () => {
                 </PressableScale>
               </React.Fragment>
             ))}
+            </View>
           </View>
 
-          {/* ── 最近鱼获：区块标题 + 全部 ›（设计稿与标题同行） ────── */}
-          <View style={[styles.sectionRow, styles.pageInset]}>
+          {/* ── 最近鱼获：区块标题 + 全部 ›（设计稿与标题同行）。
+              marginTop = gAB（Stats–Title 基础 gap + 长屏盈余 S/2）── */}
+          <View
+            style={[styles.sectionRow, styles.pageInset, { marginTop: statsToTitleGap }]}
+            onLayout={(e) => setTitleHeight(e.nativeEvent.layout.height)}
+          >
             <Text style={styles.sectionTitle}>最近鱼获</Text>
             <PressableScale
               onPress={() => navigation.navigate('MyCatches')}
@@ -302,8 +358,9 @@ export const HomeScreen: React.FC = () => {
           </View>
 
           {/* ── 渔获卡轮播（中间大卡 + 两侧弱预览，无 3D） ──────── */}
-          {/* catches===0 时整个普通布局不可达（Empty Home 承接），此处恒有数据 */}
-          <View style={{ marginTop: 14 }}>
+          {/* catches===0 时整个普通布局不可达（Empty Home 承接），此处恒有数据。
+              marginTop = Title–Card 冻结间距（8/12/18/20dp 按档） */}
+          <View style={{ marginTop: titleToCard }}>
             <CardCarousel
                 ref={carouselRef}
                 count={visibleCatches.length}
@@ -313,7 +370,7 @@ export const HomeScreen: React.FC = () => {
                 sideScale={SIDE_SCALE}
                 sideDrop={SIDE_DROP}
                 sidePush={SIDE_PUSH}
-                sideOpacity={0.75}
+                sideOpacity={0.8}
                 onChange={() => {
                   homeFeedback.playCardSwipe();
                   homeFeedback.hapticSwipe();
@@ -344,6 +401,7 @@ export const HomeScreen: React.FC = () => {
       {/* ── 底部相机（共享 YuJianPrimaryCaptureButton，锚点 ~83.5%） ── */}
       <View
         style={[styles.cameraDock, { bottom: insets.bottom + SCREEN_HEIGHT * 0.085 }]}
+        onLayout={(e) => setCtaTopY(e.nativeEvent.layout.y)}
         pointerEvents="box-none"
       >
         {isEmptyHome ? (
@@ -372,10 +430,8 @@ export const HomeScreen: React.FC = () => {
 
 const EmptyHomeLayout: React.FC<{
   insetsTop: number;
-  loggedIn: boolean;
-  nicknameEntry: React.ReactNode;
   onLogin: () => void;
-}> = ({ insetsTop, loggedIn, nicknameEntry, onLogin }) => {
+}> = ({ insetsTop, onLogin }) => {
   /* 柔和入场（content_screens 允许 soft entrance） */
   const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -397,18 +453,15 @@ const EmptyHomeLayout: React.FC<{
           <Text style={styles.brand}>渔见</Text>
           <Text style={styles.brandSub}>拍照收藏每次渔获</Text>
         </View>
-        {loggedIn ? (
-          nicknameEntry
-        ) : (
-          <PressableScale onPress={onLogin} scaleTo={0.94} style={styles.loginEntry}>
-            <View style={styles.loginRow}>
-              <Text style={styles.loginText}>登录</Text>
-              <View style={styles.loginChevron}>
-                <AppIcon name="chevron_right" size={14} color={coreColors.deepLakeBlue} />
-              </View>
+        {/* 登录入口：空首页固定展示登录引导，本地持久化的历史会话不作为登录态呈现 */}
+        <PressableScale onPress={onLogin} scaleTo={0.94} style={styles.loginEntry}>
+          <View style={styles.loginRow}>
+            <Text style={styles.loginText}>登录</Text>
+            <View style={styles.loginChevron}>
+              <AppIcon name="chevron_right" size={14} color={coreColors.deepLakeBlue} />
             </View>
-          </PressableScale>
-        )}
+          </View>
+        </PressableScale>
       </Animated.View>
 
       {/* 情绪 Hero：Empty Home V2.2 冻结 raster 母版（hero_asset_contract：
@@ -490,10 +543,16 @@ const CatchCard: React.FC<{
     outputRange: [SIDE_DROP, 0, SIDE_DROP],
     extrapolate: 'clamp',
   });
-  /* 向内位移补偿缩放空隙：侧卡收向居中卡、轻压其下 */
+  /* 向内位移补偿缩放空隙：侧卡贴回主卡侧边，保持与主卡同一 gap（契约：重叠 ≤1dp） */
   const translateX = scrollX.interpolate({
     inputRange: [(index - 1) * CARD_STEP, index * CARD_STEP, (index + 1) * CARD_STEP],
     outputRange: [-SIDE_PUSH, 0, SIDE_PUSH],
+    extrapolate: 'clamp',
+  });
+  /* 副卡为纯图预览（契约：Peek 不带文案）：离焦时底部遮罩与信息随缩放一起淡出 */
+  const overlayOpacity = scrollX.interpolate({
+    inputRange: [(index - 1) * CARD_STEP, index * CARD_STEP, (index + 1) * CARD_STEP],
+    outputRange: [0, 1, 0],
     extrapolate: 'clamp',
   });
 
@@ -548,8 +607,9 @@ const CatchCard: React.FC<{
             </View>
           )}
 
-          {/* 底部渐变遮罩（GLASS_C：transparent → DeepOverlay 文字保护） */}
-          <View style={styles.cardOverlay}>
+          {/* 底部渐变遮罩（GLASS_C：transparent → DeepOverlay 文字保护）。
+              副卡纯图预览：遮罩与信息只在主卡位置可见 */}
+          <Animated.View style={[styles.cardOverlay, { opacity: overlayOpacity }]}>
             <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
               <Defs>
                 <LinearGradient id={`scrim${index}`} x1="0" y1="0" x2="0" y2="1">
@@ -577,7 +637,7 @@ const CatchCard: React.FC<{
                 </Text>
               )}
             </View>
-          </View>
+          </Animated.View>
         </View>
       </PressableScale>
     </Animated.View>
@@ -586,7 +646,7 @@ const CatchCard: React.FC<{
 
 /* ─── 样式 ───────────────────────────────────────────────────────────────── */
 
-/** 头像入口尺寸（ProfileAvatar：外盘+人像为合同矢量，真实头像同尺寸圆形填充） */
+/** 头像入口尺寸（ProfileAvatar：默认头像为静态图资源，真实头像同尺寸圆形填充） */
 const AVATAR_SIZE = 42;
 
 /** 统计文字白色柔光晕：亮背景上不可见，暗背景（晨雾湖树影）上保证分离度 */
@@ -630,11 +690,10 @@ const styles = StyleSheet.create({
   /** 头像触感热区（圆角与 ProfileAvatar 同径） */
   avatarHit: { borderRadius: AVATAR_SIZE / 2 } as ViewStyle,
 
-  // 统计区（设计稿：直接落在背景上，无容器）
+  // 统计区（设计稿：直接落在背景上，无容器；marginTop 由 Header–Stats 公式内联给出）
   statBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.xl,
     paddingVertical: 12,
   } as ViewStyle,
   statDivider: { width: 1, height: 34, backgroundColor: 'rgba(11,45,75,0.10)' } as ViewStyle,
@@ -659,12 +718,11 @@ const styles = StyleSheet.create({
     color: coreColors.lakeBlue,
   } as TextStyle,
 
-  // 最近鱼获：区块标题 + 全部 ›（同一行）
+  // 最近鱼获：区块标题 + 全部 ›（同一行；marginTop 由 Stats–Title 公式内联给出）
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.xl,
   } as ViewStyle,
   sectionTitle: {
     fontFamily: font.serif,

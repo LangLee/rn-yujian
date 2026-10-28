@@ -18,25 +18,19 @@ import { AppIcon } from '../components/icons/AppIcon';
 import { StackNavigationProp, RootStackParamList } from '../navigation/types';
 import { RouteProp } from '@react-navigation/native';
 import { useRecognition } from '../contexts/RecognitionContext';
-import { usePreferences } from '../contexts/PreferencesContext';
 import { recognitionService } from '../services/recognitionService';
-import {
-  LocationPermissionStatus,
-  locationService,
-  precisionRequiresLocation,
-} from '../services/locationService';
-import { locationPickerHub } from '../utils/locationPickerHub';
-import { CatchLocation, SelectedImageMeta } from '../types/models';
-import { FishScanFrame } from '../components/FishScanFrame';
+import { SelectedImageMeta } from '../types/models';
+import { GUIDE_FRAME, ViewfinderCornerMarks } from '../components/ViewfinderCornerMarks';
 import { RulerGlyph } from '../components/RulerGlyph';
 import { RulerMeasureLayer } from '../components/RulerMeasureLayer';
 import { ARMeasureLayer } from '../components/ARMeasureLayer';
 import { arMeasure } from '../native/arMeasure';
 import { BottomSheet } from '../components/ui/BottomSheet';
+import { FirstUseCameraGuide } from '../components/FirstUseCameraGuide';
 import { PressableScale } from '../components/ui/PressableScale';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { palette } from '../constants/colors';
-import { font, fs, spacing, typeScale } from '../constants/tokens';
+import { fs, spacing, typeScale } from '../constants/tokens';
 import { haptics } from '../utils/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -44,6 +38,8 @@ type IdentifyScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Ide
 type IdentifyScreenRouteProp = RouteProp<RootStackParamList, 'Identify'>;
 
 const CAMERA_PERM_SEEN_KEY = '@yujian/perm_camera_seen';
+/** 首次拍照教学完成态：仅在用户真实关闭教学（跳过 / 开始拍摄）后写入 */
+const FIRST_USE_GUIDE_KEY = '@yujian/first_use_camera_guide_done';
 
 /** 底部快门与相册按钮（简化版：快门水平居中，相册在其右侧）。 */
 const SHUTTER_SIZE = 74;
@@ -51,19 +47,21 @@ const SHUTTER_INNER = 56;
 const ALBUM_SIZE = 46;
 const DOCK_HEIGHT = SHUTTER_SIZE;
 
+/** 量尺入口暂时下线：隐藏 dock 上的测距按钮（量尺代码保留，恢复入口改回 true） */
+const RULER_ENABLED = false;
+
 /**
  * P02 拍照识鱼（自定义相机页）：
- * 全屏实时取景（react-native-vision-camera）+ 写实鱼形渐变轮廓框；
- * 顶部仅保留右上角透明圆形关闭按钮；
+ * 全屏实时取景（react-native-vision-camera）+ 四角取景范围线（与首次教学 Hero 同款）；
  * 底部为简化的白环快门 + 半透明相册图标按钮。
- * 拍照后立即进入 P03，识别走原有端侧 pipeline（normalizeImage → Recognizing）。
+ * 拍照后立即进入 P03（识别过程的边缘光晕动效见 RecognizingScreen / AIAmbientField）。
+ * 取景过程不获取位置：钓点在识别成功后的结果页选择地点时才申请定位权限并自动定位。
  */
 export const IdentifyScreen: React.FC = () => {
   const navigation = useNavigation<IdentifyScreenNavigationProp>();
   const route = useRoute<IdentifyScreenRouteProp>();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { selectImage, reset } = useRecognition();
-  const { privacy } = usePreferences();
   const insets = useSafeAreaInsets();
 
   const device = useCameraDevice('back');
@@ -85,33 +83,10 @@ export const IdentifyScreen: React.FC = () => {
   /** AR 浮层使用的引擎：arcore（GMS）| huawei（华为/荣耀 AR Engine） */
   const [arEngine, setArEngine] = useState<'arcore' | 'huawei'>('arcore');
   const [measuredCm, setMeasuredCm] = useState<number | null>(null);
-  /**
-   * 钓点：进入取景页按隐私设置自动定位（'none' 不记录），也可点角标在地图上手动选点。
-   * 随快门写入识别流程，与量尺长度一样只对相机拍摄有效。
-   */
-  const [spotLocation, setSpotLocation] = useState<CatchLocation | null>(null);
-  const [locating, setLocating] = useState(false);
-  /** 用户手动选点后本次取景期间不被自动定位覆盖 */
-  const spotManualRef = useRef(false);
-  /** 定位权限状态：驱动「未开启定位 · 点击开启」角标与引导弹层 */
-  const [locPerm, setLocPerm] = useState<LocationPermissionStatus>('unavailable');
-  const [locPermSheet, setLocPermSheet] = useState(false);
-  /** 每次挂载只自动提示一次，避免每次回到取景页都被打断 */
-  const locPermPromptedRef = useRef(false);
-  /** 相机权限引导进行中（说明 Sheet 或系统弹窗）：定位引导排队其后，避免首进取景页两个权限弹层叠着弹 */
-  const [cameraGuideActive, setCameraGuideActive] = useState(false);
-  const cameraGuideActiveRef = useRef(false);
-  /** 相机引导期间被推迟的自动定位提示，待引导结束再补弹（仍只补一次） */
-  const locPermDeferredRef = useRef(false);
-  const setCameraGuide = useCallback((active: boolean) => {
-    cameraGuideActiveRef.current = active;
-    setCameraGuideActive(active);
-  }, []);
-  /** 关闭相机权限说明 Sheet：相机引导阶段就此结束（定位引导随后补弹） */
+  /** 关闭相机权限说明 Sheet */
   const closePermSheet = useCallback(() => {
     setPermSheet(false);
-    setCameraGuide(false);
-  }, [setCameraGuide]);
+  }, []);
 
   // 进入 P02 时清理上一条流程的残留状态
   useEffect(() => {
@@ -120,89 +95,16 @@ export const IdentifyScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /**
-   * 定位权限引导：未授权（可再弹）→ 应用内说明 Sheet；
-   * 已被永久拒绝 → Alert 引导去系统设置。
-   */
-  const promptLocationPermission = useCallback((status: LocationPermissionStatus) => {
-    if (status === 'blocked') {
-      Alert.alert(
-        '开启定位权限',
-        '记录钓点位置需要定位权限，且你已选择不再询问。请到「系统设置 → 渔见 → 位置」中改为「仅使用期间允许」。',
-        [
-          { text: '取消', style: 'cancel' },
-          { text: '去系统设置', onPress: () => void Linking.openSettings() },
-        ],
-      );
-    } else if (status === 'denied') {
-      setLocPermSheet(true);
-    }
-  }, []);
-
-  /** 静默自动定位；要用定位但权限未开时，主动提示去开启（每次挂载只自动提示一次；相机引导进行中先排队） */
-  const refreshSpotLocation = useCallback(async () => {
-    if (!precisionRequiresLocation(privacy.recordPrecision)) {
-      setSpotLocation(null);
-      return;
-    }
-    if (spotManualRef.current) {
-      return;
-    }
-    const status = await locationService.getPermissionStatus();
-    setLocPerm(status);
-    if (status !== 'granted') {
-      setSpotLocation(null);
-      if (!locPermPromptedRef.current) {
-        if (cameraGuideActiveRef.current) {
-          // 相机权限引导还没结束：推迟到引导结束后再弹，避免两个权限弹层叠加
-          locPermDeferredRef.current = true;
-        } else {
-          locPermPromptedRef.current = true;
-          promptLocationPermission(status);
-        }
-      }
-      return;
-    }
-    setLocating(true);
-    try {
-      const resolved = await locationService.resolveCurrentLocation(
-        privacy.recordPrecision === 'waterbody_county' ? 'waterbody_county' : 'precise',
-      );
-      if (!spotManualRef.current) {
-        setSpotLocation(resolved);
-      }
-    } finally {
-      setLocating(false);
-    }
-  }, [privacy.recordPrecision, promptLocationPermission]);
-
-  /** 定位说明 Sheet「开启定位」→ 系统权限弹窗；永久拒绝 → 引导去系统设置 */
-  const continueLocationPermission = useCallback(async () => {
-    setLocPermSheet(false);
-    const result = await locationService.requestPermission();
-    if (result === 'granted') {
-      haptics.confirm();
-      setLocPerm('granted');
-      await refreshSpotLocation();
-    } else {
-      setLocPerm(result);
-      if (result === 'blocked') {
-        promptLocationPermission('blocked');
-      }
-    }
-  }, [refreshSpotLocation, promptLocationPermission]);
-
   // 离开页面时停用相机，回到页面再恢复取景；旧测量值随流程一起作废
   useFocusEffect(
     useCallback(() => {
       setCameraEnabled(true);
-      void refreshSpotLocation();
       return () => {
         setCameraEnabled(false);
         setMeasuredCm(null);
         setRulerMode('off');
       };
-    }, [refreshSpotLocation]),
+    }, []),
   );
 
   // 进入取景页就补上相机权限请求：没授权时取景一直黑屏，等用户按快门再问就晚了。
@@ -215,8 +117,6 @@ export const IdentifyScreen: React.FC = () => {
       return;
     }
     permAskedRef.current = true;
-    // 同步标记引导开始：定位引导排队其后，结束后由 flush 补弹
-    setCameraGuide(true);
     void (async () => {
       const seen = await AsyncStorage.getItem(CAMERA_PERM_SEEN_KEY);
       if (!seen) {
@@ -226,24 +126,37 @@ export const IdentifyScreen: React.FC = () => {
       try {
         await requestPermission();
       } finally {
-        setCameraGuide(false);
+        // 系统弹窗结束即可，无需其他收尾
       }
     })();
-  }, [hasPermission, canRequestPermission, requestPermission, permSheet, setCameraGuide]);
+  }, [hasPermission, canRequestPermission, requestPermission, permSheet]);
 
-  // 相机权限引导结束后，补弹被推迟的定位引导（仍受「每次挂载只提示一次」约束）
+  /**
+   * 首次拍照教学（First-use Camera Guide V1）：
+   * 相机权限已授 + 取景设备就绪后展示一次；教学是全屏 Modal，天然阻断快门穿透。
+   * 未完成（中途杀进程等）不写完成态，下次进入取景页还会再教。
+   */
+  const [firstUseGuide, setFirstUseGuide] = useState(false);
+  const firstUseGuideCheckedRef = useRef(false);
   useEffect(() => {
-    if (cameraGuideActive || !locPermDeferredRef.current || locPermPromptedRef.current) {
+    if (!hasPermission || !device || firstUseGuideCheckedRef.current) {
       return;
     }
-    locPermDeferredRef.current = false;
-    if (locPerm === 'denied' || locPerm === 'blocked') {
-      locPermPromptedRef.current = true;
-      promptLocationPermission(locPerm);
-    }
-  }, [cameraGuideActive, locPerm, promptLocationPermission]);
+    firstUseGuideCheckedRef.current = true;
+    void (async () => {
+      const done = await AsyncStorage.getItem(FIRST_USE_GUIDE_KEY);
+      if (!done) {
+        setFirstUseGuide(true);
+      }
+    })();
+  }, [hasPermission, device]);
+  /** 教学被真实关闭（跳过 / 开始拍摄 / 返回键）：写完成态，不触发快门 */
+  const finishFirstUseGuide = useCallback(() => {
+    setFirstUseGuide(false);
+    AsyncStorage.setItem(FIRST_USE_GUIDE_KEY, '1').catch(() => undefined);
+  }, []);
 
-  // 识别页异常退回时带回原因（Recognizing catch → navigate Identify { error }）
+  // 识别页异常退回时带回原因（Recognizing catch → navigate Identify { error })
   useEffect(() => {
     if (route.params?.error) {
       setError(route.params.error);
@@ -264,44 +177,19 @@ export const IdentifyScreen: React.FC = () => {
     return () => clearTimeout(t);
   }, [route.params?.openAlbum, navigation]);
 
-  /** 地图选点：返回后覆盖自动定位结果，且本次取景期间不再自动刷新 */
-  const openLocationPicker = useCallback(async () => {
-    if (!privacy.manualLocationEdit) {
-      return;
-    }
-    haptics.selection();
-    navigation.navigate('LocationPicker', {
-      initial: spotLocation
-        ? { latitude: spotLocation.latitude, longitude: spotLocation.longitude }
-        : undefined,
-    });
-    const picked = await locationPickerHub.requestPick();
-    if (picked) {
-      spotManualRef.current = true;
-      setSpotLocation(picked);
-    }
-  }, [privacy.manualLocationEdit, navigation, spotLocation]);
-
   const handlePicked = useCallback(
     async (uri: string, source: 'camera' | 'gallery') => {
       setLoading(true);
       setError(null);
       try {
         const meta = await recognitionService.normalizeImage(uri, source);
-        // 量尺测得的长度与钓点只对本次取景的相机拍摄有效，相册照片不携带
+        // 量尺测得的长度只对本次取景的相机拍摄有效，相册照片不携带；
+        // 钓点不再随取景获取：由结果页选择地点时按需申请定位并填入
         const extras: Partial<SelectedImageMeta> = {};
-        if (source === 'camera') {
-          if (measuredCm && measuredCm > 0) {
-            extras.measuredLengthCm = measuredCm;
-          }
-          if (spotLocation) {
-            extras.location = spotLocation;
-          }
+        if (source === 'camera' && measuredCm && measuredCm > 0) {
+          extras.measuredLengthCm = measuredCm;
         }
         selectImage(Object.keys(extras).length > 0 ? { ...meta, ...extras } : meta);
-        // 钓点已随照片消费：回到本页拍摄下一条时重新自动定位
-        spotManualRef.current = false;
-        setSpotLocation(null);
         // 拍照后立即进入 P03；照片尚未识别，不假装已完成
         navigation.navigate('Recognizing');
       } catch (e) {
@@ -310,7 +198,7 @@ export const IdentifyScreen: React.FC = () => {
         setLoading(false);
       }
     },
-    [selectImage, navigation, measuredCm, spotLocation],
+    [selectImage, navigation, measuredCm],
   );
 
   /** 快门：直接在取景页拍摄，不再跳系统相机 */
@@ -323,7 +211,6 @@ export const IdentifyScreen: React.FC = () => {
       const seen = await AsyncStorage.getItem(CAMERA_PERM_SEEN_KEY);
       if (!seen && !permAskedRef.current) {
         permAskedRef.current = true;
-        setCameraGuide(true);
         setPermSheet(true);
         return;
       }
@@ -367,7 +254,6 @@ export const IdentifyScreen: React.FC = () => {
     hasPermission,
     canRequestPermission,
     requestPermission,
-    setCameraGuide,
     device,
     photoOutput,
     handlePicked,
@@ -454,7 +340,11 @@ export const IdentifyScreen: React.FC = () => {
     }
   }, []);
 
-  let statusCopy: string;
+  /**
+   * 状态行只在需要反馈时出现（错误 / 准备中 / 权限 / 量尺）；
+   * 取景就绪的常态不展示任何引导文案——拍摄教学已由首次引导浮层承担。
+   */
+  let statusCopy: string | null;
   let statusMark: 'check' | 'warn' | 'close' | 'spinner';
   let statusError = false;
   if (error) {
@@ -477,7 +367,7 @@ export const IdentifyScreen: React.FC = () => {
     statusCopy = measuredCm ? `已测量 ${measuredCm.toFixed(1)} cm，拍照后自动填入` : '量好长度再拍照，识别后自动填入';
     statusMark = 'check';
   } else {
-    statusCopy = '让鱼身保持完整，识别更准确';
+    statusCopy = null;
     statusMark = 'check';
   }
 
@@ -491,6 +381,10 @@ export const IdentifyScreen: React.FC = () => {
           device={device}
           outputs={[photoOutput]}
           isActive={cameraEnabled && hasPermission && rulerMode !== 'ar'}
+          /* Android 默认 performance 模式是 SurfaceView，在窗口上挖洞且不参与 RN 合成；
+             跳转识别页停用相机时洞里露出的是 Activity 白色窗口背景（一闪而过的白蒙版）。
+             compatible 模式用 TextureView，停流时露出的是本页深色背景。 */
+          implementationMode="compatible"
           onError={(e) => {
             if (!error) {
               setError(e.message || '相机出错，请重新进入页面');
@@ -500,78 +394,45 @@ export const IdentifyScreen: React.FC = () => {
       ) : null}
       <View style={[StyleSheet.absoluteFill, styles.bgScrim]} pointerEvents="none" />
 
-      {/* 取景区：写实鱼形轮廓 + 框下引导文案 */}
-      <View style={styles.viewfinder}>
+      {/* 取景区：四角取景范围线，与首次教学引导页同款同几何（GUIDE_FRAME 冻结稿比例：
+          顶 198/1672 屏高、宽 826/941 屏宽、高 570/1672 屏高，白色 L 角标臂长 5.8% 外挑框边）；
+          常态无文案，仅异常/进行中状态在框下出现状态行。
+          首次教学浮层显示期间整块隐藏——教学层用整页背景照片 + 同款同位置框线自绘取景框。 */}
+      {!firstUseGuide ? (
+      <View style={[styles.viewfinder, { paddingTop: Math.round(GUIDE_FRAME.topRatio * windowHeight) }]}>
         <View style={styles.frameWrap}>
-          <FishScanFrame width={Math.min(windowWidth * 0.88, 400)} />
-          <View style={styles.frameCopy}>
-            <Text style={styles.headline}>拍下整条鱼</Text>
-            <View style={styles.statusRow}>
-              {statusMark === 'spinner' ? (
-                <ActivityIndicator size="small" color="#F4F8F7" />
-              ) : (
-                <View style={[styles.statusDot, statusError && styles.statusDotError]}>
-                  {statusMark === 'check' ? (
-                    <AppIcon name="check" size={10} color="#FFFFFF" />
-                  ) : statusMark === 'close' ? (
-                    <AppIcon name="close" size={9} color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.statusWarnMark}>!</Text>
-                  )}
-                </View>
-              )}
-              <Text
-                style={[styles.statusText, statusError && styles.statusTextError]}
-                numberOfLines={2}
-              >
-                {statusCopy}
-              </Text>
+          <ViewfinderCornerMarks
+            width={GUIDE_FRAME.widthRatio * windowWidth}
+            height={GUIDE_FRAME.heightRatio * windowHeight}
+          />
+          {statusCopy ? (
+            <View style={styles.frameCopy}>
+              <View style={styles.statusRow}>
+                {statusMark === 'spinner' ? (
+                  <ActivityIndicator size="small" color="#F4F8F7" />
+                ) : (
+                  <View style={[styles.statusDot, statusError && styles.statusDotError]}>
+                    {statusMark === 'check' ? (
+                      <AppIcon name="check" size={10} color="#FFFFFF" />
+                    ) : statusMark === 'close' ? (
+                      <AppIcon name="close" size={9} color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.statusWarnMark}>!</Text>
+                    )}
+                  </View>
+                )}
+                <Text
+                  style={[styles.statusText, statusError && styles.statusTextError]}
+                  numberOfLines={2}
+                >
+                  {statusCopy}
+                </Text>
+              </View>
             </View>
-            {/* 钓点角标：自动定位结果 / 权限引导 / 地图选点入口（隐私设置为不记录位置时隐藏） */}
-            {privacy.recordPrecision !== 'none' ? (
-              <PressableScale
-                onPress={() => {
-                  if (!spotLocation && (locPerm === 'denied' || locPerm === 'blocked')) {
-                    // 主动点击永远给引导（不受「每次挂载只提示一次」限制）
-                    promptLocationPermission(locPerm);
-                    return;
-                  }
-                  void openLocationPicker();
-                }}
-                disabled={locating || (!privacy.manualLocationEdit && !!spotLocation)}
-                scaleTo={0.96}
-                style={styles.locPillHit}
-                accessibilityLabel={
-                  !spotLocation && (locPerm === 'denied' || locPerm === 'blocked')
-                    ? '开启定位权限'
-                    : '地图选择钓点'
-                }
-                accessibilityRole="button"
-              >
-                <View style={styles.locPill} pointerEvents="none">
-                  {locating ? (
-                    <ActivityIndicator size="small" color="#EAD9AE" />
-                  ) : (
-                    <AppIcon name="location" size={12} color="#EAD9AE" />
-                  )}
-                  <Text style={styles.locPillText} numberOfLines={1}>
-                    {spotLocation
-                      ? spotLocation.label
-                      : locating
-                        ? '正在获取钓点…'
-                        : locPerm === 'denied' || locPerm === 'blocked'
-                          ? '未开启定位 · 点击开启'
-                          : '未定位 · 点击选择钓点'}
-                  </Text>
-                  {spotLocation && privacy.manualLocationEdit ? (
-                    <AppIcon name="chevron_right" size={11} color="rgba(251,253,252,0.7)" />
-                  ) : null}
-                </View>
-              </PressableScale>
-            ) : null}
-          </View>
+          ) : null}
         </View>
       </View>
+      ) : null}
 
       {/* 手动量尺覆盖层：置于 dock 之下，快门 / 相册 / 量尺开关仍可点 */}
       {rulerMode === 'manual' ? (
@@ -586,23 +447,25 @@ export const IdentifyScreen: React.FC = () => {
         style={[styles.dock, { bottom: insets.bottom + spacing.xl + 12 }]}
         pointerEvents="box-none"
       >
-        <PressableScale
-          onPress={toggleRuler}
-          disabled={loading || rulerProbing}
-          scaleTo={0.9}
-          style={[styles.dockItem, styles.rulerItem]}
-          accessibilityLabel={rulerMode !== 'off' ? '关闭量尺' : '打开量尺'}
-          accessibilityRole="button"
-        >
-          <View style={[styles.albumBtn, rulerMode !== 'off' && styles.rulerBtnActive]}>
-            {rulerProbing ? (
-              <ActivityIndicator size="small" color="#EAD9AE" />
-            ) : (
-              <RulerGlyph size={22} color={rulerMode !== 'off' ? '#EAD9AE' : '#F6FAF8'} />
-            )}
-          </View>
-          {measuredCm ? <View style={styles.rulerDot} /> : null}
-        </PressableScale>
+        {RULER_ENABLED ? (
+          <PressableScale
+            onPress={toggleRuler}
+            disabled={loading || rulerProbing}
+            scaleTo={0.9}
+            style={[styles.dockItem, styles.rulerItem]}
+            accessibilityLabel={rulerMode !== 'off' ? '关闭量尺' : '打开量尺'}
+            accessibilityRole="button"
+          >
+            <View style={[styles.albumBtn, rulerMode !== 'off' && styles.rulerBtnActive]}>
+              {rulerProbing ? (
+                <ActivityIndicator size="small" color="#EAD9AE" />
+              ) : (
+                <RulerGlyph size={22} color={rulerMode !== 'off' ? '#EAD9AE' : '#F6FAF8'} />
+              )}
+            </View>
+            {measuredCm ? <View style={styles.rulerDot} /> : null}
+          </PressableScale>
+        ) : null}
         <PressableScale
           onPress={shoot}
           disabled={loading || shooting}
@@ -657,8 +520,6 @@ export const IdentifyScreen: React.FC = () => {
             setPermSheet(false);
             AsyncStorage.setItem(CAMERA_PERM_SEEN_KEY, '1').catch(() => undefined);
             const granted = await requestPermission();
-            // 系统弹窗结束，相机引导阶段结束（定位引导随后补弹）
-            setCameraGuide(false);
             if (!granted) {
               setError('需要相机权限才能拍照，也可以从右下角选择相册照片');
             }
@@ -672,26 +533,8 @@ export const IdentifyScreen: React.FC = () => {
         />
       </BottomSheet>
 
-      {/* 要用定位但权限未开：应用内说明 → 系统权限弹窗；永久拒绝 → 去系统设置 */}
-      <BottomSheet
-        visible={locPermSheet}
-        onClose={() => setLocPermSheet(false)}
-        title="使用定位"
-      >
-        <Text style={styles.permText}>
-          开启定位后，拍照识鱼时会自动记录这条鱼获的钓点。渔见只在使用期间读取一次位置，不会在后台持续定位；也可以随时在「隐私与定位」中改为不记录位置。
-        </Text>
-        <PrimaryButton
-          label="开启定位"
-          onPress={() => void continueLocationPermission()}
-        />
-        <PrimaryButton
-          label="暂不"
-          variant="ghost"
-          onPress={() => setLocPermSheet(false)}
-          style={styles.permSecondary}
-        />
-      </BottomSheet>
+      {/* 首次拍照教学（两页：竖屏横鱼 / 竖拍竖鱼，横屏教学页已移除），关闭前阻断拍照操作 */}
+      <FirstUseCameraGuide visible={firstUseGuide} onFinish={finishFirstUseGuide} />
     </View>
   );
 };
@@ -713,8 +556,9 @@ const styles = StyleSheet.create({
   viewfinder: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: DOCK_HEIGHT + spacing.xl + 20,
+    /* 顶部锚定：取景框顶按 GUIDE_FRAME 冻结比例（y198/1672 ≈ 11.8% 屏高，
+       内联 paddingTop），与首次教学引导页示范框同一视觉位置 */
+    justifyContent: 'flex-start',
   } as ViewStyle,
   frameWrap: {
     alignItems: 'center',
@@ -724,18 +568,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.xl,
   } as ViewStyle,
-  headline: {
-    color: '#FDFEFD',
-    fontFamily: font.serif,
-    fontSize: fs(17),
-    fontWeight: '600',
-    letterSpacing: 1.5,
-    ...shadowText,
-  } as TextStyle,
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.sm,
     maxWidth: 220,
   } as ViewStyle,
   statusDot: {
@@ -765,28 +600,6 @@ const styles = StyleSheet.create({
   } as TextStyle,
   statusTextError: {
     color: '#F3C7BD',
-  } as TextStyle,
-  locPillHit: {
-    marginTop: spacing.md,
-    borderRadius: 15,
-  } as ViewStyle,
-  locPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    backgroundColor: 'rgba(10,26,32,0.45)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    maxWidth: 230,
-  } as ViewStyle,
-  locPillText: {
-    color: 'rgba(251,253,252,0.92)',
-    fontSize: fs(typeScale.caption),
-    maxWidth: 170,
-    ...shadowText,
   } as TextStyle,
   dock: {
     position: 'absolute',

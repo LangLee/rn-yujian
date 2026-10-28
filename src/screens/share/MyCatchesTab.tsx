@@ -609,7 +609,7 @@ const DayNode: React.FC<{ day: DayGroup; firstOfMonth: boolean }> = ({ day, firs
         <Text style={dayStyles.dayNumber}>{day.dayLabel}</Text>
       </View>
       <View style={dayStyles.summaryRow}>
-        <AppIcon name="location" size={12} color={coreColors.mistBlueGray} />
+        <AppIcon name="location" size={12} color={coreColors.lakeBlue} />
         <Text style={dayStyles.summary} numberOfLines={1}>
           {day.summary}
         </Text>
@@ -683,8 +683,8 @@ const dayStyles = StyleSheet.create({
     paddingRight: 2,
   } as ViewStyle,
   summary: {
-    fontSize: fs(12),
-    color: coreColors.mistBlueGray,
+    fontSize: fs(13),
+    color: coreColors.lakeBlue,
     flexShrink: 1,
   } as TextStyle,
   /* 日期栏下段（SEP + 星期）：绝对定位，只占日期栏宽，与首卡并排 */
@@ -697,14 +697,15 @@ const dayStyles = StyleSheet.create({
   } as ViewStyle,
   monthAbbr: {
     fontSize: fs(11),
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 2,
-    color: coreColors.mistBlueGray,
+    /* 冻结稿实测深石板 #2F4565 档（deepLakeBlue 82%），日期栏叠在山影上需偏深 */
+    color: 'rgba(11,45,75,0.82)',
   } as TextStyle,
   weekday: {
     marginTop: 2,
     fontSize: fs(11),
-    color: coreColors.mistBlueGray,
+    color: 'rgba(11,45,75,0.82)',
   } as TextStyle,
 });
 
@@ -807,7 +808,7 @@ const recentStyles = StyleSheet.create({
   } as ViewStyle,
   clear: {
     fontSize: fs(12),
-    color: coreColors.mistBlueGray,
+    color: coreColors.lakeBlue,
   } as TextStyle,
   chipWrap: {
     flexDirection: 'row',
@@ -964,7 +965,7 @@ const conditionStyles = StyleSheet.create({
   } as ViewStyle,
   clear: {
     fontSize: fs(12),
-    color: coreColors.mistBlueGray,
+    color: coreColors.lakeBlue,
   } as TextStyle,
 });
 
@@ -1019,12 +1020,12 @@ const stateStyles = StyleSheet.create({
   } as TextStyle,
   subtitle: {
     fontSize: fs(13),
-    color: coreColors.mistBlueGray,
+    color: coreColors.lakeBlue,
     textAlign: 'center',
   } as TextStyle,
   hint: {
     fontSize: fs(12),
-    color: coreColors.mistBlueGray,
+    color: coreColors.lakeBlue,
     marginTop: 4,
   } as TextStyle,
   actionHit: {
@@ -1066,8 +1067,10 @@ const styles = StyleSheet.create({
     minHeight: 32,
   } as ViewStyle,
   summaryText: {
-    fontSize: fs(12),
-    color: coreColors.mistBlueGray,
+    /* 冻结稿：摘要行深墨蓝（~#19304E），直接坐场景上必须够深 */
+    fontSize: fs(13),
+    fontWeight: '500',
+    color: coreColors.deepLakeBlue,
   } as TextStyle,
   queryChip: {
     backgroundColor: 'rgba(255,255,255,0.78)',
@@ -1125,7 +1128,7 @@ const styles = StyleSheet.create({
   } as TextStyle,
   stateText: {
     fontSize: fs(13),
-    color: coreColors.mistBlueGray,
+    color: coreColors.lakeBlue,
     textAlign: 'center',
   } as TextStyle,
   stateActionHit: {
