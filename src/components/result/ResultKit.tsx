@@ -388,7 +388,7 @@ export const ResultCandidateRow: React.FC<ResultCandidateRowProps> = ({
                   />
                 ) : (
                   <FishGlyph
-                    size={30}
+                    size={26}
                     color={selected ? TEAL : palette.fishGreen}
                   />
                 )}
@@ -1012,15 +1012,15 @@ const styles = StyleSheet.create({
     gap: 8,
   } as ViewStyle,
   candidateCard: {
-    height: 112,
+    height: 92,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(11,45,75,0.10)',
     backgroundColor: GLASS_A_LIGHT,
-    padding: 10,
+    padding: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 4,
   } as ViewStyle,
   candidateSuggested: {
     borderColor: TEAL_SUGGEST_BORDER,
@@ -1031,15 +1031,15 @@ const styles = StyleSheet.create({
     backgroundColor: TEAL_TINT,
   } as ViewStyle,
   candidateMedia: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   } as ViewStyle,
   candidateImg: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 7,
   } as ImageStyle,
   candidateLabel: {
     fontSize: fs(14),

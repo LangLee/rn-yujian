@@ -96,8 +96,13 @@ interface AIAmbientFieldProps {
   /** 刚拍下的照片（本地 file:// URI，L1 视觉主导、无处理色罩） */
   photoUri: string | null;
   /**
+   * SAM 真实分割轮廓（归一化闭合折线，demo samService 同款 SlimSAM-77 的
+   * Android 端侧分割；由 RecognizingScreen 门控后传入）。优先于 fishBox。
+   */
+  fishContour?: Array<{ x: number; y: number }> | null;
+  /**
    * 真实检测鱼体 bbox（归一化；原生 detectorRun 结果，由 RecognizingScreen
-   * 在「已定位到鱼体」状态门控后传入）。缺省不渲染轮廓光。
+   * 在「已定位到鱼体」状态门控后传入）。SAM 轮廓不可用时生成合成鱼形。
    */
   fishBox?: NormalizedFishBoxInput | null;
   /** 照片像素尺寸（EXIF 归一后；bbox → 屏幕映射基准）。缺省不渲染轮廓光 */
@@ -116,6 +121,7 @@ interface AIAmbientFieldProps {
 export const AIAmbientField: React.FC<AIAmbientFieldProps> = ({
   phase,
   photoUri,
+  fishContour = null,
   fishBox = null,
   photoPixelSize = null,
   resolveOpacity = 1,
@@ -200,14 +206,15 @@ export const AIAmbientField: React.FC<AIAmbientFieldProps> = ({
           </Animated.View>
         </Animated.View>
 
-        {/* L6. 鱼体轮廓光（demo Fish Contour Glow V1.3 移植）：真实检测
-            bbox 的有机鱼形四层光学描边，「已定位到鱼体」状态的视觉主角；
+        {/* L6. 鱼体轮廓光（demo Fish Contour Glow V1.1 经典金移植）：SAM 真实
+            分割轮廓优先、bbox 合成鱼形兜底，「已定位到鱼体」状态的视觉主角；
             不随边缘水光强度链（有自己的生长/确认/巡航时间线）；
             frozen（RESOLVE）停表冻结段位。 */}
-        {fishBox && photoPixelSize ? (
+        {(fishContour || fishBox) && photoPixelSize ? (
           <FishContourGlow
             width={size.w}
             height={size.h}
+            contourPoints={fishContour}
             fishBox={fishBox}
             photoWidth={photoPixelSize.width}
             photoHeight={photoPixelSize.height}

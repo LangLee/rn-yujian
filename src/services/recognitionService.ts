@@ -1,7 +1,9 @@
 import { NativeModules, Platform } from 'react-native';
 import {
   FeedbackDraft,
+  FishContourDTO,
   InferenceAssetMeta,
+  NormalizedFishBox,
   ProductionRecognitionResultDTO,
   SelectedImageMeta,
 } from '../types/models';
@@ -11,6 +13,8 @@ interface YujianRecognitionNative {
   normalizeImage(uri: string, source: string): Promise<SelectedImageMeta>;
   recognize(imageId: string): Promise<ProductionRecognitionResultDTO>;
   record(imageId: string): Promise<InferenceAssetMeta>;
+  /** SAM 鱼体轮廓分割（demo 同款 SlimSAM-77-uniform）；box 缺省时原生自跑检测器选主框。 */
+  extractFishContour(imageId: string, box?: NormalizedFishBox | null): Promise<FishContourDTO | null>;
   attachFeedbackAndSubmit(imageId: string, feedback: FeedbackDraft): Promise<boolean>;
   flushQueued(): Promise<number>;
   releaseImage(imageId: string): Promise<string>;
@@ -43,6 +47,8 @@ const REQUIRED_ASSET_FILES = [
   'recognition_pipeline_v1.json',
   'fish_classifier.tflite',
   'preprocess_contract_v1.json',
+  'sam_vision_encoder_quantized.onnx',
+  'sam_prompt_encoder_mask_decoder_quantized.onnx',
 ];
 
 /** Android assets.open 缺文件时 reject 的 message 只有裸文件名，翻译成可行动的提示。 */
@@ -77,6 +83,20 @@ export const recognitionService = {
 
   async record(imageId: string): Promise<InferenceAssetMeta> {
     return requireModule().record(imageId);
+  },
+
+  /**
+   * SAM 鱼体轮廓分割（demo samService 同款 SlimSAM-77-uniform，Android 端侧）：
+   * 传入 recognize 结果的主检测框可省一次原生检测；返回 null 表示无可用轮廓。
+   */
+  async extractFishContour(
+    imageId: string,
+    box?: NormalizedFishBox | null,
+  ): Promise<FishContourDTO | null> {
+    if (!nativeModule?.extractFishContour) {
+      return null;
+    }
+    return translateAssetError(() => nativeModule!.extractFishContour(imageId, box ?? null));
   },
 
   async attachFeedbackAndSubmit(imageId: string, feedback: FeedbackDraft): Promise<boolean> {

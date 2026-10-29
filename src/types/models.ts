@@ -97,6 +97,29 @@ export interface NormalizedFishBox {
   y2: number;
 }
 
+/** SAM 轮廓归一化点（0..1，相对 EXIF 归一后的原图） */
+export interface FishContourPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * SAM 鱼体轮廓分割结果（原生 extractFishContour 返回；demo samService 同款
+ * SlimSAM-77-uniform）。points 为有序闭合折线（首尾不重复）；trustworthy=false
+ * 表示掩码未过 demo 可信度门禁，调用方应退回 bbox 合成轮廓。
+ */
+export interface FishContourDTO {
+  modelId: string;
+  points: FishContourPoint[];
+  iouScore: number;
+  pixelCount: number;
+  maskBox: NormalizedFishBox;
+  trustworthy: boolean;
+  encoderLatencyMs: number;
+  decoderLatencyMs: number;
+  totalLatencyMs: number;
+}
+
 export interface FishDetectionDTO {
   confidence: number;
   className: string;

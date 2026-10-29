@@ -16,14 +16,17 @@ import {
   CONTOUR_PARAMS,
   contourTimeline,
   mapBoxToScreenRect,
+  mapContourPointsToScreen,
   type NormalizedFishBoxInput,
 } from './fishContourEngine';
 
 /**
  * 鱼体轮廓光（demo「金色鱼体主体显影」经典金 V1.1 的 RN 移植）。
  *
- * 「已定位到鱼体」的视觉主角：真实检测 bbox 生成朝向自适应的有机鱼形
- * 折线（数据源差异与冻结参数见 fishContourEngine.ts），四层光学呈现——
+ * 「已定位到鱼体」的视觉主角。轮廓数据源两级：优先 SAM 真实分割轮廓
+ * （contourPoints，demo samService 同款 SlimSAM-77-uniform 的 Android 端侧
+ * 分割，归一化闭合折线），缺省退回真实检测 bbox 生成的朝向自适应有机鱼形
+ * （冻结参数见 fishContourEngine.ts）。四层光学呈现——
  *   L1 核心描边 1.2pt #F5DFB0（0-1000ms smoothstep 生长，稳定 α0.75）；
  *   L2 外围双层柔光 #E8C882（5pt 主层 + 8pt 外层，稳定 α0.24）；
  *   L3 外发散光晕 Halo #C9A66B（10pt 宽漫射，稳定 α0.08）；
@@ -46,9 +49,11 @@ export interface FishContourGlowProps {
   width: number;
   /** 画布高（pt） */
   height: number;
-  /** 归一化鱼体 bbox（原生 detectorRun 真实检测结果） */
-  fishBox: NormalizedFishBoxInput;
-  /** 照片像素宽（EXIF 归一后；bbox 映射基准） */
+  /** SAM 真实分割轮廓（归一化闭合折线，优先于 fishBox） */
+  contourPoints?: Array<{ x: number; y: number }> | null;
+  /** 归一化鱼体 bbox（原生 detectorRun 真实检测结果；无真实轮廓时生成合成鱼形） */
+  fishBox?: NormalizedFishBoxInput | null;
+  /** 照片像素宽（EXIF 归一后；映射基准） */
   photoWidth: number;
   /** 照片像素高 */
   photoHeight: number;
@@ -65,7 +70,8 @@ export interface FishContourGlowProps {
 export const FishContourGlow: React.FC<FishContourGlowProps> = ({
   width,
   height,
-  fishBox,
+  contourPoints = null,
+  fishBox = null,
   photoWidth,
   photoHeight,
   photoFit,
@@ -80,15 +86,31 @@ export const FishContourGlow: React.FC<FishContourGlowProps> = ({
     if (typeof Skia.PathBuilder?.Make !== 'function') {
       return null;
     }
-    const rect = mapBoxToScreenRect(fishBox, photoWidth, photoHeight, width, height, photoFit);
-    if (!rect) {
+    // 轮廓数据源：SAM 真实轮廓 → 退回 bbox 合成鱼形
+    let points: Array<{ x: number; y: number }> | null = null;
+    let rect: { x: number; y: number; w: number; h: number } | null = null;
+    if (contourPoints && contourPoints.length >= 8) {
+      const mapped = mapContourPointsToScreen(contourPoints, photoWidth, photoHeight, width, height, photoFit);
+      if (mapped) {
+        points = mapped.points;
+        rect = mapped.rect;
+      }
+    }
+    if (!points && fishBox) {
+      const boxRect = mapBoxToScreenRect(fishBox, photoWidth, photoHeight, width, height, photoFit);
+      if (boxRect) {
+        const geo = buildFishContourPoints(boxRect);
+        points = geo.points;
+        rect = geo.rect;
+      }
+    }
+    if (!points || !rect) {
       return null;
     }
-    const geo = buildFishContourPoints(rect);
     // RN Skia v2：SkPath 可变 API（moveTo/lineTo/close）已弃用，折线经
     // PathBuilder.addPoly 一次性构建，detach 取不可变 SkPath
     const builder = Skia.PathBuilder.Make();
-    builder.addPoly(geo.points, true);
+    builder.addPoly(points, true);
     const path = builder.detach();
     if (!path) {
       return null;
@@ -100,7 +122,7 @@ export const FishContourGlow: React.FC<FishContourGlowProps> = ({
       r: Math.min(rect.w, rect.h) * 0.42,
     };
     return { path, rect, glint };
-  }, [fishBox, photoWidth, photoHeight, width, height, photoFit]);
+  }, [contourPoints, fishBox, photoWidth, photoHeight, width, height, photoFit]);
 
   // 双层柔光的 alpha 份额（0.15 主层 + 0.09 外层 = 0.24 冻结基线）
   const tierAShare = CONTOUR_PARAMS.softTierAAlpha / CONTOUR_PARAMS.softAlpha;

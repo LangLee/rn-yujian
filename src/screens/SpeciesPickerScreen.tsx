@@ -264,7 +264,7 @@ export const SpeciesPickerScreen: React.FC = () => {
           </View>
         ) : searching ? (
           results.length > 0 ? (
-            <View style={styles.listGap}>
+            <View style={[styles.listGap, styles.searchResults]}>
               {results.map((item) => (
                 <SpeciesRow
                   key={item.id}
@@ -464,6 +464,9 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   listGap: {
     gap: spacing.md,
+  } as ViewStyle,
+  searchResults: {
+    marginTop: spacing.md,
   } as ViewStyle,
   sectionLabel: {
     fontSize: fs(typeScale.meta),

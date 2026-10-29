@@ -91,6 +91,11 @@ export const IdentifyScreen: React.FC = () => {
   // 进入 P02 时清理上一条流程的残留状态
   useEffect(() => {
     reset();
+    // 进入取景页即预热端侧模型（detector/classifier + SAM 轮廓分割会话）：
+    // 首次识别不再承担 1-2s 冷启动，识别与 SAM 分割都不至于错过动效截止
+    recognitionService.warmup().catch(() => {
+      // 预热失败不阻塞取景（如模型资产缺失），识别时再报具体错误
+    });
     return () => undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

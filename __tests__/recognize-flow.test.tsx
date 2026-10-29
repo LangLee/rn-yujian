@@ -20,6 +20,7 @@ jest.mock('../src/services/recognitionService', () => ({
     normalizeImage: (...args: unknown[]) => mockNormalize(...args),
     recognize: (...args: unknown[]) => mockRecognize(...args),
     record: (...args: unknown[]) => mockRecord(...args),
+    extractFishContour: async () => null,
     attachFeedbackAndSubmit: async () => true,
     flushQueued: async () => 0,
     releaseImage: async () => undefined,

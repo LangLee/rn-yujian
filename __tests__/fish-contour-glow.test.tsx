@@ -19,6 +19,7 @@ import {
   CONTOUR_PARAMS,
   contourTimeline,
   mapBoxToScreenRect,
+  mapContourPointsToScreen,
 } from '../src/components/fishContourEngine';
 
 const BOX = { x1: 0.25, y1: 0.2, x2: 0.75, y2: 0.8 };
@@ -47,6 +48,50 @@ describe('fishContourEngine bbox → 屏幕映射', () => {
   test('退化输入（尺寸缺失 / 过小框）返回 null，组件侧安全退场', () => {
     expect(mapBoxToScreenRect(BOX, 0, 1200, 400, 800, 'cover')).toBeNull();
     expect(mapBoxToScreenRect({ x1: 0.5, y1: 0.5, x2: 0.505, y2: 0.505 }, 800, 1200, 400, 800, 'cover')).toBeNull();
+  });
+});
+
+describe('fishContourEngine SAM 真实轮廓映射', () => {
+  /** 照片 800×1200 中部一条竖向鱼形轮廓（归一化闭合折线，首尾不重复） */
+  const CONTOUR = Array.from({ length: 48 }, (_, i) => {
+    const a = (i / 48) * Math.PI * 2;
+    return { x: 0.5 + 0.12 * Math.cos(a), y: 0.5 + 0.25 * Math.sin(a) };
+  });
+
+  test('cover：逐点映射与 mapBoxToScreenRect 同构，包围盒落在映射矩形内', () => {
+    const mapped = mapContourPointsToScreen(CONTOUR, 800, 1200, 400, 800, 'cover');
+    expect(mapped).not.toBeNull();
+    const boxRect = mapBoxToScreenRect(
+      { x1: 0.38, y1: 0.25, x2: 0.62, y2: 0.75 },
+      800, 1200, 400, 800, 'cover',
+    )!;
+    for (const p of mapped!.points) {
+      expect(p.x).toBeGreaterThanOrEqual(boxRect.x - 1e-6);
+      expect(p.x).toBeLessThanOrEqual(boxRect.x + boxRect.w + 1e-6);
+      expect(p.y).toBeGreaterThanOrEqual(boxRect.y - 1e-6);
+      expect(p.y).toBeLessThanOrEqual(boxRect.y + boxRect.h + 1e-6);
+    }
+    expect(mapped!.points).toHaveLength(CONTOUR.length);
+  });
+
+  test('contain：点全部落回画布内（完整居中）', () => {
+    const mapped = mapContourPointsToScreen(CONTOUR, 800, 1200, 400, 800, 'contain');
+    expect(mapped).not.toBeNull();
+    for (const p of mapped!.points) {
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(400);
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      expect(p.y).toBeLessThanOrEqual(800);
+    }
+  });
+
+  test('退化输入（点数不足 / 包围盒过小）返回 null', () => {
+    expect(mapContourPointsToScreen(CONTOUR.slice(0, 5), 800, 1200, 400, 800, 'cover')).toBeNull();
+    const tiny = Array.from({ length: 12 }, (_, i) => ({
+      x: 0.5 + 0.001 * Math.cos((i / 12) * Math.PI * 2),
+      y: 0.5 + 0.001 * Math.sin((i / 12) * Math.PI * 2),
+    }));
+    expect(mapContourPointsToScreen(tiny, 800, 1200, 400, 800, 'cover')).toBeNull();
   });
 });
 
@@ -140,12 +185,33 @@ describe('fishContourEngine V1.1 经典金时间线', () => {
 });
 
 describe('FishContourGlow 组件', () => {
-  test('jest 下 Skia 原生不可用：静默退场不渲染内容、不抛错', () => {
+  test('jest 下 Skia 原生不可用：静默退场不渲染内容、不抛错（bbox 合成模式）', () => {
     const { toJSON } = render(
       <ThemeProvider>
         <FishContourGlow
           width={393}
           height={852}
+          fishBox={BOX}
+          photoWidth={800}
+          photoHeight={1200}
+          photoFit="cover"
+        />
+      </ThemeProvider>,
+    );
+    expect(toJSON()).toBeNull();
+  });
+
+  test('SAM 真实轮廓模式：contourPoints 与 fishBox 并存时优先轮廓，同样静默退场', () => {
+    const contour = Array.from({ length: 48 }, (_, i) => {
+      const a = (i / 48) * Math.PI * 2;
+      return { x: 0.5 + 0.12 * Math.cos(a), y: 0.5 + 0.25 * Math.sin(a) };
+    });
+    const { toJSON } = render(
+      <ThemeProvider>
+        <FishContourGlow
+          width={393}
+          height={852}
+          contourPoints={contour}
           fishBox={BOX}
           photoWidth={800}
           photoHeight={1200}

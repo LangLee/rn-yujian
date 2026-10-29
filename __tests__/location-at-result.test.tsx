@@ -31,6 +31,8 @@ jest.mock('../src/services/recognitionService', () => ({
     normalizeImage: jest.fn(),
     recognize: jest.fn(),
     record: jest.fn(),
+    extractFishContour: async () => null,
+    warmup: async () => true,
     attachFeedbackAndSubmit: async () => true,
   },
 }));

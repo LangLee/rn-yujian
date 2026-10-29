@@ -22,6 +22,7 @@ jest.mock('../src/services/recognitionService', () => ({
     normalizeImage: async () => ({ imageId: 'x', filePath: 'file:///tmp/x.jpg', source: 'gallery', width: 1, height: 1 }),
     recognize: async () => new Promise(() => undefined),
     record: async () => ({ recordPath: '/tmp/r.json', imagePath: '/tmp/i.jpg' }),
+    extractFishContour: async () => null,
     attachFeedbackAndSubmit: async () => true,
     flushQueued: async () => 0,
     releaseImage: async () => undefined,

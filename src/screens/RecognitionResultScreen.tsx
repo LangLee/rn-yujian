@@ -845,14 +845,14 @@ const styles = StyleSheet.create({
     lineHeight: fs(28),
     fontWeight: '700',
     letterSpacing: 1,
-    marginTop: 16,
+    marginTop: 12,
   } as TextStyle,
   candidateWrap: {
-    marginTop: 12,
+    marginTop: 10,
   } as ViewStyle,
   otherSpeciesHit: {
     alignSelf: 'flex-start',
-    marginTop: 16,
+    marginTop: 12,
     paddingVertical: 4,
   } as ViewStyle,
   otherSpeciesLink: {

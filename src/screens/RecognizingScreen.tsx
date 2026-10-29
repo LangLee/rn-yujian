@@ -15,7 +15,9 @@ import {
   AIPhase,
 } from '../components/coreui/AIAmbientField';
 import { RecognitionStatusCard } from '../components/coreui/RecognitionStatusCard';
+import { recognitionService } from '../services/recognitionService';
 import type {
+  FishContourPoint,
   NormalizedFishBox,
   ProductionRecognitionResultDTO,
 } from '../types/models';
@@ -56,6 +58,13 @@ const RESOLVE_MS = 200;
  */
 const CONTOUR_MIN_PLAY_MS = 2600;
 const CONTOUR_MAX_EXTRA_MS = 1500;
+/**
+ * SAM 真实轮廓等待截止（相对挂载）：SAM 与识别完全并行（挂载即启动、原生
+ * 自行检测选框），手机上编码器约 1.5–3s；超过截止仍未就绪则用检测 bbox
+ * 合成鱼形揭示（之后到达的 SAM 结果不再中途替换，避免跳变）。
+ * 2800ms + 揭示后至少 1400ms 展示落在顺延上限（2750 + 1500）内。
+ */
+const SAM_WAIT_DEADLINE_MS = 2800;
 const TIMEOUT_MS = 45000;
 
 /** 从识别结果提取鱼体 bbox：优先质量门选出的主检测，否则取置信度最高者 */
@@ -78,9 +87,10 @@ const pickFishBox = (result: ProductionRecognitionResultDTO): NormalizedFishBox 
  * P03 识别处理中（Recognition Processing 冻结设计 V1.2）：
  * 全屏刚拍下的照片（视觉主导、无处理色罩）+ 水光光场（2026-10 自
  * edge-aura 光环更换为 demo「四周水光识别动效」效果02 移植；识别全程
- * 贴屏缘流转）+ 鱼体轮廓光（demo Fish Contour Glow V1.3 移植：原生
- * detectorRun 真实 bbox 的有机鱼形四层描边，随「已定位到鱼体」揭示，
- * 描边生长 → 识别确认高光 → 日光金流光巡航）+ RecognitionStatusCard。
+ * 贴屏缘流转）+ 鱼体轮廓光（demo 经典金 V1.1 移植：端侧 SAM 分割——
+ * demo samService 同款 SlimSAM-77-uniform——的真实鱼体轮廓优先，
+ * 检测 bbox 合成鱼形兜底；随「已定位到鱼体」揭示：描边生长 → 柔光淡入
+ * → 识别确认高光 → 稳定巡航）+ RecognitionStatusCard。
  * 禁止 HUD / 扫描框 / 进度条 / 伪百分比。
  * 结果路由由真实推理门控：推理更快 → 等故事走完（2.75s + 200ms RESOLVE）；
  * 推理更慢 → 停留在当前真实状态不伪造后续；失败立即路由。
@@ -97,12 +107,20 @@ export const RecognizingScreen: React.FC = () => {
   const [cardLate, setCardLate] = useState(false);
   const [resolveStarted, setResolveStarted] = useState(false);
 
-  /* 真实检测鱼体 bbox（归一化）：结果就绪且进入「已定位到鱼体」状态后
-     揭示为轮廓光；两条件到达顺序不确定，用 ref 暂存先到的一方。 */
+  /* 鱼体轮廓（「已定位到鱼体」状态的视觉主角）：
+     - SAM 真实分割轮廓（优先）：识别结果到达后端侧异步跑 SlimSAM；
+     - bbox 合成鱼形（兜底）：SAM 未就绪/失败/不可信且已过等待截止。
+     多个条件到达顺序不定，用 ref 暂存先到的一方；揭示后不再替换（避免
+     轮廓中途跳变）。 */
   const [fishBox, setFishBox] = useState<NormalizedFishBox | null>(null);
+  const [fishContour, setFishContour] = useState<FishContourPoint[] | null>(null);
   const pendingFishBoxRef = useRef<NormalizedFishBox | null>(null);
+  const pendingContourRef = useRef<FishContourPoint[] | null>(null);
   const phase2StartedRef = useRef(false);
+  const samDeadlineRef = useRef(false);
   const fishRevealedElapsedRef = useRef<number | null>(null);
+  /* imageId 同照片/适配模式一起在挂载瞬间冻结（退场转场期间 context 会被 reset） */
+  const [imageId] = useState<string | null>(() => image?.imageId ?? null);
 
   // 退场转场期间 IdentifyScreen 重挂载会 reset 清空 image，
   // 用挂载瞬间的照片冻结本屏展示，避免结果转场时照片先闪没。
@@ -125,24 +143,13 @@ export const RecognizingScreen: React.FC = () => {
   const recognizeRef = useRef(recognizeAndRecord);
   recognizeRef.current = recognizeAndRecord;
 
-  /* 轮廓光揭示：结果 bbox 已到 且 「已定位到鱼体」状态已开始（900ms 节拍），
-     两者都满足才出手——描边生长从这一刻起算，与状态文案同步。 */
-  const tryRevealFish = () => {
-    if (fishRevealedElapsedRef.current != null) {
-      return;
-    }
-    if (!phase2StartedRef.current || !pendingFishBoxRef.current) {
-      return;
-    }
-    fishRevealedElapsedRef.current = Date.now() - startedAt;
-    setFishBox(pendingFishBoxRef.current);
-  };
-
   // 收场（RESOLVE）：先冻结光场段位/粒子（Motion Contract §7），
   // 再以 ResolveStrength=(1-p)²（Easing.out(quad)）淡出 ambient/状态/鱼焦点。
   const resolve = useRef(new Animated.Value(0)).current;
   const resolveOpacity = resolve.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  const resolveStartedRef = useRef(false);
   const runResolve = () => {
+    resolveStartedRef.current = true;
     setResolveStarted(true);
     Animated.timing(resolve, {
       toValue: 1,
@@ -152,11 +159,113 @@ export const RecognizingScreen: React.FC = () => {
     }).start();
   };
 
+  /* 收场排期（可重算）：识别结果就绪后补完 2.75s 三状态故事；轮廓光揭示
+     较晚时适度顺延（≤1500ms），保证描边生长与确认高光完整可见。轮廓揭示
+     时刻在结果返回时通常还未知（要等 SAM 或等待截止），所以结果返回时按
+     「最晚揭示时刻 = SAM 截止」预留，真实揭示后再重算收紧；RESOLVE 一旦
+     开始不再改动。 */
+  const proceedRef = useRef<(() => void) | null>(null);
+  const resolveTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const scheduleResolve = () => {
+    const proceed = proceedRef.current;
+    if (!proceed || resolveStartedRef.current) {
+      return;
+    }
+    resolveTimersRef.current.forEach(clearTimeout);
+    resolveTimersRef.current = [];
+    const elapsed = Date.now() - startedAt;
+    let targetEndMs = STORY_MS;
+    const revealedAt = fishRevealedElapsedRef.current;
+    if (revealedAt != null) {
+      targetEndMs = Math.max(STORY_MS, revealedAt + CONTOUR_MIN_PLAY_MS);
+    } else if (pendingFishBoxRef.current) {
+      // 已检出鱼、轮廓必将揭示（最晚在 SAM 截止）：先按最晚揭示预留
+      targetEndMs = Math.max(STORY_MS, Math.max(elapsed, SAM_WAIT_DEADLINE_MS) + CONTOUR_MIN_PLAY_MS);
+    }
+    targetEndMs = Math.min(targetEndMs, STORY_MS + CONTOUR_MAX_EXTRA_MS);
+    const fadeDelay = Math.max(0, targetEndMs - elapsed - RESOLVE_MS);
+    resolveTimersRef.current.push(setTimeout(runResolve, fadeDelay));
+    resolveTimersRef.current.push(setTimeout(proceed, fadeDelay + RESOLVE_MS));
+  };
+
+  /* 轮廓揭示：进入「已定位到鱼体」状态（900ms 节拍）且轮廓数据就绪——
+     优先 SAM 真实轮廓；截止前没有真实轮廓则用 bbox 合成鱼形。
+     揭示后重算收场排期，保证轮廓时间线完整走完。 */
+  const tryRevealFish = () => {
+    if (fishRevealedElapsedRef.current != null) {
+      return;
+    }
+    if (!phase2StartedRef.current) {
+      return;
+    }
+    const contour = pendingContourRef.current;
+    if (contour && contour.length >= 8) {
+      fishRevealedElapsedRef.current = Date.now() - startedAt;
+      setFishContour(contour);
+      scheduleResolve();
+      return;
+    }
+    if (!samDeadlineRef.current) {
+      return; // 截止前继续等 SAM 真实轮廓
+    }
+    const box = pendingFishBoxRef.current;
+    if (!box) {
+      return; // 无轮廓也无框（未检出鱼）：不渲染轮廓光
+    }
+    fishRevealedElapsedRef.current = Date.now() - startedAt;
+    setFishBox(box);
+    scheduleResolve();
+  };
+
+  /* 端侧 SAM 分割（demo samService 同款 SlimSAM-77-uniform）：与识别完全
+     并行——挂载即启动、原生自行检测选框（共用 pipeline 已加载的检测器会话，
+     约百毫秒），不等 recognize 返回。手机上编码器需 1.5–3s，串行等待必然
+     错过截止。成功且过可信度门禁时以真实轮廓揭示；失败不阻塞识别。 */
+  useEffect(() => {
+    if (!imageId) {
+      return undefined;
+    }
+    let cancelled = false;
+    recognitionService
+      .extractFishContour(imageId)
+      .then((contour) => {
+        if (__DEV__) {
+          console.log(
+            '[SAM] 轮廓分割',
+            contour
+              ? `points=${contour.points.length} iou=${contour.iouScore.toFixed(3)} trustworthy=${contour.trustworthy} ` +
+                  `enc=${Math.round(contour.encoderLatencyMs)}ms dec=${Math.round(contour.decoderLatencyMs)}ms total=${Math.round(contour.totalLatencyMs)}ms`
+              : 'null（无可用掩码）',
+          );
+        }
+        if (cancelled || !contour?.trustworthy || contour.points.length < 8) {
+          return;
+        }
+        pendingContourRef.current = contour.points;
+        tryRevealFish();
+      })
+      .catch((error) => {
+        // SAM 失败不阻塞识别：截止后走 bbox 合成轮廓
+        if (__DEV__) {
+          console.warn('[SAM] 轮廓分割失败', error instanceof Error ? error.message : String(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* 冻结状态推进：只前进不回退（推理更慢时在当前状态停留更久；
      Reduce Motion 只去除运动表达，状态节奏/语义不变——ReduceMotion §13） */
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     timers.push(setTimeout(() => setCardLate(true), EARLY_TO_LATE_MS));
+    // SAM 等待截止：到点仍无真实轮廓就退回 bbox 合成鱼形揭示
+    timers.push(setTimeout(() => {
+      samDeadlineRef.current = true;
+      tryRevealFish();
+    }, SAM_WAIT_DEADLINE_MS));
     let acc = 0;
     for (let i = 1; i < STATE_ORDER.length; i++) {
       acc += AI_STATE_MIN_MS[STATE_ORDER[i - 1]];
@@ -193,32 +302,19 @@ export const RecognizingScreen: React.FC = () => {
         if (cancelled) {
           return;
         }
-        // 真实检测鱼体 bbox：喂给轮廓光（若已进入「已定位到鱼体」状态立即揭示）
+        // 真实检测鱼体 bbox：立即暂存（SAM 截止兜底 / 无 SAM 时的合成轮廓）
         if (result?.ready) {
           pendingFishBoxRef.current = pickFishBox(result);
           tryRevealFish();
         }
-        const proceed = () => {
+        proceedRef.current = () => {
           if (result.ready && result.prediction) {
             navigation.replace('Result');
           } else {
             navigation.replace('RecognitionIssue');
           }
         };
-        // 呈现时间管理（V1.2）：结果就绪后补完 2.75s 三状态故事；轮廓光
-        // 揭示较晚时适度顺延（≤1500ms），保证描边生长与确认高光完整可见，
-        // 最后 200ms RESOLVE 冻结淡出与路由衔接
-        const elapsed = Date.now() - startedAt;
-        let targetEndMs = STORY_MS;
-        if (fishRevealedElapsedRef.current != null) {
-          targetEndMs = Math.min(
-            Math.max(STORY_MS, fishRevealedElapsedRef.current + CONTOUR_MIN_PLAY_MS),
-            STORY_MS + CONTOUR_MAX_EXTRA_MS,
-          );
-        }
-        const fadeDelay = Math.max(0, targetEndMs - elapsed - RESOLVE_MS);
-        setTimeout(runResolve, fadeDelay);
-        setTimeout(proceed, fadeDelay + RESOLVE_MS);
+        scheduleResolve();
       } catch (e) {
         // 异常（非识别"没认出"）直接退回 P02 并带回原因；RecognitionIssue 只承载有结果的 FAILED。
         // popTo：弹回栈里原有的拍照页，避免 push 新实例后旧 Recognizing 残留在栈中
@@ -239,6 +335,8 @@ export const RecognizingScreen: React.FC = () => {
     return () => {
       cancelled = true;
       clearTimeout(timeout);
+      resolveTimersRef.current.forEach(clearTimeout);
+      resolveTimersRef.current = [];
     };
   }, [navigation, startedAt]);
 
@@ -252,11 +350,12 @@ export const RecognizingScreen: React.FC = () => {
 
   return (
     <View style={styles.screen}>
-      {/* 环境层：全屏照片 + 暗角 + 水光光场（识别动效）+ 鱼体轮廓光（真实 bbox） */}
+      {/* 环境层：全屏照片 + 暗角 + 水光光场（识别动效）+ 鱼体轮廓光（SAM 真实轮廓 / bbox 合成） */}
       <AIAmbientField
         phase={phase}
         photoUri={photoUri}
         photoFit={photoFit}
+        fishContour={fishContour}
         fishBox={fishBox}
         photoPixelSize={photoPixelSize}
         resolveOpacity={resolveOpacity}

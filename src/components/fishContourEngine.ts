@@ -143,6 +143,56 @@ export const mapBoxToScreenRect = (
   return { x: Math.min(x1, x2), y: Math.min(y1, y2), w, h };
 };
 
+/** 真实轮廓（SAM 分割）映射到屏幕的结果 */
+export interface ContourScreenMapping {
+  /** 屏幕坐标有序闭合折线（首尾不重复） */
+  points: Array<{ x: number; y: number }>;
+  /** 轮廓包围盒（屏幕坐标） */
+  rect: ScreenRect;
+}
+
+/**
+ * SAM 归一化轮廓点 → 屏幕坐标：与 mapBoxToScreenRect 同一套 cover / contain
+ * 数学逐点映射，并求包围盒；点数不足或包围盒过小返回 null（退回 bbox 合成轮廓）。
+ */
+export const mapContourPointsToScreen = (
+  contour: Array<{ x: number; y: number }>,
+  photoWidth: number,
+  photoHeight: number,
+  viewWidth: number,
+  viewHeight: number,
+  fit: 'cover' | 'contain',
+): ContourScreenMapping | null => {
+  if (contour.length < 8 || photoWidth <= 0 || photoHeight <= 0 || viewWidth <= 0 || viewHeight <= 0) {
+    return null;
+  }
+  const scale =
+    fit === 'cover'
+      ? Math.max(viewWidth / photoWidth, viewHeight / photoHeight)
+      : Math.min(viewWidth / photoWidth, viewHeight / photoHeight);
+  const dx = (viewWidth - photoWidth * scale) / 2;
+  const dy = (viewHeight - photoHeight * scale) / 2;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const points = contour.map((p) => {
+    const x = Math.min(Math.max(p.x, 0), 1) * photoWidth * scale + dx;
+    const y = Math.min(Math.max(p.y, 0), 1) * photoHeight * scale + dy;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    return { x, y };
+  });
+  const w = maxX - minX;
+  const h = maxY - minY;
+  if (!(w >= 8) || !(h >= 8)) {
+    return null;
+  }
+  return { points, rect: { x: minX, y: minY, w, h } };
+};
+
 /** 三次贝塞尔取值 */
 const cubicAt = (
   p0: number, p1: number, p2: number, p3: number, t: number,

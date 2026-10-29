@@ -44,3 +44,24 @@ npm run android          # 构建前自动校验/下载模型资产
    `FishRecognitionEngine` 常量同步）；
 2. 删除 `android/app/src/main/assets/` 下对应旧文件（或直接重新构建，哈希不符会自动重下）；
 3. assets 变更不会热更新，需完整重新构建。
+
+## SAM 轮廓分割资产（识别过程动效）
+
+识别处理页的鱼体轮廓光（demo AI--main samService 同款实现）使用
+`Xenova/slimsam-77-uniform` 的 q8 量化 ONNX 导出（transformers.js 用的那两个文件）
+在端上做分割，由 `SamContourEngine.kt` 通过 ONNX Runtime 运行：
+
+| 文件 | 大小 | SHA256 |
+| --- | --- | --- |
+| `sam_vision_encoder_quantized.onnx` | 8,882,165 | `cce23c7b…f2971` |
+| `sam_prompt_encoder_mask_decoder_quantized.onnx` | 4,903,810 | `cb90b279…fdce2` |
+
+- 接口（已从 ONNX 图解析确认）：encoder `pixel_values[1,3,1024,1024]` →
+  `image_embeddings[1,256,64,64]` + `image_positional_embeddings[1,256,64,64]`；
+  decoder `input_points[1,1,N,2]` float32 + `input_labels[1,1,N]` int64 +
+  两个嵌入 → `iou_scores[1,1,3]` + `pred_masks[1,1,3,256,256]`（logits > 0 为前景）。
+- 来源是 Hugging Face 而非本仓库的模型工厂 Release，`fetchModelAssets` 只做
+  在位校验（SHA256 + 字节数，与 `SamContourEngine` 常量一致），缺失时构建报错
+  并提示执行 `./scripts/fetch-sam.sh`（优先 hf-mirror 镜像，回退 Hugging Face）。
+- SAM 为辅助视觉：模型缺失/失败只影响轮廓精度（退回检测 bbox 合成鱼形），
+  不阻塞识别流程。
